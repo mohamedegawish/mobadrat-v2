@@ -1,42 +1,55 @@
+import { config, assertConfigValid, assertProductionSafe, seedPasswordProblem } from './config.js';
 import { createApp } from './app.js';
-import { config } from './config.js';
-import { closeDb, getDb } from './db/sqlite.js';
-import { applySeedUpdates, seedIfEmpty } from './db/seed.js';
-import { startChatReminderJob, stopChatReminderJob } from './jobs/chatReminders.js';
-import { startMailQueue, stopMailQueue } from './jobs/mailQueue.js';
+import { closeDb, dbDialect } from './core/db/index.js';
+import { bootPlatform } from './core/boot.js';
+import { seedIfEmpty } from './core/seed.js';
+import { sweepStaleTmp } from './core/http/upload.js';
+import { startNotificationWorker, stopNotificationWorker } from './core/jobs/notificationWorker.js';
+import { startOutboxRetention, stopOutboxRetention } from './core/jobs/outboxRetention.js';
+import { drainJobs, runningJobs } from './core/jobs/inflight.js';
+import { MODULES } from './initiatives/registry.js';
 
-let seedUpdates: string[];
+assertConfigValid();
+assertProductionSafe();
+// Applies the core and module migrations before serving any request (MySQL: waits for the server, migrates under a lock).
+await bootPlatform();
 if (config.seedOnBoot) {
-  const { seeded, updates } = seedIfEmpty();
-  seedUpdates = updates;
-  console.log(`[server] seed-on-boot=${seeded ? 'seeded' : 'skipped (already seeded)'}`);
-} else {
-  // Versioned seed updates still reach a DB this seed created; an empty DB stays empty.
-  seedUpdates = applySeedUpdates();
-  console.log('[server] seed-on-boot disabled (SEED_ON_BOOT=0) — no fresh seed on an empty DB');
-  const users = (getDb().prepare('SELECT COUNT(*) AS c FROM users').get() as { c: number }).c;
-  if (users === 0) {
-    console.warn('[server] WARNING: database is EMPTY and SEED_ON_BOOT=0 — there are no accounts, nobody can log in. Remove SEED_ON_BOOT (default 1) or set it to 1, then restart.');
-  }
+  if (config.isProd && seedPasswordProblem()) throw new Error(`[seed] ${seedPasswordProblem()}`);
+  const seeded = await seedIfEmpty();
+  if (seeded) console.log('[seed] demo accounts and data loaded (empty database)');
 }
-console.log(`[server] seed updates: ${seedUpdates.length ? `applied ${seedUpdates.join(', ')}` : 'up to date'}`);
 
-const server = createApp().listen(config.port, () => {
-  console.log(`[server] listening on http://localhost:${config.port} — prefix /api/v1 (env=${config.env})`);
-  startChatReminderJob();
-  startMailQueue();
-});
+const swept = sweepStaleTmp();
+if (swept) console.log(`[uploads] removed ${swept} stale temporary upload file(s)`);
+setInterval(() => { sweepStaleTmp(); }, 60 * 60_000).unref();
 
+const app = createApp();
+const onListening = () => {
+  console.log(`[mobadrat] listening on ${config.host ?? '*'}:${config.port} (${config.env}, db=${dbDialect()}, modules=${MODULES.map((m) => m.id).join(',') || 'none'})`);
+};
+const server = config.host ? app.listen(config.port, config.host, onListening) : app.listen(config.port, onListening);
+
+if (config.jobsEnabled) {
+  startNotificationWorker();
+  startOutboxRetention();
+  for (const m of MODULES) await m.startJobs?.();
+}
+
+let stopping = false;
 function shutdown(signal: string) {
-  console.log(`[server] ${signal} — closing`);
-  stopChatReminderJob();
-  stopMailQueue();
+  if (stopping) return;
+  stopping = true;
+  console.log(`[mobadrat] ${signal} — shutting down`);
+  stopNotificationWorker();
+  stopOutboxRetention();
+  for (const m of MODULES) m.stopJobs?.();
+  setTimeout(() => { console.error('[mobadrat] forced exit after 10s'); process.exit(1); }, 10_000).unref();
   server.close(() => {
-    closeDb();
-    process.exit(0);
+    drainJobs(8_000)
+      .then((drained) => { if (!drained) console.warn(`[mobadrat] ${runningJobs()} background job(s) still running at shutdown`); return closeDb(); })
+      .then(() => process.exit(0), (e: unknown) => { console.error('[mobadrat] database close failed:', (e as Error).message); process.exit(1); });
   });
-  setTimeout(() => process.exit(1), 5000).unref();
+  server.closeIdleConnections?.();
 }
-
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));

@@ -1,0 +1,46 @@
+# Local development and tests — MySQL 8.4 only (the app runs on the host with `npm run dev`).
+#
+#   docker compose -f docker-compose.dev.yml up -d
+#   backend:  DB defaults match this file (mobadrat / mobadrat @ 127.0.0.1:3306, database mobadrat)
+#   tests:    MYSQL_TEST_URL=mysql://root:root@127.0.0.1:3306  npm test   (one throw-away database per test file)
+#
+# `mysql-test` is optional: a tmpfs server on 3308 for fast, disposable test runs
+#   (docker compose -f docker-compose.dev.yml --profile test up -d mysql-test ; MYSQL_TEST_URL=mysql://root:root@127.0.0.1:3308)
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: mobadrat
+      MYSQL_USER: mobadrat
+      MYSQL_PASSWORD: mobadrat
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_bin", "--log-bin-trust-function-creators=1"]
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - mysql-dev-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  mysql-test:
+    image: mysql:8.4
+    profiles: ["test"]
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_bin", "--log-bin-trust-function-creators=1", "--skip-log-bin"]
+    ports:
+      - "127.0.0.1:3308:3306"
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  mysql-dev-data:

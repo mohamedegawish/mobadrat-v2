@@ -1,0 +1,2 @@
+-- 003_security_fixes.sql — MySQL: already contained in 001_init.sql (the MySQL baseline is the complete schema of SQLite v7).
+-- Recorded in schema_migrations so both engines report the same schema version. Nothing to execute.
