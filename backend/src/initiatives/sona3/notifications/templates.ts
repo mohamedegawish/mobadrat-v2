@@ -41,7 +41,7 @@ export interface Rendered { subject: string; html: string; text: string; sms: st
 
 /** رابط الطلب — بلا أي توكن، ويتطلب تسجيل الدخول. */
 export function applicationLink(appId: string): string {
-  return `${config.appUrl}/#application/${encodeURIComponent(appId)}`;
+  return `${config.appUrl}/#i/sona3/application/${encodeURIComponent(appId)}`;
 }
 
 function ref(v: TemplateVars): string { return v.number ?? 'مسودة'; }

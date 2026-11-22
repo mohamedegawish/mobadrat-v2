@@ -191,9 +191,9 @@ test('evaluators never see each other scores; IMC sees all after submission; app
 });
 
 test('cohort weights lock once the first evaluation is submitted', async () => {
-  const { weightsLocked } = await import('../src/store/cohorts.js');
-  assert.equal(weightsLocked(w.cohortId), true, 'earlier tests already submitted evaluations in this cohort');
+  const { weightsLocked } = await import('../store/cohorts.js');
+  assert.equal(await weightsLocked(w.cohortId), true, 'earlier tests already submitted evaluations in this cohort');
   const { makeCohort } = await import('./helpers.js');
   const fresh = await makeCohort({ opensAt: '2000-01-01', closesAt: '2000-06-30' });
-  assert.equal(weightsLocked(fresh.id), false);
+  assert.equal(await weightsLocked(fresh.id), false);
 });

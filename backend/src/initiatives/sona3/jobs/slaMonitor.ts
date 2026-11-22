@@ -14,21 +14,21 @@ import { kickNotificationWorker } from './notificationWorker.js';
 
 let timer: NodeJS.Timeout | null = null;
 
-export function runSlaSweep(now = Date.now()): number {
+export async function runSlaSweep(now = Date.now()): Promise<number> {
   const states = (Object.entries(policy.slaDays) as Array<[ApplicationState, number | null]>)
     .filter(([, d]) => d !== null && d !== undefined).map(([s]) => s);
   if (!states.length) return 0;
-  const rows = getDb().prepare(`SELECT id FROM applications WHERE state IN (${states.map(() => '?').join(',')})`).all(...states) as Array<{ id: string }>;
+  const rows = await getDb().prepare(`SELECT id FROM sona3_applications WHERE state IN (${states.map(() => '?').join(',')})`).all(...states) as Array<{ id: string }>;
   let n = 0;
   for (const { id } of rows) {
-    const app = getApplication(id);
+    const app = await getApplication(id);
     if (!app) continue;
     const sla = slaInfo(app, now);
     if (!sla.overdue || !sla.dueAt) continue;
     const daysOverdue = Math.max(1, Math.floor((now - Date.parse(sla.dueAt)) / 86_400_000));
-    const responsible = STATE_RESPONSIBLE[app.state] === 'applicant' ? applicantRecipients(app) : orgRecipients(responsibleOrgId(app));
-    const recipients = [...responsible, ...(responsibleOrgId(app) === ORG_IDS.imc ? [] : imcRecipients())];
-    n += dispatch('app.sla_overdue', {
+    const responsible = STATE_RESPONSIBLE[app.state] === 'applicant' ? await applicantRecipients(app) : await orgRecipients(responsibleOrgId(app));
+    const recipients = [...responsible, ...(responsibleOrgId(app) === ORG_IDS.imc ? [] : await imcRecipients())];
+    n += await dispatch('app.sla_overdue', {
       appId: app.id, number: app.number, projectName: app.projectName,
       stateAr: STATE_LABELS[app.state].ar, stateEn: STATE_LABELS[app.state].en, daysOverdue,
     }, recipients, { dedupePrefix: `sla:${app.id}:${app.state}:${app.stateEnteredAt}`, applicationId: app.id });
@@ -39,8 +39,8 @@ export function runSlaSweep(now = Date.now()): number {
 
 export function startSlaMonitor(): void {
   if (timer) return;
-  timer = setInterval(() => {
-    try { runSlaSweep(); } catch (e) { console.error('[sla] sweep error:', (e as Error).message); }
+  timer = setInterval(async () => {
+    try { await runSlaSweep(); } catch (e) { console.error('[sla] sweep error:', (e as Error).message); }
   }, config.slaSweepMs);
   timer.unref();
 }

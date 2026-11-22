@@ -5,8 +5,9 @@
  */
 import type { InitiativeModule } from './contract.js';
 import { shamsModule } from './shams/module.js';
+import { sona3Module } from './sona3/module.js';
 
-export const MODULES: InitiativeModule[] = [shamsModule];
+export const MODULES: InitiativeModule[] = [shamsModule, sona3Module];
 
 export function getModule(id: string): InitiativeModule | undefined {
   return MODULES.find((m) => m.id === id);

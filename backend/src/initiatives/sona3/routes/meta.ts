@@ -17,8 +17,8 @@ import { slaConfigured } from '../workflow/applicationView.js';
 export const metaRouter = Router();
 
 /** تعريف الفورم والحالات والقيم المرجعية — مصدر واحد للواجهة (الإجبارية والتسميات من الباك). */
-metaRouter.get('/meta', ah((_req, res) => {
-  const cohort = openCohort();
+metaRouter.get('/meta', ah(async (_req, res) => {
+  const cohort = await openCohort();
   return okMessage(res, 200, 'ok', {
     initiative: policy.content,
     form: {
@@ -38,7 +38,7 @@ metaRouter.get('/meta', ah((_req, res) => {
       materialSources: policy.materialSources,
       financingModels: policy.financingModels,
       recommendations: policy.recommendations,
-      experts: listExperts({ status: 'approved' }).map((e) => ({ value: e.id, labelAr: e.nameAr, labelEn: e.nameEn || e.nameAr, specialty: e.specialty })),
+      experts: (await listExperts({ status: 'approved' })).map((e) => ({ value: e.id, labelAr: e.nameAr, labelEn: e.nameEn || e.nameAr, specialty: e.specialty })),
     },
     governorates: GOVERNORATES,
     documents: DOCUMENT_KINDS.map((k) => ({ kind: k, labelAr: DOCUMENT_LABELS[k].ar, labelEn: DOCUMENT_LABELS[k].en })),
@@ -52,7 +52,7 @@ metaRouter.get('/meta', ah((_req, res) => {
     })),
     transitions: TRANSITIONS.map((t) => ({ ...t })),
     roles: ROLE_LABELS,
-    funders: listActiveFunders(),
+    funders: await listActiveFunders(),
     openCohort: cohort ? { id: cohort.id, nameAr: cohort.nameAr, nameEn: cohort.nameEn, opensAt: cohort.opensAt, closesAt: cohort.closesAt, status: cohortStatus(cohort), maxAge: cohort.maxAge } : null,
     policy: {
       appealWindowDays: policy.appealWindowDays,

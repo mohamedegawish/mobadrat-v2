@@ -1,3 +1,4 @@
+import { mapSeq } from '../http/helpers.js';
 /** إسناد المقيّمين، وإقرار تضارب المصالح، وتسجيل الدرجات وتسليمها (docs/SONA3_DESIGN.md §8). */
 import { tx } from '../db/sqlite.js';
 import { Errors, type ErrorDetail } from '../http/errors.js';
@@ -18,73 +19,73 @@ import { ORG_IDS } from '../domain.js';
 
 const ASSIGNABLE_STATES = ['STUDY_REVIEW', 'COMMITTEE_EVALUATION'];
 
-function loadForImc(user: UserInternal, appId: string): AppRow {
+async function loadForImc(user: UserInternal, appId: string): Promise<AppRow> {
   if (user.role !== 'imc_officer' || user.organizationId !== ORG_IDS.imc) throw Errors.forbidden();
-  const app = getApplication(appId);
+  const app = await getApplication(appId);
   if (!app) throw Errors.notFound('الطلب غير موجود.', 'Application not found.');
   return app;
 }
 
-function audit(user: UserInternal, ip: string, action: string, app: AppRow, summaryAr: string, details: Record<string, unknown> = {}) {
-  addAuditLog({ actorType: 'user', actorUserId: user.id, actorName: user.nameAr, actorRole: user.role, actorOrgId: user.organizationId, ip,
+async function audit(user: UserInternal, ip: string, action: string, app: AppRow, summaryAr: string, details: Record<string, unknown> = {}) {
+  await addAuditLog({ actorType: 'user', actorUserId: user.id, actorName: user.nameAr, actorRole: user.role, actorOrgId: user.organizationId, ip,
     action, entityType: 'application', entityId: app.id, applicationId: app.id, summaryAr, details });
 }
 
-export function assignEvaluator(user: UserInternal, appId: string, body: unknown, ip: string): Assignment {
-  const app = loadForImc(user, appId);
+export async function assignEvaluator(user: UserInternal, appId: string, body: unknown, ip: string): Promise<Assignment> {
+  const app = await loadForImc(user, appId);
   const b = onlyKeys(body, ['evaluatorUserId']);
   if (!ASSIGNABLE_STATES.includes(app.state)) {
     throw Errors.conflict('INVALID_STATE', 'إسناد المقيّمين متاح أثناء مراجعة الدراسة أو التقييم فقط.', 'Evaluators can be assigned only during study review or evaluation.');
   }
-  const ev = typeof b.evaluatorUserId === 'string' ? getUserById(b.evaluatorUserId) : null;
+  const ev = typeof b.evaluatorUserId === 'string' ? await getUserById(b.evaluatorUserId) : null;
   if (!ev || ev.role !== 'evaluator' || !ev.isActive) throw Errors.validation([{ field: 'evaluatorUserId', issue: 'unknown or inactive evaluator' }]);
-  if (assignmentFor(app.id, ev.id)) throw Errors.conflict('ALREADY_ASSIGNED', 'المقيّم مسند لهذا المشروع بالفعل.', 'The evaluator is already assigned.');
-  const a = tx(() => {
-    const created = insertAssignment(app.id, ev.id, user.id);
-    audit(user, ip, 'evaluation.assign', app, `إسناد المقيّم ${ev.nameAr}`, { assignmentId: created.id, evaluatorUserId: ev.id });
-    dispatch('app.evaluation_assigned', baseVars(app), [{ userId: ev.id, email: ev.email, phone: ev.phone || undefined }],
+  if (await assignmentFor(app.id, ev.id)) throw Errors.conflict('ALREADY_ASSIGNED', 'المقيّم مسند لهذا المشروع بالفعل.', 'The evaluator is already assigned.');
+  const a = await tx(async () => {
+    const created = await insertAssignment(app.id, ev.id, user.id);
+    await audit(user, ip, 'evaluation.assign', app, `إسناد المقيّم ${ev.nameAr}`, { assignmentId: created.id, evaluatorUserId: ev.id });
+    await dispatch('app.evaluation_assigned', baseVars(app), [{ userId: ev.id, email: ev.email, phone: ev.phone || undefined }],
       { dedupePrefix: `assign:${created.id}`, applicationId: app.id });
     return created;
   });
   return a;
 }
 
-export function unassignEvaluator(user: UserInternal, appId: string, assignmentId: string, body: unknown, ip: string): void {
-  const app = loadForImc(user, appId);
+export async function unassignEvaluator(user: UserInternal, appId: string, assignmentId: string, body: unknown, ip: string): Promise<void> {
+  const app = await loadForImc(user, appId);
   const b = onlyKeys(body ?? {}, ['reason']);
-  const a = getAssignment(assignmentId);
+  const a = await getAssignment(assignmentId);
   if (!a || a.applicationId !== app.id || a.status === 'removed') throw Errors.notFound();
   if (a.status === 'submitted') throw Errors.conflict('ALREADY_SUBMITTED', 'لا يمكن إلغاء إسناد مقيّم سلّم تقييمه.', 'A submitted evaluation cannot be unassigned.');
   if (!ASSIGNABLE_STATES.includes(app.state)) throw Errors.conflict('INVALID_STATE', 'التقييم مغلق.', 'Evaluation is closed.');
   const reason = typeof b.reason === 'string' ? b.reason.trim().slice(0, 500) : '';
-  tx(() => {
-    removeAssignment(a.id, user.id, reason);
-    audit(user, ip, 'evaluation.unassign', app, 'إلغاء إسناد مقيّم', { assignmentId: a.id, reason });
+  await tx(async () => {
+    await removeAssignment(a.id, user.id, reason);
+    await audit(user, ip, 'evaluation.unassign', app, 'إلغاء إسناد مقيّم', { assignmentId: a.id, reason });
   });
 }
 
-function loadForEvaluator(user: UserInternal, appId: string): { app: AppRow; a: Assignment } {
+async function loadForEvaluator(user: UserInternal, appId: string): Promise<{ app: AppRow; a: Assignment }> {
   if (user.role !== 'evaluator') throw Errors.forbidden();
-  const app = getApplication(appId);
-  if (!app || !canSeeApplication(user, app)) throw Errors.notFound('الطلب غير موجود.', 'Application not found.');
-  return { app, a: assignmentFor(app.id, user.id)! };
+  const app = await getApplication(appId);
+  if (!app || !await canSeeApplication(user, app)) throw Errors.notFound('الطلب غير موجود.', 'Application not found.');
+  return { app, a: (await assignmentFor(app.id, user.id))! };
 }
 
-export function declareConflict(user: UserInternal, appId: string, body: unknown, ip: string): Assignment {
-  const { app, a } = loadForEvaluator(user, appId);
+export async function declareConflict(user: UserInternal, appId: string, body: unknown, ip: string): Promise<Assignment> {
+  const { app, a } = await loadForEvaluator(user, appId);
   const b = onlyKeys(body, ['hasConflict', 'note']);
   if (typeof b.hasConflict !== 'boolean') throw Errors.validation([{ field: 'hasConflict', issue: 'must be true or false' }]);
   const note = typeof b.note === 'string' ? b.note.trim().slice(0, 1000) : '';
   if (b.hasConflict && note.length < 3) throw Errors.validation([{ field: 'note', issue: 'required when declaring a conflict' }]);
   if (a.status !== 'assigned') throw Errors.conflict('ALREADY_DECLARED', 'سبق تسجيل إقرار تضارب المصالح.', 'The declaration was already recorded.');
-  return tx(() => {
-    declareCoi(a.id, b.hasConflict as boolean, note);
-    audit(user, ip, b.hasConflict ? 'evaluation.coi_conflict' : 'evaluation.coi_none', app,
+  return await tx(async () => {
+    await declareCoi(a.id, b.hasConflict as boolean, note);
+    await audit(user, ip, b.hasConflict ? 'evaluation.coi_conflict' : 'evaluation.coi_none', app,
       b.hasConflict ? 'إقرار بوجود تضارب مصالح — استبعاد من التقييم' : 'إقرار بعدم وجود تضارب مصالح', { assignmentId: a.id });
     if (b.hasConflict) {
-      dispatch('ops.coi_declared', { ...baseVars(app), evaluatorName: user.nameAr, reason: note }, imcRecipients(), { dedupePrefix: `coi:${a.id}`, applicationId: app.id, channels: ['email'] });
+      await dispatch('ops.coi_declared', { ...baseVars(app), evaluatorName: user.nameAr, reason: note }, await imcRecipients(), { dedupePrefix: `coi:${a.id}`, applicationId: app.id, channels: ['email'] });
     }
-    return getAssignment(a.id)!;
+    return (await getAssignment(a.id))!;
   });
 }
 
@@ -122,33 +123,33 @@ function requireScoring(app: AppRow, a: Assignment): void {
   if (app.state !== 'COMMITTEE_EVALUATION') throw Errors.conflict('INVALID_STATE', 'التقييم متاح أثناء مرحلة تقييم اللجنة فقط.', 'Scoring is open only during committee evaluation.');
 }
 
-export function saveEvaluation(user: UserInternal, appId: string, body: unknown, ip: string): Assignment {
-  const { app, a } = loadForEvaluator(user, appId);
+export async function saveEvaluation(user: UserInternal, appId: string, body: unknown, ip: string): Promise<Assignment> {
+  const { app, a } = await loadForEvaluator(user, appId);
   requireScoring(app, a);
   const input = parseScores(body, false);
-  return tx(() => {
-    saveScores(a.id, input.scores, input.notes, input.recommendation);
-    audit(user, ip, 'evaluation.save', app, 'حفظ مسودة تقييم', { assignmentId: a.id });
-    return getAssignment(a.id)!;
+  return await tx(async () => {
+    await saveScores(a.id, input.scores, input.notes, input.recommendation);
+    await audit(user, ip, 'evaluation.save', app, 'حفظ مسودة تقييم', { assignmentId: a.id });
+    return (await getAssignment(a.id))!;
   });
 }
 
-export function submitEvaluation(user: UserInternal, appId: string, body: unknown, ip: string): Assignment {
-  const { app, a } = loadForEvaluator(user, appId);
+export async function submitEvaluation(user: UserInternal, appId: string, body: unknown, ip: string): Promise<Assignment> {
+  const { app, a } = await loadForEvaluator(user, appId);
   requireScoring(app, a);
   const input = parseScores(body, true);
-  const cohort = getCohort(app.cohortId)!;
+  const cohort = (await getCohort(app.cohortId))!;
   const score = weighted(input.scores, cohort.weights);
-  return tx(() => {
-    saveScores(a.id, input.scores, input.notes, input.recommendation);
-    submitScores(a.id, score);
-    audit(user, ip, 'evaluation.submit', app, `تسليم تقييم (${score})`, { assignmentId: a.id, weightedScore: score });
-    const remaining = activeAssignments(app.id).filter((x) => x.status !== 'conflict' && x.status !== 'submitted');
+  return await tx(async () => {
+    await saveScores(a.id, input.scores, input.notes, input.recommendation);
+    await submitScores(a.id, score);
+    await audit(user, ip, 'evaluation.submit', app, `تسليم تقييم (${score})`, { assignmentId: a.id, weightedScore: score });
+    const remaining = (await activeAssignments(app.id)).filter((x) => x.status !== 'conflict' && x.status !== 'submitted');
     if (!remaining.length) {
-      dispatch('ops.evaluations_complete', { ...baseVars(app), count: activeAssignments(app.id).filter((x) => x.status === 'submitted').length },
-        imcRecipients(), { dedupePrefix: `evaldone:${app.id}:${a.id}`, applicationId: app.id, channels: ['email'] });
+      await dispatch('ops.evaluations_complete', { ...baseVars(app), count: (await activeAssignments(app.id)).filter((x) => x.status === 'submitted').length },
+        await imcRecipients(), { dedupePrefix: `evaldone:${app.id}:${a.id}`, applicationId: app.id, channels: ['email'] });
     }
-    return getAssignment(a.id)!;
+    return (await getAssignment(a.id))!;
   });
 }
 
@@ -160,8 +161,8 @@ const STATUS_LABELS: Record<Assignment['status'], { ar: string; en: string }> = 
   removed: { ar: 'أُلغي الإسناد', en: 'Removed' },
 };
 
-function mapAssignment(a: Assignment, withScores: boolean) {
-  const ev = getUserById(a.evaluatorUserId);
+async function mapAssignment(a: Assignment, withScores: boolean) {
+  const ev = await getUserById(a.evaluatorUserId);
   return {
     id: a.id, evaluatorUserId: a.evaluatorUserId, evaluatorName: ev?.nameAr ?? '', status: a.status,
     statusLabelAr: STATUS_LABELS[a.status].ar, statusLabelEn: STATUS_LABELS[a.status].en, assignedAt: a.assignedAt,
@@ -171,30 +172,30 @@ function mapAssignment(a: Assignment, withScores: boolean) {
 }
 
 /** كتلة التقييم في تفاصيل الطلب — حسب الدور (المقيّم يرى تقييمه فقط؛ IMC يرى الكل). */
-export function evaluationBlock(user: UserInternal, app: AppRow) {
-  const cohort = getCohort(app.cohortId);
+export async function evaluationBlock(user: UserInternal, app: AppRow) {
+  const cohort = await getCohort(app.cohortId);
   const criteria = CRITERIA.map((c) => ({ ...c, weight: cohort?.weights[c.key] ?? 0 }));
   if (user.role === 'imc_officer') {
-    const list = allAssignments(app.id).filter((a) => a.status !== 'removed');
+    const list = (await allAssignments(app.id)).filter((a) => a.status !== 'removed');
     const agg = aggregate(list);
     return {
-      criteria, assignments: list.map((a) => mapAssignment(a, a.status === 'submitted')), aggregate: agg,
+      criteria, assignments: await mapSeq(list, async (a) => await mapAssignment(a, a.status === 'submitted')), aggregate: agg,
       minimums: cohort ? { total: cohort.minTotalScore, financial: cohort.minFinancialScore, technical: cohort.minTechnicalScore, evaluators: cohort.minEvaluators } : null,
       canAssign: ASSIGNABLE_STATES.includes(app.state),
     };
   }
   if (user.role === 'evaluator') {
-    const a = assignmentFor(app.id, user.id);
-    return { criteria, recommendations: policy.recommendations, mine: a ? mapAssignment(a, true) : null, canScore: Boolean(a && (a.status === 'draft') && app.state === 'COMMITTEE_EVALUATION') };
+    const a = await assignmentFor(app.id, user.id);
+    return { criteria, recommendations: policy.recommendations, mine: a ? await mapAssignment(a, true) : null, canScore: Boolean(a && (a.status === 'draft') && app.state === 'COMMITTEE_EVALUATION') };
   }
   return null;
 }
 
 /** قائمة عمل المقيّم: إسناداته مع حالة كل منها. */
-export function evaluatorQueue(user: UserInternal) {
+export async function evaluatorQueue(user: UserInternal) {
   if (user.role !== 'evaluator') throw Errors.forbidden();
-  return assignmentsOfEvaluator(user.id).map((a) => {
-    const app = getApplication(a.applicationId);
-    return { ...mapAssignment(a, false), applicationId: a.applicationId, number: app?.number ?? null, projectName: app?.projectName ?? '', sector: app?.sector ?? '', appState: app?.state ?? null };
+  return mapSeq(await assignmentsOfEvaluator(user.id), async (a) => {
+    const app = await getApplication(a.applicationId);
+    return { ...await mapAssignment(a, false), applicationId: a.applicationId, number: app?.number ?? null, projectName: app?.projectName ?? '', sector: app?.sector ?? '', appState: app?.state ?? null };
   });
 }

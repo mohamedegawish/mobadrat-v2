@@ -6,7 +6,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import { ah, apiError, okMessage, Errors, rateLimitedBody } from '../http/errors.js';
-import { clientIp, normPage, normPageSize, paginate, str } from '../http/helpers.js';
+import { clientIp, normPage, normPageSize, paginate, str, mapSeq } from '../http/helpers.js';
 import { onlyKeys } from '../http/validate.js';
 import { findActiveKey, touchKey, type IntegrationKey, type IntegrationScope } from '../store/integrationKeys.js';
 import { addAuditLog, actorFromReq, listAuditLogs } from '../store/audit.js';
@@ -35,16 +35,16 @@ const OBSERVER = {
   createdAt: '', updatedAt: '', organizationType: 'admin', organizationNameAr: '', organizationNameEn: '', organizationActive: true,
 } as unknown as UserInternal;
 
-function apiKeyAuth(req: Request, res: Response, next: NextFunction) {
+async function apiKeyAuth(req: Request, res: Response, next: NextFunction) {
   const h = req.headers.authorization;
   const raw = (h?.startsWith('Bearer ') ? h.slice(7) : (req.headers['x-api-key'] as string | undefined) ?? '').trim();
-  const key = raw ? findActiveKey(raw) : null;
+  const key = raw ? await findActiveKey(raw) : null;
   if (!key) {
-    addAuditLog({ actorType: 'anonymous', ip: clientIp(req), action: 'integration.auth_failed', entityType: 'integration', entityId: req.path.slice(0, 100), summaryAr: 'محاولة وصول بمفتاح ربط غير صالح أو ملغى' });
+    await addAuditLog({ actorType: 'anonymous', ip: clientIp(req), action: 'integration.auth_failed', entityType: 'integration', entityId: req.path.slice(0, 100), summaryAr: 'محاولة وصول بمفتاح ربط غير صالح أو ملغى' });
     return apiError(res, 401, 'INVALID_API_KEY', 'مفتاح الربط غير صالح أو ملغى.', 'Invalid or revoked API key.');
   }
   (req as KeyedRequest).integrationKey = key;
-  touchKey(key.id);
+  await touchKey(key.id);
   next();
 }
 
@@ -57,8 +57,8 @@ const perKeyLimiter = rateLimit({
 
 /** تدقيق كل طلب ربط (القراءة والكتابة) بعد انتهاء الرد. */
 function auditRequest(req: Request, res: Response, next: NextFunction) {
-  res.on('finish', () => {
-    addAuditLog({ ...actorFromReq(req), action: `integration.${req.method.toLowerCase()}`, entityType: 'integration', entityId: req.route?.path ? String(req.route.path) : req.path.slice(0, 100),
+  res.on('finish', async () => {
+    await addAuditLog({ ...actorFromReq(req), action: `integration.${req.method.toLowerCase()}`, entityType: 'integration', entityId: req.route?.path ? String(req.route.path) : req.path.slice(0, 100),
       summaryAr: `طلب ربط ${req.method} ${req.path.slice(0, 120)} → ${res.statusCode}` });
   });
   next();
@@ -87,80 +87,80 @@ function stripActions<T extends Record<string, unknown>>(o: T) {
 }
 
 // ── read ──
-integrationRouter.get('/summary', requireScope('read'), ah((_req, res) => okMessage(res, 200, 'ok', buildSummary(ALL_SCOPE))));
+integrationRouter.get('/summary', requireScope('read'), ah(async (_req, res) => okMessage(res, 200, 'ok', await buildSummary(ALL_SCOPE))));
 
-integrationRouter.get('/applications', requireScope('read'), ah((req, res) => {
+integrationRouter.get('/applications', requireScope('read'), ah(async (req, res) => {
   const page = normPage(req.query.page);
   const pageSize = normPageSize(req.query.pageSize, 50, 200);
   const states = str(req.query.state).split(',').filter((s): s is ApplicationState => (APPLICATION_STATES as readonly string[]).includes(s));
-  const { rows, total } = listApplications({
+  const { rows, total } = await listApplications({
     scopeSql: '1 = 1', scopeParams: [], includeDrafts: req.query.includeDrafts === '1', states: states.length ? states : undefined,
     from: str(req.query.from) || undefined, to: str(req.query.to) || undefined, governorate: str(req.query.governorate) || undefined,
     funderOrgId: str(req.query.funderOrgId) || undefined, q: str(req.query.q).slice(0, 100) || undefined,
   }, page, pageSize);
-  return okMessage(res, 200, 'ok', paginate(rows.map((a) => stripActions(buildListItem(OBSERVER, a))), total, page, pageSize));
+  return okMessage(res, 200, 'ok', paginate(await mapSeq(rows, async (a) => stripActions(await buildListItem(OBSERVER, a))), total, page, pageSize));
 }));
 
-integrationRouter.get('/applications/:id', requireScope('read'), ah((req, res) => {
-  const app = getApplication(req.params.id);
+integrationRouter.get('/applications/:id', requireScope('read'), ah(async (req, res) => {
+  const app = await getApplication(req.params.id);
   if (!app) throw Errors.notFound('الطلب غير موجود.', 'Application not found.');
-  return okMessage(res, 200, 'ok', stripActions(buildDetail(OBSERVER, app)));
+  return okMessage(res, 200, 'ok', stripActions(await buildDetail(OBSERVER, app)));
 }));
 
-integrationRouter.get('/applications/:id/documents/:docId', requireScope('read_documents'), ah((req, res) => {
-  const app = getApplication(req.params.id);
-  const doc = app ? getDocument(app.id, req.params.docId) : null;
+integrationRouter.get('/applications/:id/documents/:docId', requireScope('read_documents'), ah(async (req, res) => {
+  const app = await getApplication(req.params.id);
+  const doc = app ? await getDocument(app.id, req.params.docId) : null;
   // المستندات المُرسلة فقط (لا يُكشف ما لم يرسله المتقدم بعد).
   if (!app || !doc || doc.attempt > app.attempt) throw Errors.notFound('المستند غير موجود.', 'Document not found.');
   sendStoredPdf(res, doc.storedName, doc.originalName, false);
 }));
 
 // ── manage_users ──
-integrationRouter.get('/organizations', requireScope('manage_users'), ah((req, res) => {
+integrationRouter.get('/organizations', requireScope('manage_users'), ah(async (req, res) => {
   const type = (ORG_TYPES as readonly string[]).includes(str(req.query.type)) ? (str(req.query.type) as OrgType) : undefined;
-  return okMessage(res, 200, 'ok', { items: listOrganizations({ type, includeApplicants: type === 'applicant' }) });
+  return okMessage(res, 200, 'ok', { items: await listOrganizations({ type, includeApplicants: type === 'applicant' }) });
 }));
-integrationRouter.post('/organizations', requireScope('manage_users'), ah((req, res) => okMessage(res, 201, 'created', createOrg(actorFromReq(req), req.body))));
-integrationRouter.put('/organizations/:id', requireScope('manage_users'), ah((req, res) => okMessage(res, 200, 'updated', updateOrg(actorFromReq(req), req.params.id, req.body, LIMITED))));
+integrationRouter.post('/organizations', requireScope('manage_users'), ah(async (req, res) => okMessage(res, 201, 'created', await createOrg(actorFromReq(req), req.body))));
+integrationRouter.put('/organizations/:id', requireScope('manage_users'), ah(async (req, res) => okMessage(res, 200, 'updated', await updateOrg(actorFromReq(req), req.params.id, req.body, LIMITED))));
 
-integrationRouter.get('/users', requireScope('manage_users'), ah((req, res) => {
+integrationRouter.get('/users', requireScope('manage_users'), ah(async (req, res) => {
   const page = normPage(req.query.page);
   const pageSize = normPageSize(req.query.pageSize, 50, 200);
   const role = (ROLES as readonly string[]).includes(str(req.query.role)) ? (str(req.query.role) as Role) : undefined;
-  const { rows, total } = listUsers({ role, organizationId: str(req.query.organizationId) || undefined, excludeApplicants: !role }, page, pageSize);
+  const { rows, total } = await listUsers({ role, organizationId: str(req.query.organizationId) || undefined, excludeApplicants: !role }, page, pageSize);
   return okMessage(res, 200, 'ok', paginate(rows.map(toPublicUser), total, page, pageSize));
 }));
-integrationRouter.post('/users', requireScope('manage_users'), ah((req, res) => okMessage(res, 201, 'created', createStaffUser(actorFromReq(req), req.body, LIMITED))));
-integrationRouter.put('/users/:id', requireScope('manage_users'), ah((req, res) => okMessage(res, 200, 'updated', updateStaffUser(actorFromReq(req), req.params.id, req.body, LIMITED))));
+integrationRouter.post('/users', requireScope('manage_users'), ah(async (req, res) => okMessage(res, 201, 'created', await createStaffUser(actorFromReq(req), req.body, LIMITED))));
+integrationRouter.put('/users/:id', requireScope('manage_users'), ah(async (req, res) => okMessage(res, 200, 'updated', await updateStaffUser(actorFromReq(req), req.params.id, req.body, LIMITED))));
 
 // ── manage_experts (دليل الخبراء) ──
-integrationRouter.get('/experts', requireScope('manage_experts'), ah((req, res) => {
+integrationRouter.get('/experts', requireScope('manage_experts'), ah(async (req, res) => {
   const status = ['pending', 'approved', 'suspended'].includes(str(req.query.status)) ? (str(req.query.status) as ExpertStatus) : undefined;
-  return okMessage(res, 200, 'ok', { items: listExperts({ status }).map((p) => publicExpert(p, true)) });
+  return okMessage(res, 200, 'ok', { items: (await listExperts({ status })).map((p) => publicExpert(p, true)) });
 }));
-integrationRouter.post('/experts', requireScope('manage_experts'), ah((req, res) => {
-  const p = createExpert(cleanExpertInput(req.body, true) as ExpertInput & { nameAr: string }, null);
-  addAuditLog({ ...actorFromReq(req), action: 'expert.create', entityType: 'expert', entityId: p.id, summaryAr: `إضافة خبير عبر الربط: ${p.nameAr}` });
+integrationRouter.post('/experts', requireScope('manage_experts'), ah(async (req, res) => {
+  const p = await createExpert(cleanExpertInput(req.body, true) as ExpertInput & { nameAr: string }, null);
+  await addAuditLog({ ...actorFromReq(req), action: 'expert.create', entityType: 'expert', entityId: p.id, summaryAr: `إضافة خبير عبر الربط: ${p.nameAr}` });
   return okMessage(res, 201, 'created', publicExpert(p, true));
 }));
-integrationRouter.put('/experts/:id', requireScope('manage_experts'), ah((req, res) => {
-  if (!getExpert(req.params.id)) throw Errors.notFound();
+integrationRouter.put('/experts/:id', requireScope('manage_experts'), ah(async (req, res) => {
+  if (!await getExpert(req.params.id)) throw Errors.notFound();
   const body = (req.body ?? {}) as Record<string, unknown>;
   const { status, ...fields } = body;
   if (status !== undefined && !['pending', 'approved', 'suspended'].includes(String(status))) throw Errors.validation([{ field: 'status', issue: 'pending | approved | suspended' }]);
-  if (Object.keys(fields).length) updateExpert(req.params.id, cleanExpertInput(fields, false));
+  if (Object.keys(fields).length) await updateExpert(req.params.id, cleanExpertInput(fields, false));
   else onlyKeys(fields, []);
-  if (status !== undefined) setExpertStatus(req.params.id, status as ExpertStatus, null);
-  const p = getExpert(req.params.id)!;
-  addAuditLog({ ...actorFromReq(req), action: 'expert.update', entityType: 'expert', entityId: p.id, summaryAr: `تعديل خبير عبر الربط: ${p.nameAr}`, details: { status } });
+  if (status !== undefined) await setExpertStatus(req.params.id, status as ExpertStatus, null);
+  const p = (await getExpert(req.params.id))!;
+  await addAuditLog({ ...actorFromReq(req), action: 'expert.update', entityType: 'expert', entityId: p.id, summaryAr: `تعديل خبير عبر الربط: ${p.nameAr}`, details: { status } });
   return okMessage(res, 200, 'updated', publicExpert(p, true));
 }));
 
 // ── read_audit ──
-integrationRouter.get('/audit-logs', requireScope('read_audit'), ah((req, res) => {
+integrationRouter.get('/audit-logs', requireScope('read_audit'), ah(async (req, res) => {
   const page = normPage(req.query.page);
   const pageSize = normPageSize(req.query.pageSize, 100, 500);
-  const { rows, total } = listAuditLogs({
+  const { rows, total } = await listAuditLogs({
     action: str(req.query.action) || undefined, applicationId: str(req.query.applicationId) || undefined,
     from: str(req.query.from) || undefined, to: str(req.query.to) || undefined,
   }, page, pageSize);

@@ -1,37 +1,79 @@
 /**
- * أدوات الاختبار لمنصة «صُنّاع المستقبل»: قاعدة مؤقتة لكل ملف، سيرفر حقيقي على منفذ عشوائي، عميل HTTP بكوكيز.
- * الحسابات والدورة تُنشأ مباشرة عبر الـstores (بريد/كلمة مرور معروفة) فلا تعتمد الاختبارات على بذرة التطوير.
- * يجب استدعاء isolateTestEnv قبل أول استخدام لقاعدة البيانات (الإعدادات lazy).
+ * Test tools (Sona3 module on the platform): a throw-away MySQL database per test file, the real platform server on a
+ * random port, and an HTTP client with cookies. The client keeps the original application's paths: platform account routes
+ * (/auth/login, /auth/refresh, …) go to the core, the rest to /api/v1/i/sona3 (registration/meta/site content to its public
+ * router). Accounts and the cohort are created directly through the stores (no demo seed).
+ * isolateTestEnv must run before the first database use (settings are lazy).
  */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
 export interface TestEnv { dir: string; cleanup: () => Promise<void> }
 
+const MODULE_BASE = '/i/sona3';
+
+/** Original path → platform path (see the file header). */
+export function platformPath(p: string): string {
+  if (p.startsWith('/i/') || p === '/me' || p.startsWith('/me/') || p === '/health' || p.startsWith('/initiatives')) return p;
+  if (p === '/auth/me') return `${MODULE_BASE}/auth/me`;
+  if (p === '/auth/register') return `${MODULE_BASE}/public/register`;
+  if (p.startsWith('/auth/')) return p;
+  if (p === '/meta' || p.startsWith('/meta?') || p === '/site-content') return `${MODULE_BASE}/public${p}`;
+  return `${MODULE_BASE}${p}`;
+}
+
+function mysqlAdminUrl(): string {
+  return process.env.MYSQL_TEST_URL || 'mysql://root:root@127.0.0.1:3308';
+}
+
+function createMysqlTestDatabase(tag: string): string {
+  const admin = mysqlAdminUrl();
+  const name = `mbt_s3_${tag.replace(/\W/g, '_').slice(0, 20)}_${Math.random().toString(36).slice(2, 8)}`;
+  const script = `const m=require('mysql2/promise');(async()=>{const u=new URL(process.argv[1]);const c=await m.createConnection({host:u.hostname,port:Number(u.port||3306),user:decodeURIComponent(u.username),password:decodeURIComponent(u.password)});await c.query('CREATE DATABASE \`'+process.argv[2]+'\` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin');await c.end();})().catch(e=>{console.error(e.message);process.exit(1)})`;
+  const r = spawnSync(process.execPath, ['-e', script, admin, name], { cwd: path.resolve(import.meta.dirname, '..', '..', '..', '..'), encoding: 'utf8' });
+  if (r.status !== 0) throw new Error(`could not create MySQL test database ${name}: ${r.stderr}`);
+  const u = new URL(admin);
+  u.pathname = `/${name}`;
+  process.env.DATABASE_URL = u.toString();
+  return name;
+}
+
+async function dropMysqlTestDatabase(name: string): Promise<void> {
+  if (!/^mbt_\w+$/.test(name)) return;
+  const mysql = await import('mysql2/promise');
+  const u = new URL(mysqlAdminUrl());
+  const c = await mysql.createConnection({ host: u.hostname, port: Number(u.port || 3306), user: decodeURIComponent(u.username), password: decodeURIComponent(u.password) });
+  try { await c.query(`DROP DATABASE IF EXISTS \`${name}\``); } finally { await c.end(); }
+}
+
 export function isolateTestEnv(tag: string): TestEnv {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), `sona3-${tag}-`));
   process.env.NODE_ENV = 'test';
-  process.env.DB_PATH = path.join(dir, 'test.db');
+  const mysqlDb = createMysqlTestDatabase(tag);
+  void import('../../../core/boot.js').then((m) => m.registerModuleMigrations());
   process.env.UPLOAD_DIR = path.join(dir, 'uploads');
   process.env.CORS_ORIGIN = 'http://localhost:5173';
   process.env.APP_URL = 'http://localhost:5173';
   process.env.JOBS_DISABLED = '1';
+  process.env.REGISTRY_ADAPTER = 'mock';
   process.env.BCRYPT_ROUNDS = '4';
   process.env.RATE_LIMIT_SCALE = process.env.KEEP_RATE_LIMITS === '1' ? '1' : '1000';
-  delete process.env.PLATFORM_WEBHOOK_URL;
-  delete process.env.PLATFORM_WEBHOOK_SECRET;
+  delete process.env.SONA3_WEBHOOK_URL;
+  delete process.env.SONA3_WEBHOOK_SECRET;
   delete process.env.GMAIL_USER;
   delete process.env.SMTP_HOST;
   return {
     dir,
     cleanup: async () => {
-      const { closeDb } = await import('../src/db/sqlite.js');
-      closeDb();
+      const { closeDb } = await import('../db/sqlite.js');
+      await closeDb();
       await new Promise((r) => setTimeout(r, 50));
       fs.rmSync(dir, { recursive: true, force: true });
+      await dropMysqlTestDatabase(mysqlDb);
     },
   };
 }
@@ -41,13 +83,15 @@ export const sentSms: Array<{ to: string; text: string }> = [];
 
 export interface Started { base: string; integration: string; origin: string; close: () => Promise<void> }
 
-/** سيرفر حقيقي على قاعدة نظيفة (الـmigrations فقط). بذرة التطوير تُختبر منفصلة في 10-seed. */
+let booted = false;
+
+/** The real platform server on a clean database (migrations + reference data only; no demo seed). */
 export async function startServer(): Promise<Started> {
-  const { getDb } = await import('../src/db/sqlite.js');
-  const { createApp } = await import('../src/app.js');
-  const { setMailSenderForTests } = await import('../src/mail/mailer.js');
-  const { setSmsAdapterForTests } = await import('../src/integrations/sms/index.js');
-  getDb();
+  const { bootPlatform } = await import('../../../core/boot.js');
+  const { createApp } = await import('../../../app.js');
+  const { setMailSenderForTests } = await import('../mail/mailer.js');
+  const { setSmsAdapterForTests } = await import('../integrations/sms/index.js');
+  if (!booted) { await bootPlatform(); booted = true; }
   setMailSenderForTests(async (m) => { sentMails.push({ to: m.to, subject: m.subject, html: m.html, text: m.text }); return 'sent'; });
   setSmsAdapterForTests({ name: 'test', send: async (to, text) => { sentSms.push({ to, text }); } });
   const app = createApp();
@@ -55,7 +99,7 @@ export async function startServer(): Promise<Started> {
   const { port } = server.address() as AddressInfo;
   const origin = `http://127.0.0.1:${port}`;
   return {
-    base: `${origin}/api/v1`, integration: `${origin}/api/integration/v1`, origin,
+    base: `${origin}/api/v1`, integration: `${origin}/api/integration/v1/i/sona3`, origin,
     close: () => new Promise((r) => server.close(() => r())),
   };
 }
@@ -87,7 +131,7 @@ export class Client {
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     if (this.token) headers.Authorization = `Bearer ${this.token}`;
     if (this.cookies.size) headers.Cookie = this.cookieHeader();
-    const r = await fetch(`${this.base}${p}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    const r = await fetch(`${this.base}${platformPath(p)}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
     this.keepCookies(r.headers);
     const ct = r.headers.get('content-type') ?? '';
     if (ct.includes('application/json')) return { status: r.status, json: await r.json(), headers: r.headers };
@@ -95,16 +139,18 @@ export class Client {
     return { status: r.status, json: null as T, headers: r.headers, raw };
   }
 
-  get<T = any>(p: string) { return this.req<T>('GET', p); }
-  post<T = any>(p: string, body: unknown = {}) { return this.req<T>('POST', p, body); }
-  put<T = any>(p: string, body: unknown) { return this.req<T>('PUT', p, body); }
-  del<T = any>(p: string) { return this.req<T>('DELETE', p); }
+  async get<T = any>(p: string) { return await this.req<T>('GET', p); }
+  async post<T = any>(p: string, body: unknown = {}) { return await this.req<T>('POST', p, body); }
+  async put<T = any>(p: string, body: unknown) { return await this.req<T>('PUT', p, body); }
+  async del<T = any>(p: string) { return await this.req<T>('DELETE', p); }
 
   async login(email: string, password = PASSWORD): Promise<this> {
     const r = await this.post('/auth/login', { email, password });
     if (r.status !== 200) throw new Error(`login ${email} failed: ${r.status} ${JSON.stringify(r.json)}`);
     this.token = r.json.data.accessToken;
     this.user = r.json.data.user;
+    const me = await this.get('/auth/me');
+    if (me.status === 200) this.user = me.json.data.user;
     return this;
   }
 
@@ -114,7 +160,7 @@ export class Client {
     if (file) fd.append('file', new Blob([new Uint8Array(file)], { type: mime }), filename);
     const headers: Record<string, string> = {};
     if (this.token) headers.Authorization = `Bearer ${this.token}`;
-    const r = await fetch(`${this.base}${p}`, { method: 'POST', headers, body: fd });
+    const r = await fetch(`${this.base}${platformPath(p)}`, { method: 'POST', headers, body: fd });
     return { status: r.status, json: await r.json(), headers: r.headers };
   }
 }
@@ -157,8 +203,8 @@ export interface World {
 let counter = 0;
 
 async function mkUser(role: string, org: string, email: string, name: string) {
-  const { createUser } = await import('../src/store/users.js');
-  const { hashPassword } = await import('../src/auth/jwt.js');
+  const { createUser } = await import('../store/users.js');
+  const { hashPassword } = await import('../auth/jwt.js');
   return createUser({ organizationId: org, role: role as any, email, nameAr: name, nameEn: name, phone: '', passwordHash: hashPassword(PASSWORD), emailVerified: true });
 }
 
@@ -169,17 +215,17 @@ export interface CohortOpts {
 }
 
 export async function makeCohort(opts: CohortOpts = {}) {
-  const { createCohort } = await import('../src/store/cohorts.js');
+  const { createCohort } = await import('../store/cohorts.js');
   return createCohort({ nameAr: 'دورة اختبار', nameEn: 'Test cohort', opensAt: addDays(todayIso(), -30), closesAt: addDays(todayIso(), 90), ...(opts as any) }, null);
 }
 
 /** يبني الدورة والحسابات الثابتة لكل ملف اختبار. يُستدعى بعد startServer. */
 export async function buildWorld(srv: Started, opts: CohortOpts = {}): Promise<World> {
-  const { ORG_IDS } = await import('../src/domain.js');
-  const { createOrganization } = await import('../src/store/organizations.js');
+  const { ORG_IDS } = await import('../domain.js');
+  const { createOrganization } = await import('../store/organizations.js');
   const cohort = await makeCohort(opts);
-  const fa = createOrganization({ type: 'funder', nameAr: 'صندوق تحيا مصر (اختبار)', nameEn: 'Funder A (test)' });
-  const fb = createOrganization({ type: 'funder', nameAr: 'بنك تمويل (اختبار)', nameEn: 'Funder B (test)' });
+  const fa = await createOrganization({ type: 'funder', nameAr: 'صندوق تحيا مصر (اختبار)', nameEn: 'Funder A (test)' });
+  const fb = await createOrganization({ type: 'funder', nameAr: 'بنك تمويل (اختبار)', nameEn: 'Funder B (test)' });
   await mkUser('evaluator', ORG_IDS.committee, 't3.eval1@sona3.test', 'مقيّم 1');
   await mkUser('evaluator', ORG_IDS.committee, 't3.eval2@sona3.test', 'مقيّم 2');
   await mkUser('evaluator', ORG_IDS.committee, 't3.eval3@sona3.test', 'مقيّم 3');
@@ -188,7 +234,7 @@ export async function buildWorld(srv: Started, opts: CohortOpts = {}): Promise<W
   await mkUser('funder_reviewer', fa.id, 't3.funda@sona3.test', 'مسؤول جهة التمويل أ');
   await mkUser('funder_reviewer', fb.id, 't3.fundb@sona3.test', 'مسؤول جهة التمويل ب');
   await mkUser('system_admin', ORG_IDS.admin, 't3.admin@sona3.test', 'مدير النظام');
-  const L = (e: string) => new Client(srv.base).login(e);
+  const L = async (e: string) => await new Client(srv.base).login(e);
   const [imc, imc2, eval1, eval2, eval3, funderA, funderB, admin] = await Promise.all([
     L('t3.imc1@sona3.test'), L('t3.imc2@sona3.test'), L('t3.eval1@sona3.test'), L('t3.eval2@sona3.test'), L('t3.eval3@sona3.test'),
     L('t3.funda@sona3.test'), L('t3.fundb@sona3.test'), L('t3.admin@sona3.test'),
@@ -201,11 +247,11 @@ export async function buildWorld(srv: Started, opts: CohortOpts = {}): Promise<W
 
 /** متقدم جديد (جهة applicant + ملف + مستخدم) يسجل دخوله ويرجع العميل. */
 export async function newApplicant(srv: Started, name = 'أحمد محمد علي حسن'): Promise<Client> {
-  const { createOrganization } = await import('../src/store/organizations.js');
-  const { createApplicant } = await import('../src/store/applicants.js');
+  const { createOrganization } = await import('../store/organizations.js');
+  const { createApplicant } = await import('../store/applicants.js');
   const n = ++counter;
-  const org = createOrganization({ type: 'applicant', nameAr: name, nameEn: name });
-  createApplicant(org.id, name, null);
+  const org = await createOrganization({ type: 'applicant', nameAr: name, nameEn: name });
+  await createApplicant(org.id, name, null);
   const email = `t3.app${n}@sona3.test`;
   await mkUser('applicant', org.id, email, name);
   return new Client(srv.base).login(email);
@@ -281,8 +327,8 @@ export function ok(r: Res, step: string): Res {
 }
 
 export async function q<T = any>(sql: string, ...params: Array<string | number | null>): Promise<T[]> {
-  const { getDb } = await import('../src/db/sqlite.js');
-  return getDb().prepare(sql).all(...params) as T[];
+  const { getDb } = await import('../db/sqlite.js');
+  return await getDb().prepare(sql).all(...params) as T[];
 }
 
 /** مسودة مكتملة (بيانات + بطاقة الرقم القومي). */

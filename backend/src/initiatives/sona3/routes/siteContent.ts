@@ -5,8 +5,8 @@ import { listOverrides } from '../store/siteContent.js';
 
 export const siteContentRouter = Router();
 
-siteContentRouter.get('/site-content', ah((_req, res) => {
+siteContentRouter.get('/site-content', ah(async (_req, res) => {
   const overrides: Record<string, unknown> = {};
-  for (const r of listOverrides()) overrides[r.key] = r.value;
+  for (const r of await listOverrides()) overrides[r.key] = r.value;
   return okMessage(res, 200, 'ok', { overrides });
 }));

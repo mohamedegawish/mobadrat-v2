@@ -17,9 +17,9 @@ export function listScope(user: UserInternal): { sql: string; params: SqlParam[]
     case 'applicant':
       return { sql: 'p.organizationId = ?', params: [user.organizationId], includeDrafts: true };
     case 'evaluator':
-      return { sql: "EXISTS (SELECT 1 FROM evaluator_assignments e WHERE e.applicationId = a.id AND e.evaluatorUserId = ? AND e.status <> 'removed')", params: [user.id], includeDrafts: false };
+      return { sql: "EXISTS (SELECT 1 FROM sona3_evaluator_assignments e WHERE e.applicationId = a.id AND e.evaluatorUserId = ? AND e.status <> 'removed')", params: [user.id], includeDrafts: false };
     case 'funder_reviewer':
-      return { sql: 'EXISTS (SELECT 1 FROM funding_referrals r WHERE r.applicationId = a.id AND r.funderOrgId = ?)', params: [user.organizationId], includeDrafts: false };
+      return { sql: 'EXISTS (SELECT 1 FROM sona3_funding_referrals r WHERE r.applicationId = a.id AND r.funderOrgId = ?)', params: [user.organizationId], includeDrafts: false };
     case 'imc_officer':
       return user.organizationId === ORG_IDS.imc ? { sql: '1 = 1', params: [], includeDrafts: true } : { sql: '1 = 0', params: [], includeDrafts: false };
     case 'system_admin':
@@ -30,11 +30,11 @@ export function listScope(user: UserInternal): { sql: string; params: SqlParam[]
 }
 
 /** هل يرى المستخدم هذا الطلب؟ (غير ذلك → 404 دون كشف وجوده). */
-export function canSeeApplication(user: UserInternal, app: AppRow): boolean {
+export async function canSeeApplication(user: UserInternal, app: AppRow): Promise<boolean> {
   switch (user.role) {
     case 'applicant': return app.applicantOrgId === user.organizationId;
-    case 'evaluator': return assignmentFor(app.id, user.id) !== null;
-    case 'funder_reviewer': return hasReferralTo(app.id, user.organizationId);
+    case 'evaluator': return await assignmentFor(app.id, user.id) !== null;
+    case 'funder_reviewer': return await hasReferralTo(app.id, user.organizationId);
     case 'imc_officer': return user.organizationId === ORG_IDS.imc;
     case 'system_admin': return true;
     default: return false;
@@ -46,20 +46,20 @@ export function isApplicantOf(user: UserInternal, app: AppRow): boolean {
 }
 
 /** المقيّم يرى بيانات الطلب فقط بعد إقراره بعدم تضارب المصالح. */
-export function evaluatorCleared(user: UserInternal, app: AppRow): boolean {
+export async function evaluatorCleared(user: UserInternal, app: AppRow): Promise<boolean> {
   if (user.role !== 'evaluator') return false;
-  const a = assignmentFor(app.id, user.id);
+  const a = await assignmentFor(app.id, user.id);
   return a !== null && (a.status === 'draft' || a.status === 'submitted');
 }
 
 /** الأقسام المسموح بها لكل دور. */
-export function visibleSections(user: UserInternal, app: AppRow): Set<DataSection> {
+export async function visibleSections(user: UserInternal, app: AppRow): Promise<Set<DataSection>> {
   const all: DataSection[] = [...FORM_SECTIONS, 'approval'];
   switch (user.role) {
     case 'applicant': return isApplicantOf(user, app) ? new Set(all) : new Set();
     case 'imc_officer': return new Set(all);
     case 'funder_reviewer': return new Set(all);
-    case 'evaluator': return evaluatorCleared(user, app) ? new Set(FORM_SECTIONS) : new Set();
+    case 'evaluator': return await evaluatorCleared(user, app) ? new Set(FORM_SECTIONS) : new Set();
     default: return new Set();
   }
 }
@@ -70,7 +70,7 @@ export function viewAttempt(user: UserInternal, app: AppRow): number | undefined
 }
 
 /** المستندات ونسخها السابقة المسموح بها. */
-export function visibleDocuments(user: UserInternal, app: AppRow, docs: DocumentRow[]): DocumentRow[] {
+export async function visibleDocuments(user: UserInternal, app: AppRow, docs: DocumentRow[]): Promise<DocumentRow[]> {
   switch (user.role) {
     case 'applicant':
       return isApplicantOf(user, app) ? docs : [];
@@ -78,7 +78,7 @@ export function visibleDocuments(user: UserInternal, app: AppRow, docs: Document
     case 'system_admin':
       return docs.filter((d) => d.attempt <= Math.max(app.attempt, 1));
     case 'evaluator':
-      return evaluatorCleared(user, app)
+      return await evaluatorCleared(user, app)
         ? docs.filter((d) => isActiveAt(d, app.attempt) && !['approvalFile', 'fundingDecisionFile', 'milestoneEvidence'].includes(d.kind))
         : [];
     case 'funder_reviewer':

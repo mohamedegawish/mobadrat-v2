@@ -1,3 +1,4 @@
+import { mapSeq, filterSeq } from '../http/helpers.js';
 /** بناء ردود الطلب حسب المستخدم: البيانات المسموح بها فقط + allowedActions + currentTask. */
 import type { UserInternal } from '../store/users.js';
 import {
@@ -40,15 +41,15 @@ export function slaInfo(app: Pick<AppRow, 'state' | 'stateEnteredAt'>, now = Dat
   return { slaDays: days, dueAt: new Date(due).toISOString(), overdue: now > due, daysInState };
 }
 
-function orgLabel(orgId: string | null) {
+async function orgLabel(orgId: string | null) {
   if (!orgId) return null;
-  const o = getOrganization(orgId);
+  const o = await getOrganization(orgId);
   return o ? { id: o.id, nameAr: o.nameAr, nameEn: o.nameEn, type: o.type } : null;
 }
 
-export function responsibleInfo(app: AppRow) {
+export async function responsibleInfo(app: AppRow) {
   const type = STATE_RESPONSIBLE[app.state];
-  const org = orgLabel(responsibleOrgId(app));
+  const org = await orgLabel(responsibleOrgId(app));
   return {
     type, labelAr: RESPONSIBLE_LABELS[type].ar, labelEn: RESPONSIBLE_LABELS[type].en,
     orgId: org?.id ?? null, orgNameAr: org?.nameAr ?? null, orgNameEn: org?.nameEn ?? null,
@@ -129,8 +130,8 @@ export function returnCounts(transitions: TransitionRow[]): Partial<Record<Appli
 }
 
 /** فحوص الأهلية الآلية لمراجع IMC وللمتقدم (المقترح — رابعًا: الشروط). */
-function eligibilityChecks(app: AppRow, data: FormData) {
-  const cohort = getCohort(app.cohortId);
+async function eligibilityChecks(app: AppRow, data: FormData) {
+  const cohort = await getCohort(app.cohortId);
   const p = data.personal ?? {};
   const id = typeof p.nationalId === 'string' ? parseNationalId(p.nationalId) : null;
   const birth = typeof p.birthDate === 'string' ? p.birthDate : null;
@@ -150,12 +151,12 @@ function eligibilityChecks(app: AppRow, data: FormData) {
   return { referenceDate: refDate, checks };
 }
 
-export function buildListItem(user: UserInternal, app: AppRow) {
+export async function buildListItem(user: UserInternal, app: AppRow) {
   const sla = slaInfo(app);
   const actions = effectiveActions(user, app);
-  const cohort = getCohort(app.cohortId);
+  const cohort = await getCohort(app.cohortId);
   const showScore = seesScore(user, app);
-  const funder = user.role === 'evaluator' ? null : orgLabel(app.funderOrgId);
+  const funder = user.role === 'evaluator' ? null : await orgLabel(app.funderOrgId);
   const gov = findGovernorate(app.governorate);
   return {
     id: app.id, number: app.number, state: app.state, stateLabelAr: STATE_LABELS[app.state].ar, stateLabelEn: STATE_LABELS[app.state].en,
@@ -167,13 +168,13 @@ export function buildListItem(user: UserInternal, app: AppRow) {
     score: showScore ? app.score : null, passedMinimums: showScore ? app.passedMinimums : null, isStalled: user.role === 'evaluator' ? false : app.isStalled,
     attempt: app.attempt, version: app.version,
     submittedAt: app.submittedAt, stateEnteredAt: app.stateEnteredAt, closedAt: app.closedAt, createdAt: app.createdAt, updatedAt: app.updatedAt,
-    responsible: responsibleInfo(app), isMine: actions.some((a) => a.action !== 'withdraw'), overdue: sla.overdue, dueAt: sla.dueAt,
+    responsible: await responsibleInfo(app), isMine: actions.some((a) => a.action !== 'withdraw'), overdue: sla.overdue, dueAt: sla.dueAt,
     daysInState: sla.daysInState, funder: funder ? { id: funder.id, nameAr: funder.nameAr, nameEn: funder.nameEn } : null,
   };
 }
 
-export function buildDetail(user: UserInternal, app: AppRow) {
-  const sections = visibleSections(user, app);
+export async function buildDetail(user: UserInternal, app: AppRow) {
+  const sections = await visibleSections(user, app);
   const metaOnly = adminMetadataOnly(user);
   const maxAttempt = viewAttempt(user, app);
   const isOwner = isApplicantOf(user, app);
@@ -181,19 +182,19 @@ export function buildDetail(user: UserInternal, app: AppRow) {
   const data: Partial<Record<DataSection, Record<string, unknown>>> = {};
   for (const s of [...FORM_SECTIONS, 'approval'] as DataSection[]) {
     if (!sections.has(s) || metaOnly) continue;
-    const d = getSection(app.id, s, maxAttempt);
+    const d = await getSection(app.id, s, maxAttempt);
     if (d) data[s] = maskIds(user, s, d);
   }
   const rawForm: FormData = {};
-  for (const s of FORM_SECTIONS) rawForm[s] = getSection(app.id, s, maxAttempt) ?? {};
-  const allTransitions = listTransitions(app.id);
+  for (const s of FORM_SECTIONS) rawForm[s] = await getSection(app.id, s, maxAttempt) ?? {};
+  const allTransitions = await listTransitions(app.id);
   const transitions = visibleTransitions(user, allTransitions);
-  const deficiencies = visibleDeficiencies(user, listDeficiencies(app.id));
-  const open = openDeficiencies(app.id);
+  const deficiencies = visibleDeficiencies(user, await listDeficiencies(app.id));
+  const open = await openDeficiencies(app.id);
   const actions = effectiveActions(user, app);
   const sla = slaInfo(app);
-  const docs = visibleDocuments(user, app, listDocuments(app.id));
-  const cohort = getCohort(app.cohortId);
+  const docs = await visibleDocuments(user, app, await listDocuments(app.id));
+  const cohort = await getCohort(app.cohortId);
   const seesStudy = sections.has('study_market');
   const corrKind = CORRECTION_STATES[app.state];
 
@@ -206,31 +207,31 @@ export function buildDetail(user: UserInternal, app: AppRow) {
   else if (isOwner && app.state === 'STUDY_PREPARATION') editableForm = 'study';
   else if (isOwner && corrKind) { editableForm = corrKind; editableFields = open.map((d) => d.field); }
 
-  const expert = seesStudy && app.expertId ? getExpert(app.expertId) : null;
-  const referrals = listReferrals(app.id).filter((r) => isOwner || isImc || (user.role === 'funder_reviewer' && r.funderOrgId === user.organizationId));
+  const expert = seesStudy && app.expertId ? await getExpert(app.expertId) : null;
+  const referrals = (await listReferrals(app.id)).filter((r) => isOwner || isImc || (user.role === 'funder_reviewer' && r.funderOrgId === user.organizationId));
   const showLifecycle = isOwner || isImc || (user.role === 'funder_reviewer' && app.funderOrgId === user.organizationId);
   const selectHint = isImc && app.state === 'EVALUATED' && cohort ? {
-    outOfRank: isOutOfRank(app), selected: selectedCount(app.cohortId), target: cohort.selectionTarget, passedMinimums: app.passedMinimums,
+    outOfRank: await isOutOfRank(app), selected: await selectedCount(app.cohortId), target: cohort.selectionTarget, passedMinimums: app.passedMinimums,
   } : null;
 
   return {
-    ...buildListItem(user, app),
+    ...await buildListItem(user, app),
     cohort: cohort ? { id: cohort.id, nameAr: cohort.nameAr, opensAt: cohort.opensAt, closesAt: cohort.closesAt, maxAge: cohort.maxAge, selectionTarget: cohort.selectionTarget, evaluationTarget: cohort.evaluationTarget } : null,
     data,
     studyTotals: seesStudy && !metaOnly ? studyTotals(rawForm) : null,
-    eligibility: (isImc || isOwner) && !metaOnly ? eligibilityChecks(app, rawForm) : null,
+    eligibility: (isImc || isOwner) && !metaOnly ? await eligibilityChecks(app, rawForm) : null,
     expert: expert ? { id: expert.id, nameAr: expert.nameAr, specialty: expert.specialty, status: expert.status } : null,
-    evaluation: metaOnly ? null : evaluationBlock(user, app),
+    evaluation: metaOnly ? null : await evaluationBlock(user, app),
     selectHint,
-    referrals: metaOnly ? referrals.map((r) => ({ id: r.id, funderNameAr: getOrganization(r.funderOrgId)?.nameAr ?? r.funderOrgId, status: r.status, referredAt: r.referredAt, decidedAt: r.decidedAt }))
-      : referrals.map((r) => ({
-        id: r.id, funderOrgId: r.funderOrgId, funderNameAr: getOrganization(r.funderOrgId)?.nameAr ?? r.funderOrgId, funderNameEn: getOrganization(r.funderOrgId)?.nameEn ?? r.funderOrgId,
+    referrals: metaOnly ? await mapSeq(referrals, async (r) => ({ id: r.id, funderNameAr: (await getOrganization(r.funderOrgId))?.nameAr ?? r.funderOrgId, status: r.status, referredAt: r.referredAt, decidedAt: r.decidedAt }))
+      : await mapSeq(referrals, async (r) => ({
+        id: r.id, funderOrgId: r.funderOrgId, funderNameAr: (await getOrganization(r.funderOrgId))?.nameAr ?? r.funderOrgId, funderNameEn: (await getOrganization(r.funderOrgId))?.nameEn ?? r.funderOrgId,
         status: r.status, referredAt: r.referredAt, referralNote: r.referralNote, decidedAt: r.decidedAt, amount: r.amount, model: r.model,
         modelLabelAr: r.model ? optionLabel(policy.financingModels, r.model).ar : null, terms: r.terms, declineReason: r.declineReason,
       })),
-    milestones: showLifecycle ? listMilestones(app.id).map((m) => ({ ...m })) : [],
-    impactReports: showLifecycle ? listImpactReports(app.id) : [],
-    appeal: metaOnly ? null : appealInfo(user, app),
+    milestones: showLifecycle ? (await listMilestones(app.id)).map((m) => ({ ...m })) : [],
+    impactReports: showLifecycle ? await listImpactReports(app.id) : [],
+    appeal: metaOnly ? null : await appealInfo(user, app),
     documents: docs.map((d) => mapDocument(d, app, !metaOnly)),
     transitions: transitions.map(mapTransition).map((t) => (metaOnly ? { ...t, reason: '' } : t)),
     deficiencies: deficiencies.map((d) => ({ id: d.id, stage: d.stage, field: d.field, note: metaOnly ? '' : d.note, resolved: d.resolvedAtTransitionId !== null, createdAt: d.createdAt, ...(() => { const l = fieldLabel(d.field); return { labelAr: l.ar, labelEn: l.en }; })() })),
@@ -243,30 +244,30 @@ export function buildDetail(user: UserInternal, app: AppRow) {
       state: app.state,
       labelAr: STATE_TASKS[app.state]?.ar ?? STATE_LABELS[app.state].ar,
       labelEn: STATE_TASKS[app.state]?.en ?? STATE_LABELS[app.state].en,
-      responsible: responsibleInfo(app),
+      responsible: await responsibleInfo(app),
       isMine: actions.some((a) => a.action !== 'withdraw'),
       dueAt: sla.dueAt, overdue: sla.overdue, slaDays: sla.slaDays, daysInState: sla.daysInState,
       deficiencies: openList,
     },
     pendingAttempt: isOwner ? app.attempt + 1 : undefined,
-    unchangedDeficiencies: isOwner && corrKind ? unchangedDeficiencies(app, open) : undefined,
+    unchangedDeficiencies: isOwner && corrKind ? await unchangedDeficiencies(app, open) : undefined,
     metadataOnly: metaOnly || undefined,
     hasPendingDocuments: isOwner ? docs.some((d) => !isActiveAt(d, app.attempt) && d.attempt > app.attempt) : undefined,
   };
 }
 
 /** بنود النواقص المفتوحة التي لم يُعدَّل فيها شيء منذ آخر إرسال (تنبيه فقط). */
-function unchangedDeficiencies(app: AppRow, open: Array<{ field: string }>): string[] {
+async function unchangedDeficiencies(app: AppRow, open: Array<{ field: string }>): Promise<string[]> {
   const pending = app.attempt + 1;
-  return [...new Set(open.map((d) => d.field))].filter((field) => {
+  return filterSeq([...new Set(open.map((d) => d.field))], async (field) => {
     const kind = docKindForField(field);
-    if (kind) return !listDocuments(app.id).some((d) => d.kind === kind && d.attempt === pending);
+    if (kind) return !(await listDocuments(app.id)).some((d) => d.kind === kind && d.attempt === pending);
     const def = FIELD_BY_KEY.get(field);
     if (!def) return false;
-    const before = getSection(app.id, def.section, app.attempt)?.[field];
-    const now = getSection(app.id, def.section)?.[field];
+    const before = (await getSection(app.id, def.section, app.attempt))?.[field];
+    const now = (await getSection(app.id, def.section))?.[field];
     return JSON.stringify(before ?? null) === JSON.stringify(now ?? null);
   });
 }
 
-export type ApplicationDetail = ReturnType<typeof buildDetail>;
+export type ApplicationDetail = Awaited<ReturnType<typeof buildDetail>>;

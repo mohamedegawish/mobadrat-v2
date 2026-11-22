@@ -12,7 +12,7 @@ import { policy } from '../config/initiativePolicy.js';
 import { AppError, apiError } from './errors.js';
 
 export function uploadRoot(): string {
-  const dir = path.join(config.uploadDir, 'documents');
+  const dir = path.join(config.uploadDir, 'sona3', 'documents');
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }

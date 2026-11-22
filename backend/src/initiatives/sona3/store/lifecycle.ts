@@ -13,36 +13,36 @@ export interface FundingReferral {
   amount: number | null; model: FinancingModel | null; terms: string; declineReason: string;
 }
 
-export function listReferrals(appId: string): FundingReferral[] {
-  return getDb().prepare('SELECT * FROM funding_referrals WHERE applicationId = ? ORDER BY referredAt, rowid').all(appId) as unknown as FundingReferral[];
+export async function listReferrals(appId: string): Promise<FundingReferral[]> {
+  return await getDb().prepare('SELECT * FROM sona3_funding_referrals WHERE applicationId = ? ORDER BY referredAt, rowid').all(appId) as unknown as FundingReferral[];
 }
 
-export function pendingReferral(appId: string): FundingReferral | null {
-  return (getDb().prepare("SELECT * FROM funding_referrals WHERE applicationId = ? AND status = 'pending'").get(appId) as unknown as FundingReferral | undefined) ?? null;
+export async function pendingReferral(appId: string): Promise<FundingReferral | null> {
+  return (await getDb().prepare("SELECT * FROM sona3_funding_referrals WHERE applicationId = ? AND status = 'pending'").get(appId) as unknown as FundingReferral | undefined) ?? null;
 }
 
-export function approvedReferral(appId: string): FundingReferral | null {
-  return (getDb().prepare("SELECT * FROM funding_referrals WHERE applicationId = ? AND status = 'approved' ORDER BY decidedAt DESC LIMIT 1").get(appId) as unknown as FundingReferral | undefined) ?? null;
+export async function approvedReferral(appId: string): Promise<FundingReferral | null> {
+  return (await getDb().prepare("SELECT * FROM sona3_funding_referrals WHERE applicationId = ? AND status = 'approved' ORDER BY decidedAt DESC LIMIT 1").get(appId) as unknown as FundingReferral | undefined) ?? null;
 }
 
-export function hasReferralTo(appId: string, funderOrgId: string): boolean {
-  return Boolean(getDb().prepare('SELECT 1 FROM funding_referrals WHERE applicationId = ? AND funderOrgId = ? LIMIT 1').get(appId, funderOrgId));
+export async function hasReferralTo(appId: string, funderOrgId: string): Promise<boolean> {
+  return Boolean(await getDb().prepare('SELECT 1 FROM sona3_funding_referrals WHERE applicationId = ? AND funderOrgId = ? LIMIT 1').get(appId, funderOrgId));
 }
 
-export function insertReferral(appId: string, funderOrgId: string, by: string, note: string): FundingReferral {
+export async function insertReferral(appId: string, funderOrgId: string, by: string, note: string): Promise<FundingReferral> {
   const id = newId('ref');
-  getDb().prepare('INSERT INTO funding_referrals (id, applicationId, funderOrgId, referredAt, referredBy, referralNote) VALUES (?, ?, ?, ?, ?, ?)')
+  await getDb().prepare('INSERT INTO sona3_funding_referrals (id, applicationId, funderOrgId, referredAt, referredBy, referralNote) VALUES (?, ?, ?, ?, ?, ?)')
     .run(id, appId, funderOrgId, nowIso(), by, note);
-  return getDb().prepare('SELECT * FROM funding_referrals WHERE id = ?').get(id) as unknown as FundingReferral;
+  return await getDb().prepare('SELECT * FROM sona3_funding_referrals WHERE id = ?').get(id) as unknown as FundingReferral;
 }
 
-export function decideReferral(id: string, by: string, d: { status: 'approved'; amount: number; model: FinancingModel; terms: string } | { status: 'declined'; reason: string }): void {
+export async function decideReferral(id: string, by: string, d: { status: 'approved'; amount: number; model: FinancingModel; terms: string } | { status: 'declined'; reason: string }): Promise<void> {
   const now = nowIso();
   if (d.status === 'approved') {
-    getDb().prepare("UPDATE funding_referrals SET status = 'approved', decidedAt = ?, decidedBy = ?, amount = ?, model = ?, terms = ? WHERE id = ?")
+    await getDb().prepare("UPDATE sona3_funding_referrals SET status = 'approved', decidedAt = ?, decidedBy = ?, amount = ?, model = ?, terms = ? WHERE id = ?")
       .run(now, by, d.amount, d.model, d.terms, id);
   } else {
-    getDb().prepare("UPDATE funding_referrals SET status = 'declined', decidedAt = ?, decidedBy = ?, declineReason = ? WHERE id = ?").run(now, by, d.reason, id);
+    await getDb().prepare("UPDATE sona3_funding_referrals SET status = 'declined', decidedAt = ?, decidedBy = ?, declineReason = ? WHERE id = ?").run(now, by, d.reason, id);
   }
 }
 
@@ -57,39 +57,39 @@ export interface Milestone {
   createdAt: string; updatedAt: string;
 }
 
-export function listMilestones(appId: string): Milestone[] {
-  return getDb().prepare('SELECT * FROM milestones WHERE applicationId = ? ORDER BY seq').all(appId) as unknown as Milestone[];
+export async function listMilestones(appId: string): Promise<Milestone[]> {
+  return await getDb().prepare('SELECT * FROM sona3_milestones WHERE applicationId = ? ORDER BY seq').all(appId) as unknown as Milestone[];
 }
 
-export function getMilestone(appId: string, id: string): Milestone | null {
-  return (getDb().prepare('SELECT * FROM milestones WHERE id = ? AND applicationId = ?').get(id, appId) as unknown as Milestone | undefined) ?? null;
+export async function getMilestone(appId: string, id: string): Promise<Milestone | null> {
+  return (await getDb().prepare('SELECT * FROM sona3_milestones WHERE id = ? AND applicationId = ?').get(id, appId) as unknown as Milestone | undefined) ?? null;
 }
 
-export function insertMilestones(appId: string, rows: Array<{ title: string; dueDate: string | null; amount: number }>): void {
+export async function insertMilestones(appId: string, rows: Array<{ title: string; dueDate: string | null; amount: number }>): Promise<void> {
   const now = nowIso();
-  const st = getDb().prepare(`INSERT INTO milestones (id, applicationId, seq, title, dueDate, amount, status, createdAt, updatedAt)
+  const st = getDb().prepare(`INSERT INTO sona3_milestones (id, applicationId, seq, title, dueDate, amount, status, createdAt, updatedAt)
     VALUES (?, ?, ?, ?, ?, ?, 'planned', ?, ?)`);
-  rows.forEach((r, i) => st.run(newId('mst'), appId, i + 1, r.title, r.dueDate, r.amount, now, now));
+  for (let i = 0; i < rows.length; i++) { const r = rows[i]; await st.run(newId('mst'), appId, i + 1, r.title, r.dueDate, r.amount, now, now); }
 }
 
-export function reportMilestone(id: string, by: string, note: string, evidenceDocId: string | null): void {
+export async function reportMilestone(id: string, by: string, note: string, evidenceDocId: string | null): Promise<void> {
   const now = nowIso();
-  getDb().prepare("UPDATE milestones SET status = 'reported', reportNote = ?, reportedAt = ?, reportedBy = ?, evidenceDocId = ?, reviewNote = '', updatedAt = ? WHERE id = ?")
+  await getDb().prepare("UPDATE sona3_milestones SET status = 'reported', reportNote = ?, reportedAt = ?, reportedBy = ?, evidenceDocId = ?, reviewNote = '', updatedAt = ? WHERE id = ?")
     .run(note, now, by, evidenceDocId, now, id);
 }
 
-export function reviewMilestone(id: string, by: string, verified: boolean, note: string): void {
+export async function reviewMilestone(id: string, by: string, verified: boolean, note: string): Promise<void> {
   const now = nowIso();
   if (verified) {
-    getDb().prepare("UPDATE milestones SET status = 'verified', reviewNote = ?, verifiedAt = ?, verifiedBy = ?, updatedAt = ? WHERE id = ?").run(note, now, by, now, id);
+    await getDb().prepare("UPDATE sona3_milestones SET status = 'verified', reviewNote = ?, verifiedAt = ?, verifiedBy = ?, updatedAt = ? WHERE id = ?").run(note, now, by, now, id);
   } else {
-    getDb().prepare("UPDATE milestones SET status = 'returned', reviewNote = ?, updatedAt = ? WHERE id = ?").run(note, now, id);
+    await getDb().prepare("UPDATE sona3_milestones SET status = 'returned', reviewNote = ?, updatedAt = ? WHERE id = ?").run(note, now, id);
   }
 }
 
-export function disburseMilestone(id: string, by: string, ref: string): void {
+export async function disburseMilestone(id: string, by: string, ref: string): Promise<void> {
   const now = nowIso();
-  getDb().prepare("UPDATE milestones SET status = 'disbursed', disbursedAt = ?, disbursedBy = ?, disbursementRef = ?, updatedAt = ? WHERE id = ?").run(now, by, ref, now, id);
+  await getDb().prepare("UPDATE sona3_milestones SET status = 'disbursed', disbursedAt = ?, disbursedBy = ?, disbursementRef = ?, updatedAt = ? WHERE id = ?").run(now, by, ref, now, id);
 }
 
 // ── تقارير الأثر ────────────────────────────────────────────────────────────
@@ -99,15 +99,15 @@ export interface ImpactReport {
   directJobs: number; indirectJobs: number; issues: string; submittedBy: string | null; submittedAt: string;
 }
 
-export function listImpactReports(appId: string): ImpactReport[] {
-  return getDb().prepare('SELECT * FROM impact_reports WHERE applicationId = ? ORDER BY periodEnd DESC').all(appId) as unknown as ImpactReport[];
+export async function listImpactReports(appId: string): Promise<ImpactReport[]> {
+  return await getDb().prepare('SELECT * FROM sona3_impact_reports WHERE applicationId = ? ORDER BY periodEnd DESC').all(appId) as unknown as ImpactReport[];
 }
 
-export function insertImpactReport(appId: string, r: Omit<ImpactReport, 'id' | 'applicationId' | 'submittedAt'>): ImpactReport {
+export async function insertImpactReport(appId: string, r: Omit<ImpactReport, 'id' | 'applicationId' | 'submittedAt'>): Promise<ImpactReport> {
   const id = newId('imp');
-  getDb().prepare(`INSERT INTO impact_reports (id, applicationId, periodStart, periodEnd, revenue, costs, production, directJobs, indirectJobs, issues, submittedBy, submittedAt)
+  await getDb().prepare(`INSERT INTO sona3_impact_reports (id, applicationId, periodStart, periodEnd, revenue, costs, production, directJobs, indirectJobs, issues, submittedBy, submittedAt)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, appId, r.periodStart, r.periodEnd, r.revenue, r.costs, r.production, r.directJobs, r.indirectJobs, r.issues, r.submittedBy, nowIso());
-  return getDb().prepare('SELECT * FROM impact_reports WHERE id = ?').get(id) as unknown as ImpactReport;
+  return await getDb().prepare('SELECT * FROM sona3_impact_reports WHERE id = ?').get(id) as unknown as ImpactReport;
 }
 
 // ── التظلمات ────────────────────────────────────────────────────────────────
@@ -118,21 +118,21 @@ export interface Appeal {
   createdBy: string | null; createdAt: string;
 }
 
-export function getAppeal(appId: string): Appeal | null {
-  return (getDb().prepare('SELECT * FROM appeals WHERE applicationId = ?').get(appId) as unknown as Appeal | undefined) ?? null;
+export async function getAppeal(appId: string): Promise<Appeal | null> {
+  return (await getDb().prepare('SELECT * FROM sona3_appeals WHERE applicationId = ?').get(appId) as unknown as Appeal | undefined) ?? null;
 }
 
-export function listPendingAppeals(): Appeal[] {
-  return getDb().prepare("SELECT * FROM appeals WHERE status = 'pending' ORDER BY createdAt").all() as unknown as Appeal[];
+export async function listPendingAppeals(): Promise<Appeal[]> {
+  return await getDb().prepare("SELECT * FROM sona3_appeals WHERE status = 'pending' ORDER BY createdAt").all() as unknown as Appeal[];
 }
 
-export function insertAppeal(appId: string, decisionTransitionId: string, reviewState: ApplicationState, reason: string, by: string): Appeal {
-  getDb().prepare('INSERT INTO appeals (id, applicationId, decisionTransitionId, reviewState, reason, createdBy, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)')
+export async function insertAppeal(appId: string, decisionTransitionId: string, reviewState: ApplicationState, reason: string, by: string): Promise<Appeal> {
+  await getDb().prepare('INSERT INTO sona3_appeals (id, applicationId, decisionTransitionId, reviewState, reason, createdBy, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)')
     .run(newId('apl-appeal'), appId, decisionTransitionId, reviewState, reason, by, nowIso());
-  return getAppeal(appId)!;
+  return (await getAppeal(appId))!;
 }
 
-export function decideAppeal(id: string, by: string, accepted: boolean, note: string): void {
-  getDb().prepare('UPDATE appeals SET status = ?, decidedBy = ?, decidedAt = ?, decisionNote = ? WHERE id = ?')
+export async function decideAppeal(id: string, by: string, accepted: boolean, note: string): Promise<void> {
+  await getDb().prepare('UPDATE sona3_appeals SET status = ?, decidedBy = ?, decidedAt = ?, decisionNote = ? WHERE id = ?')
     .run(accepted ? 'accepted' : 'rejected', by, nowIso(), note, id);
 }

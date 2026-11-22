@@ -22,57 +22,57 @@ function map(r: Record<string, unknown>): Assignment {
   };
 }
 
-export function getAssignment(id: string): Assignment | null {
-  const r = getDb().prepare('SELECT * FROM evaluator_assignments WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+export async function getAssignment(id: string): Promise<Assignment | null> {
+  const r = await getDb().prepare('SELECT * FROM sona3_evaluator_assignments WHERE id = ?').get(id) as Record<string, unknown> | undefined;
   return r ? map(r) : null;
 }
 
 /** الإسنادات غير المحذوفة للطلب. */
-export function activeAssignments(appId: string): Assignment[] {
-  return (getDb().prepare("SELECT * FROM evaluator_assignments WHERE applicationId = ? AND status <> 'removed' ORDER BY assignedAt").all(appId) as Array<Record<string, unknown>>).map(map);
+export async function activeAssignments(appId: string): Promise<Assignment[]> {
+  return (await getDb().prepare("SELECT * FROM sona3_evaluator_assignments WHERE applicationId = ? AND status <> 'removed' ORDER BY assignedAt").all(appId) as Array<Record<string, unknown>>).map(map);
 }
 
-export function allAssignments(appId: string): Assignment[] {
-  return (getDb().prepare('SELECT * FROM evaluator_assignments WHERE applicationId = ? ORDER BY assignedAt').all(appId) as Array<Record<string, unknown>>).map(map);
+export async function allAssignments(appId: string): Promise<Assignment[]> {
+  return (await getDb().prepare('SELECT * FROM sona3_evaluator_assignments WHERE applicationId = ? ORDER BY assignedAt').all(appId) as Array<Record<string, unknown>>).map(map);
 }
 
-export function assignmentFor(appId: string, userId: string): Assignment | null {
-  const r = getDb().prepare("SELECT * FROM evaluator_assignments WHERE applicationId = ? AND evaluatorUserId = ? AND status <> 'removed'").get(appId, userId) as Record<string, unknown> | undefined;
+export async function assignmentFor(appId: string, userId: string): Promise<Assignment | null> {
+  const r = await getDb().prepare("SELECT * FROM sona3_evaluator_assignments WHERE applicationId = ? AND evaluatorUserId = ? AND status <> 'removed'").get(appId, userId) as Record<string, unknown> | undefined;
   return r ? map(r) : null;
 }
 
 /** إسنادات المقيّم (قائمة عمله). */
-export function assignmentsOfEvaluator(userId: string): Assignment[] {
-  return (getDb().prepare("SELECT * FROM evaluator_assignments WHERE evaluatorUserId = ? AND status <> 'removed' ORDER BY assignedAt DESC").all(userId) as Array<Record<string, unknown>>).map(map);
+export async function assignmentsOfEvaluator(userId: string): Promise<Assignment[]> {
+  return (await getDb().prepare("SELECT * FROM sona3_evaluator_assignments WHERE evaluatorUserId = ? AND status <> 'removed' ORDER BY assignedAt DESC").all(userId) as Array<Record<string, unknown>>).map(map);
 }
 
-export function insertAssignment(appId: string, evaluatorUserId: string, assignedBy: string): Assignment {
+export async function insertAssignment(appId: string, evaluatorUserId: string, assignedBy: string): Promise<Assignment> {
   const id = newId('asg');
   const now = nowIso();
-  getDb().prepare(`INSERT INTO evaluator_assignments (id, applicationId, evaluatorUserId, assignedBy, assignedAt, status, updatedAt)
+  await getDb().prepare(`INSERT INTO sona3_evaluator_assignments (id, applicationId, evaluatorUserId, assignedBy, assignedAt, status, updatedAt)
     VALUES (?, ?, ?, ?, ?, 'assigned', ?)`).run(id, appId, evaluatorUserId, assignedBy, now, now);
-  return getAssignment(id)!;
+  return (await getAssignment(id))!;
 }
 
-export function removeAssignment(id: string, by: string, reason: string): void {
+export async function removeAssignment(id: string, by: string, reason: string): Promise<void> {
   const now = nowIso();
-  getDb().prepare("UPDATE evaluator_assignments SET status = 'removed', removedAt = ?, removedBy = ?, removeReason = ?, updatedAt = ? WHERE id = ?").run(now, by, reason, now, id);
+  await getDb().prepare("UPDATE sona3_evaluator_assignments SET status = 'removed', removedAt = ?, removedBy = ?, removeReason = ?, updatedAt = ? WHERE id = ?").run(now, by, reason, now, id);
 }
 
-export function declareCoi(id: string, conflict: boolean, note: string): void {
+export async function declareCoi(id: string, conflict: boolean, note: string): Promise<void> {
   const now = nowIso();
-  getDb().prepare('UPDATE evaluator_assignments SET status = ?, coiDeclaredAt = ?, coiNote = ?, updatedAt = ? WHERE id = ?')
+  await getDb().prepare('UPDATE sona3_evaluator_assignments SET status = ?, coiDeclaredAt = ?, coiNote = ?, updatedAt = ? WHERE id = ?')
     .run(conflict ? 'conflict' : 'draft', now, note, now, id);
 }
 
-export function saveScores(id: string, scores: Partial<Record<CriterionKey, number>>, notes: Partial<Record<CriterionKey, string>>, recommendation: string): void {
-  getDb().prepare('UPDATE evaluator_assignments SET scores = ?, notes = ?, recommendation = ?, updatedAt = ? WHERE id = ?')
+export async function saveScores(id: string, scores: Partial<Record<CriterionKey, number>>, notes: Partial<Record<CriterionKey, string>>, recommendation: string): Promise<void> {
+  await getDb().prepare('UPDATE sona3_evaluator_assignments SET scores = ?, notes = ?, recommendation = ?, updatedAt = ? WHERE id = ?')
     .run(JSON.stringify(scores), JSON.stringify(notes), recommendation, nowIso(), id);
 }
 
-export function submitScores(id: string, weightedScore: number): void {
+export async function submitScores(id: string, weightedScore: number): Promise<void> {
   const now = nowIso();
-  getDb().prepare("UPDATE evaluator_assignments SET status = 'submitted', weightedScore = ?, submittedAt = ?, updatedAt = ? WHERE id = ?").run(weightedScore, now, now, id);
+  await getDb().prepare("UPDATE sona3_evaluator_assignments SET status = 'submitted', weightedScore = ?, submittedAt = ?, updatedAt = ? WHERE id = ?").run(weightedScore, now, now, id);
 }
 
 /** الدرجة الموزونة = Σ(درجة × وزن) / Σ(الأوزان). */
@@ -96,7 +96,7 @@ export function aggregate(list: Assignment[]): Aggregate {
   return { evaluators: done.length, score: avg(done.map((a) => a.weightedScore ?? 0)), perCriterion };
 }
 
-export function setApplicationScore(appId: string, score: number | null, passed: boolean | null): void {
-  getDb().prepare('UPDATE applications SET score = ?, passedMinimums = ?, updatedAt = ? WHERE id = ?')
+export async function setApplicationScore(appId: string, score: number | null, passed: boolean | null): Promise<void> {
+  await getDb().prepare('UPDATE sona3_applications SET score = ?, passedMinimums = ?, updatedAt = ? WHERE id = ?')
     .run(score, passed === null ? null : passed ? 1 : 0, nowIso(), appId);
 }

@@ -36,17 +36,17 @@ export function cleanExpertInput(body: unknown, creating: boolean): ExpertInput 
   return out;
 }
 
-export function publicExpert(p: NonNullable<ReturnType<typeof getExpert>>, full: boolean) {
+export function publicExpert(p: NonNullable<Awaited<ReturnType<typeof getExpert>>>, full: boolean) {
   const base = { id: p.id, nameAr: p.nameAr, nameEn: p.nameEn, specialty: p.specialty, contactName: p.contactName, contactPhone: p.contactPhone, contactEmail: p.contactEmail, website: p.website, status: p.status };
   return full ? { ...base, notes: p.notes, approvedAt: p.approvedAt, approvedBy: p.approvedBy, suspendedAt: p.suspendedAt, createdAt: p.createdAt, updatedAt: p.updatedAt } : base;
 }
 
-expertsRouter.get('/experts', ah((req, res) => {
+expertsRouter.get('/experts', ah(async (req, res) => {
   const user = currentUser(req);
   const manage = canManage(user.role);
   // المتقدم وباقي الجهات يرون القائمة المعتمدة فقط.
   const status = manage ? ((['pending', 'approved', 'suspended'].includes(str(req.query.status)) ? str(req.query.status) : undefined) as ExpertStatus | undefined) : 'approved';
-  const list = listExperts({ status, q: str(req.query.q).slice(0, 100) || undefined });
+  const list = await listExperts({ status, q: str(req.query.q).slice(0, 100) || undefined });
   return okMessage(res, 200, 'ok', { items: list.map((p) => publicExpert(p, manage)) });
 }));
 
@@ -56,29 +56,29 @@ function requireManager(req: Request) {
   return user;
 }
 
-expertsRouter.post('/experts', ah((req, res) => {
+expertsRouter.post('/experts', ah(async (req, res) => {
   const user = requireManager(req);
   const input = cleanExpertInput(req.body, true);
-  const p = createExpert(input as ExpertInput & { nameAr: string }, user.id);
-  addAuditLog({ ...actorFromReq(req), action: 'expert.create', entityType: 'expert', entityId: p.id, summaryAr: `إضافة خبير: ${p.nameAr}` });
+  const p = await createExpert(input as ExpertInput & { nameAr: string }, user.id);
+  await addAuditLog({ ...actorFromReq(req), action: 'expert.create', entityType: 'expert', entityId: p.id, summaryAr: `إضافة خبير: ${p.nameAr}` });
   return okMessage(res, 201, 'تمت إضافة الخبير (بانتظار الاعتماد).', publicExpert(p, true));
 }));
 
-expertsRouter.put('/experts/:id', ah((req, res) => {
+expertsRouter.put('/experts/:id', ah(async (req, res) => {
   requireManager(req);
-  if (!getExpert(req.params.id)) throw Errors.notFound();
-  const p = updateExpert(req.params.id, cleanExpertInput(req.body, false))!;
-  addAuditLog({ ...actorFromReq(req), action: 'expert.update', entityType: 'expert', entityId: p.id, summaryAr: `تعديل خبير: ${p.nameAr}` });
+  if (!await getExpert(req.params.id)) throw Errors.notFound();
+  const p = (await updateExpert(req.params.id, cleanExpertInput(req.body, false)))!;
+  await addAuditLog({ ...actorFromReq(req), action: 'expert.update', entityType: 'expert', entityId: p.id, summaryAr: `تعديل خبير: ${p.nameAr}` });
   return okMessage(res, 200, 'تم الحفظ.', publicExpert(p, true));
 }));
 
 for (const [path, status, ar] of [['approve', 'approved', 'اعتماد'], ['suspend', 'suspended', 'إيقاف']] as const) {
-  expertsRouter.post(`/experts/:id/${path}`, ah((req, res) => {
+  expertsRouter.post(`/experts/:id/${path}`, ah(async (req, res) => {
     const user = requireManager(req);
     onlyKeys(req.body ?? {}, []);
-    if (!getExpert(req.params.id)) throw Errors.notFound();
-    const p = setExpertStatus(req.params.id, status, user.id)!;
-    addAuditLog({ ...actorFromReq(req), action: `expert.${path}`, entityType: 'expert', entityId: p.id, summaryAr: `${ar} خبير: ${p.nameAr}` });
+    if (!await getExpert(req.params.id)) throw Errors.notFound();
+    const p = (await setExpertStatus(req.params.id, status, user.id))!;
+    await addAuditLog({ ...actorFromReq(req), action: `expert.${path}`, entityType: 'expert', entityId: p.id, summaryAr: `${ar} خبير: ${p.nameAr}` });
     return okMessage(res, 200, 'تم التحديث.', publicExpert(p, true));
   }));
 }
@@ -86,12 +86,12 @@ for (const [path, status, ar] of [['approve', 'approved', 'اعتماد'], ['sus
 /** قوائم مساعدة لـ IMC: جهات التمويل المتاحة والمقيّمون النشطون. */
 import { listActiveFunders } from '../store/organizations.js';
 import { listUsers } from '../store/users.js';
-expertsRouter.get('/funders', ah((req, res) => {
+expertsRouter.get('/funders', ah(async (req, res) => {
   if (currentUser(req).role !== 'imc_officer') throw Errors.forbidden();
-  return okMessage(res, 200, 'ok', { items: listActiveFunders() });
+  return okMessage(res, 200, 'ok', { items: await listActiveFunders() });
 }));
-expertsRouter.get('/evaluators', ah((req, res) => {
+expertsRouter.get('/evaluators', ah(async (req, res) => {
   if (currentUser(req).role !== 'imc_officer') throw Errors.forbidden();
-  const { rows } = listUsers({ role: 'evaluator' }, 1, 200);
+  const { rows } = await listUsers({ role: 'evaluator' }, 1, 200);
   return okMessage(res, 200, 'ok', { items: rows.filter((u) => u.isActive).map((u) => ({ id: u.id, nameAr: u.nameAr, email: u.email })) });
 }));

@@ -9,7 +9,7 @@ import { config } from '../config.js';
 // كل قيمة ديناميكية يجب أن تمر عبر escapeHtml قبل وضعها في bodyHtml.
 // ============================================================================
 
-export const LOGO_CID = 'platform-logo';
+export const LOGO_CID = 'sona3-logo';
 
 export function escapeHtml(s: unknown): string {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
@@ -27,13 +27,13 @@ export function logoAttachment(): { filename: string; path: string; cid: string 
   if (logoPathCache === undefined) {
     const here = path.dirname(fileURLToPath(import.meta.url));
     const candidates = [
-      path.join(process.cwd(), 'assets', 'email', 'logo.jpg'),       // backend/ (dev + docker /app)
-      path.join(here, '..', '..', 'assets', 'email', 'logo.jpg'),    // src/mail or dist/mail
-      path.join(process.cwd(), 'backend', 'assets', 'email', 'logo.jpg'),
+      path.join(process.cwd(), 'assets', 'email', 'sona3-logo.jpg'),       // backend/ (dev + docker /app)
+      path.join(here, '..', '..', '..', '..', 'assets', 'email', 'sona3-logo.jpg'),    // src/mail or dist/mail
+      path.join(process.cwd(), 'backend', 'assets', 'email', 'sona3-logo.jpg'),
     ];
     logoPathCache = candidates.find((p) => fs.existsSync(p)) ?? null;
   }
-  return logoPathCache ? { filename: 'logo.jpg', path: logoPathCache, cid: LOGO_CID } : null;
+  return logoPathCache ? { filename: 'sona3-logo.jpg', path: logoPathCache, cid: LOGO_CID } : null;
 }
 
 export type EmailTone = 'info' | 'success' | 'warning' | 'danger' | 'neutral';

@@ -67,21 +67,21 @@ export function validateContent(key: ContentKey, raw: unknown): unknown {
 
 export interface ContentRow { key: ContentKey; value: unknown; updatedAt: string; updatedBy: string | null }
 
-export function listOverrides(): ContentRow[] {
-  const rows = getDb().prepare('SELECT key, value, updatedAt, updatedBy FROM site_content ORDER BY key').all() as Array<Record<string, unknown>>;
+export async function listOverrides(): Promise<ContentRow[]> {
+  const rows = await getDb().prepare('SELECT key, value, updatedAt, updatedBy FROM sona3_site_content ORDER BY key').all() as Array<Record<string, unknown>>;
   return rows.filter((r) => isContentKey(String(r.key))).map((r) => ({
     key: String(r.key) as ContentKey, value: parseJson<unknown>(r.value, null), updatedAt: String(r.updatedAt), updatedBy: (r.updatedBy as string | null) ?? null,
   }));
 }
 
-export function setOverride(key: ContentKey, value: unknown, userId: string | null): ContentRow {
+export async function setOverride(key: ContentKey, value: unknown, userId: string | null): Promise<ContentRow> {
   const at = nowIso();
-  getDb().prepare(`INSERT INTO site_content (key, value, updatedAt, updatedBy) VALUES (?, ?, ?, ?)
+  await getDb().prepare(`INSERT INTO sona3_site_content (key, value, updatedAt, updatedBy) VALUES (?, ?, ?, ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = excluded.updatedAt, updatedBy = excluded.updatedBy`)
     .run(key, JSON.stringify(value), at, userId);
   return { key, value, updatedAt: at, updatedBy: userId };
 }
 
-export function resetOverride(key: ContentKey): boolean {
-  return Number(getDb().prepare('DELETE FROM site_content WHERE key = ?').run(key).changes) > 0;
+export async function resetOverride(key: ContentKey): Promise<boolean> {
+  return Number((await getDb().prepare('DELETE FROM sona3_site_content WHERE key = ?').run(key)).changes) > 0;
 }

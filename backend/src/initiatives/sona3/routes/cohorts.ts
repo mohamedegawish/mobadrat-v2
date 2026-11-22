@@ -1,3 +1,4 @@
+import { mapSeq } from '../http/helpers.js';
 /** دورات التقديم: القراءة لكل الأدوار المصادق عليها، والإدارة (إنشاء/تعديل/أوزان) للأدمن فقط (docs/SONA3_DESIGN.md §3). */
 import { Router } from 'express';
 import { ah, okMessage, Errors } from '../http/errors.js';
@@ -17,11 +18,11 @@ const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 const COHORT_KEYS = ['nameAr', 'nameEn', 'opensAt', 'closesAt', 'evaluationTarget', 'selectionTarget', 'maxAge', 'ageReference',
   'weights', 'minTotalScore', 'minFinancialScore', 'minTechnicalScore', 'minEvaluators'] as const;
 
-function present(c: Cohort) {
-  const counts = getDb().prepare(`SELECT COUNT(*) AS total, SUM(CASE WHEN state <> 'DRAFT' THEN 1 ELSE 0 END) AS submitted
-    FROM applications WHERE cohortId = ?`).get(c.id) as { total: number; submitted: number | null };
+async function present(c: Cohort) {
+  const counts = await getDb().prepare(`SELECT COUNT(*) AS total, SUM(CASE WHEN state <> 'DRAFT' THEN 1 ELSE 0 END) AS submitted
+    FROM sona3_applications WHERE cohortId = ?`).get(c.id) as { total: number; submitted: number | null };
   return {
-    ...c, status: cohortStatus(c), weightsLocked: weightsLocked(c.id),
+    ...c, status: cohortStatus(c), weightsLocked: await weightsLocked(c.id),
     weightsTotal: CRITERION_KEYS.reduce((s, k) => s + c.weights[k], 0),
     applications: { total: counts.total, submitted: counts.submitted ?? 0 },
   };
@@ -100,56 +101,56 @@ const lockedError = () => Errors.conflict('WEIGHTS_LOCKED',
   'لا يمكن تعديل الأوزان بعد تسليم أول تقييم في الدورة.', 'Weights are locked once the first evaluation has been submitted in this cohort.');
 
 // ── قراءة (أي مستخدم مصادق): قائمة الدورات ──
-cohortsRouter.get('/cohorts', ah((_req, res) => okMessage(res, 200, 'ok', {
-  items: listCohorts().map((c) => ({ id: c.id, nameAr: c.nameAr, nameEn: c.nameEn, opensAt: c.opensAt, closesAt: c.closesAt, status: cohortStatus(c), maxAge: c.maxAge })),
+cohortsRouter.get('/cohorts', ah(async (_req, res) => okMessage(res, 200, 'ok', {
+  items: (await listCohorts()).map((c) => ({ id: c.id, nameAr: c.nameAr, nameEn: c.nameEn, opensAt: c.opensAt, closesAt: c.closesAt, status: cohortStatus(c), maxAge: c.maxAge })),
   criteria: CRITERIA,
 })));
 
 // ── إدارة (الأدمن) ──
-cohortsRouter.get('/admin/cohorts', requireRole('system_admin'), ah((_req, res) => okMessage(res, 200, 'ok', { items: listCohorts().map(present), criteria: CRITERIA })));
+cohortsRouter.get('/admin/cohorts', requireRole('system_admin'), ah(async (_req, res) => okMessage(res, 200, 'ok', { items: await mapSeq(await listCohorts(), async (c) => await present(c)), criteria: CRITERIA })));
 
-cohortsRouter.get('/admin/cohorts/:id', requireRole('system_admin'), ah((req, res) => {
-  const c = getCohort(req.params.id);
+cohortsRouter.get('/admin/cohorts/:id', requireRole('system_admin'), ah(async (req, res) => {
+  const c = await getCohort(req.params.id);
   if (!c) throw Errors.notFound();
-  return okMessage(res, 200, 'ok', present(c));
+  return okMessage(res, 200, 'ok', await present(c));
 }));
 
-cohortsRouter.post('/admin/cohorts', requireRole('system_admin'), ah((req, res) => {
+cohortsRouter.post('/admin/cohorts', requireRole('system_admin'), ah(async (req, res) => {
   const input = cleanCohort(req.body, true);
   const actor = actorFromReq(req);
-  const c = tx(() => {
-    const created = createCohort(input, actor.actorUserId ?? null);
-    addAuditLog({ ...actor, action: 'cohort.create', entityType: 'cohort', entityId: created.id, summaryAr: `إنشاء دورة تقديم: ${created.nameAr}`, details: { weights: created.weights } });
+  const c = await tx(async () => {
+    const created = await createCohort(input, actor.actorUserId ?? null);
+    await addAuditLog({ ...actor, action: 'cohort.create', entityType: 'cohort', entityId: created.id, summaryAr: `إنشاء دورة تقديم: ${created.nameAr}`, details: { weights: created.weights } });
     return created;
   });
-  return okMessage(res, 201, 'تم إنشاء الدورة.', present(c));
+  return okMessage(res, 201, 'تم إنشاء الدورة.', await present(c));
 }));
 
-cohortsRouter.put('/admin/cohorts/:id', requireRole('system_admin'), ah((req, res) => {
-  const cur = getCohort(req.params.id);
+cohortsRouter.put('/admin/cohorts/:id', requireRole('system_admin'), ah(async (req, res) => {
+  const cur = await getCohort(req.params.id);
   if (!cur) throw Errors.notFound();
   const patch = cleanCohort(req.body, false, cur);
-  if (patch.weights && weightsChanged(patch.weights, cur.weights) && weightsLocked(cur.id)) throw lockedError();
+  if (patch.weights && weightsChanged(patch.weights, cur.weights) && await weightsLocked(cur.id)) throw lockedError();
   const actor = actorFromReq(req);
-  const c = tx(() => {
-    const updated = updateCohort(cur.id, patch)!;
-    addAuditLog({ ...actor, action: 'cohort.update', entityType: 'cohort', entityId: cur.id, summaryAr: `تعديل دورة تقديم: ${updated.nameAr}`, details: { before: cur, after: updated } });
+  const c = await tx(async () => {
+    const updated = (await updateCohort(cur.id, patch))!;
+    await addAuditLog({ ...actor, action: 'cohort.update', entityType: 'cohort', entityId: cur.id, summaryAr: `تعديل دورة تقديم: ${updated.nameAr}`, details: { before: cur, after: updated } });
     return updated;
   });
-  return okMessage(res, 200, 'تم الحفظ.', present(c));
+  return okMessage(res, 200, 'تم الحفظ.', await present(c));
 }));
 
 /** أوزان المعايير فقط: مجموعها 100، وتُقفل بمجرد تسليم أول تقييم في الدورة. */
-cohortsRouter.put('/admin/cohorts/:id/weights', requireRole('system_admin'), ah((req, res) => {
-  const cur = getCohort(req.params.id);
+cohortsRouter.put('/admin/cohorts/:id/weights', requireRole('system_admin'), ah(async (req, res) => {
+  const cur = await getCohort(req.params.id);
   if (!cur) throw Errors.notFound();
   const weights = cleanWeights(onlyKeys(req.body, ['weights']).weights);
-  if (weightsChanged(weights, cur.weights) && weightsLocked(cur.id)) throw lockedError();
+  if (weightsChanged(weights, cur.weights) && await weightsLocked(cur.id)) throw lockedError();
   const actor = actorFromReq(req);
-  const c = tx(() => {
-    const updated = updateCohort(cur.id, { weights })!;
-    addAuditLog({ ...actor, action: 'cohort.weights', entityType: 'cohort', entityId: cur.id, summaryAr: `تعديل أوزان معايير الدورة: ${updated.nameAr}`, details: { before: cur.weights, after: weights } });
+  const c = await tx(async () => {
+    const updated = (await updateCohort(cur.id, { weights }))!;
+    await addAuditLog({ ...actor, action: 'cohort.weights', entityType: 'cohort', entityId: cur.id, summaryAr: `تعديل أوزان معايير الدورة: ${updated.nameAr}`, details: { before: cur.weights, after: weights } });
     return updated;
   });
-  return okMessage(res, 200, 'تم حفظ الأوزان.', present(c));
+  return okMessage(res, 200, 'تم حفظ الأوزان.', await present(c));
 }));

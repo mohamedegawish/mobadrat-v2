@@ -1,3 +1,4 @@
+import { mapSeq } from '../http/helpers.js';
 /** التقارير ومؤشرات لوحة المتابعة (docs/SONA3_DESIGN.md §13) — دالة واحدة لـ /reports/summary و Integration GET /summary. */
 import { getDb } from '../db/sqlite.js';
 import type { SqlParam } from '../http/helpers.js';
@@ -22,70 +23,70 @@ export interface SummaryOptions {
 const n = (v: unknown) => Number(v ?? 0);
 
 /** عدد الطلبات التي دخلت حالة معينة مرة على الأقل (قمع الرحلة). */
-function entered(base: string, params: SqlParam[], state: ApplicationState): number {
-  return n((getDb().prepare(`SELECT COUNT(DISTINCT a.id) AS n ${base} AND EXISTS (
-    SELECT 1 FROM application_transitions t WHERE t.applicationId = a.id AND t.toState = ? AND t.fromState <> t.toState)`)
+async function entered(base: string, params: SqlParam[], state: ApplicationState): Promise<number> {
+  return n((await getDb().prepare(`SELECT COUNT(DISTINCT a.id) AS n ${base} AND EXISTS (
+    SELECT 1 FROM sona3_application_transitions t WHERE t.applicationId = a.id AND t.toState = ? AND t.fromState <> t.toState)`)
     .get(...params, state) as { n: number }).n);
 }
 
-export function buildSummary(scope: Scope, opts: SummaryOptions = {}) {
+export async function buildSummary(scope: Scope, opts: SummaryOptions = {}) {
   const db = getDb();
   const draftFilter = scope.includeDrafts ? '' : " AND a.state <> 'DRAFT'";
   const cohortFilter = opts.cohortId ? ' AND a.cohortId = ?' : '';
   const params: SqlParam[] = [...scope.params, ...(opts.cohortId ? [opts.cohortId] : [])];
-  const base = `FROM applications a JOIN applicants p ON p.id = a.applicantId WHERE ${scope.sql}${draftFilter}${cohortFilter}`;
+  const base = `FROM sona3_applications a JOIN sona3_applicants p ON p.id = a.applicantId WHERE ${scope.sql}${draftFilter}${cohortFilter}`;
   const submittedBase = `${base} AND a.state <> 'DRAFT'`;
 
-  const byStateRows = db.prepare(`SELECT a.state AS state, COUNT(*) AS n ${base} GROUP BY a.state`).all(...params) as Array<{ state: ApplicationState; n: number }>;
+  const byStateRows = await db.prepare(`SELECT a.state AS state, COUNT(*) AS n ${base} GROUP BY a.state`).all(...params) as Array<{ state: ApplicationState; n: number }>;
   const byState: Record<string, number> = {};
   for (const s of APPLICATION_STATES) byState[s] = 0;
   for (const r of byStateRows) byState[r.state] = n(r.n);
 
-  const apps = listApplications({ scopeSql: `${scope.sql}${cohortFilter}`, scopeParams: params, includeDrafts: scope.includeDrafts }, 1, 1, true).rows;
+  const apps = (await listApplications({ scopeSql: `${scope.sql}${cohortFilter}`, scopeParams: params, includeDrafts: scope.includeDrafts }, 1, 1, true)).rows;
   const overdue = apps.filter((a) => slaInfo(a).overdue).length;
 
   // ── المؤشرات الرئيسية (§13): قمع الرحلة ──
-  const selectionTarget = opts.cohortId ? getCohort(opts.cohortId)?.selectionTarget ?? null : (openCohort()?.selectionTarget ?? null);
+  const selectionTarget = opts.cohortId ? (await getCohort(opts.cohortId))?.selectionTarget ?? null : ((await openCohort())?.selectionTarget ?? null);
   const kpis = {
-    applicants: n((db.prepare(`SELECT COUNT(DISTINCT a.applicantId) AS n ${submittedBase}`).get(...params) as { n: number }).n),
-    applications: n((db.prepare(`SELECT COUNT(*) AS n ${submittedBase}`).get(...params) as { n: number }).n),
-    eligible: entered(submittedBase, params, 'STUDY_PREPARATION'),
-    studyCompleted: entered(submittedBase, params, 'STUDY_REVIEW'),
-    evaluated: entered(submittedBase, params, 'EVALUATED'),
-    selected: entered(submittedBase, params, 'SELECTED'),
+    applicants: n((await db.prepare(`SELECT COUNT(DISTINCT a.applicantId) AS n ${submittedBase}`).get(...params) as { n: number }).n),
+    applications: n((await db.prepare(`SELECT COUNT(*) AS n ${submittedBase}`).get(...params) as { n: number }).n),
+    eligible: await entered(submittedBase, params, 'STUDY_PREPARATION'),
+    studyCompleted: await entered(submittedBase, params, 'STUDY_REVIEW'),
+    evaluated: await entered(submittedBase, params, 'EVALUATED'),
+    selected: await entered(submittedBase, params, 'SELECTED'),
     selectionTarget,
-    approved: entered(submittedBase, params, 'FUNDING_SEARCH'),
-    funded: entered(submittedBase, params, 'IMPLEMENTATION'),
+    approved: await entered(submittedBase, params, 'FUNDING_SEARCH'),
+    funded: await entered(submittedBase, params, 'IMPLEMENTATION'),
     inImplementation: byState.IMPLEMENTATION ?? 0,
     operating: byState.OPERATING ?? 0,
   };
 
   // ── التمويل ──
-  const requested = n((db.prepare(`SELECT COALESCE(SUM(a.requestedFunding), 0) AS v ${submittedBase}`).get(...params) as { v: number }).v);
-  const approvedAmount = n((db.prepare(`SELECT COALESCE(SUM(r.amount), 0) AS v FROM funding_referrals r WHERE r.status = 'approved'
+  const requested = n((await db.prepare(`SELECT COALESCE(SUM(a.requestedFunding), 0) AS v ${submittedBase}`).get(...params) as { v: number }).v);
+  const approvedAmount = n((await db.prepare(`SELECT COALESCE(SUM(r.amount), 0) AS v FROM sona3_funding_referrals r WHERE r.status = 'approved'
     AND r.applicationId IN (SELECT a.id ${base})`).get(...params) as { v: number }).v);
-  const disbursed = n((db.prepare(`SELECT COALESCE(SUM(m.amount), 0) AS v FROM milestones m WHERE m.status = 'disbursed'
+  const disbursed = n((await db.prepare(`SELECT COALESCE(SUM(m.amount), 0) AS v FROM sona3_milestones m WHERE m.status = 'disbursed'
     AND m.applicationId IN (SELECT a.id ${base})`).get(...params) as { v: number }).v);
 
   // ── فرص العمل: المتوقع (من الدراسة) والفعلي (آخر تقرير أثر لكل مشروع) ──
-  const expectedJobs = n((db.prepare(`SELECT COALESCE(SUM(a.expectedJobs), 0) AS v ${submittedBase}`).get(...params) as { v: number }).v);
-  const actualJobs = n((db.prepare(`SELECT COALESCE(SUM(i.directJobs + i.indirectJobs), 0) AS v FROM impact_reports i
-    WHERE i.applicationId IN (SELECT a.id ${base}) AND i.periodEnd = (SELECT MAX(i2.periodEnd) FROM impact_reports i2 WHERE i2.applicationId = i.applicationId)`)
+  const expectedJobs = n((await db.prepare(`SELECT COALESCE(SUM(a.expectedJobs), 0) AS v ${submittedBase}`).get(...params) as { v: number }).v);
+  const actualJobs = n((await db.prepare(`SELECT COALESCE(SUM(i.directJobs + i.indirectJobs), 0) AS v FROM sona3_impact_reports i
+    WHERE i.applicationId IN (SELECT a.id ${base}) AND i.periodEnd = (SELECT MAX(i2.periodEnd) FROM sona3_impact_reports i2 WHERE i2.applicationId = i.applicationId)`)
     .get(...params) as { v: number }).v);
 
-  const bySector = db.prepare(`SELECT a.sector AS sector, COUNT(*) AS n ${submittedBase} AND a.sector <> '' GROUP BY a.sector ORDER BY n DESC`)
+  const bySector = await db.prepare(`SELECT a.sector AS sector, COUNT(*) AS n ${submittedBase} AND a.sector <> '' GROUP BY a.sector ORDER BY n DESC`)
     .all(...params) as Array<{ sector: string; n: number }>;
-  const byGovernorate = db.prepare(`SELECT a.governorate AS governorate, COUNT(*) AS n ${submittedBase} AND a.governorate <> '' GROUP BY a.governorate ORDER BY n DESC`)
+  const byGovernorate = await db.prepare(`SELECT a.governorate AS governorate, COUNT(*) AS n ${submittedBase} AND a.governorate <> '' GROUP BY a.governorate ORDER BY n DESC`)
     .all(...params) as Array<{ governorate: string; n: number }>;
   const avg = opts.includeScores
-    ? (db.prepare(`SELECT AVG(a.score) AS v, COUNT(a.score) AS c ${submittedBase} AND a.score IS NOT NULL`).get(...params) as { v: number | null; c: number })
+    ? (await db.prepare(`SELECT AVG(a.score) AS v, COUNT(a.score) AS c ${submittedBase} AND a.score IS NOT NULL`).get(...params) as { v: number | null; c: number })
     : null;
 
   // متوسط زمن البقاء في كل حالة (أيام) من السجل التاريخي.
-  const avgRows = db.prepare(`WITH t AS (
+  const avgRows = await db.prepare(`WITH t AS (
       SELECT tr.applicationId, tr.toState AS state, tr.createdAt AS enteredAt,
         LEAD(tr.createdAt) OVER (PARTITION BY tr.applicationId ORDER BY tr.createdAt, tr.rowid) AS leftAt
-      FROM application_transitions tr
+      FROM sona3_application_transitions tr
       WHERE tr.fromState <> tr.toState AND tr.applicationId IN (SELECT a.id ${base})
     )
     SELECT state, AVG(julianday(leftAt) - julianday(enteredAt)) AS avgDays, COUNT(*) AS n FROM t WHERE leftAt IS NOT NULL GROUP BY state`)
@@ -109,17 +110,17 @@ export function buildSummary(scope: Scope, opts: SummaryOptions = {}) {
     avgDaysPerState,
     bySector: bySector.map((s) => ({ sector: s.sector, label: policy.sectors.find((o) => o.value === s.sector) ?? null, count: n(s.n) })),
     byGovernorate: byGovernorate.map((g) => ({ governorate: g.governorate, label: findGovernorate(g.governorate)?.labelAr ?? g.governorate, count: n(g.n) })),
-    cohorts: listCohorts().map((c) => ({ id: c.id, nameAr: c.nameAr, nameEn: c.nameEn })),
+    cohorts: (await listCohorts()).map((c) => ({ id: c.id, nameAr: c.nameAr, nameEn: c.nameEn })),
     stateLabels: Object.fromEntries(APPLICATION_STATES.map((s) => [s, STATE_LABELS[s]])),
     generatedAt: new Date().toISOString(),
   };
 }
 
 /** صفوف تقرير Excel. `full` = IMC (الدرجة والتمويل). */
-export function reportRows(apps: AppRow[], full: boolean) {
-  return apps.map((a) => {
+export async function reportRows(apps: AppRow[], full: boolean) {
+  return mapSeq(apps, async (a) => {
     const sla = slaInfo(a);
-    const resp = responsibleInfo(a);
+    const resp = await responsibleInfo(a);
     const base = {
       number: a.number ?? '', applicantName: a.applicantName, projectName: a.projectName, sector: a.sector, governorate: a.governorate,
       state: a.state, stateLabelAr: STATE_LABELS[a.state].ar, stateLabelEn: STATE_LABELS[a.state].en,
@@ -132,7 +133,7 @@ export function reportRows(apps: AppRow[], full: boolean) {
       ...base,
       requestedFunding: a.requestedFunding, totalInvestment: a.totalInvestment, expectedJobs: a.expectedJobs,
       score: a.score, passedMinimums: a.passedMinimums,
-      funderAr: a.funderOrgId ? getOrganization(a.funderOrgId)?.nameAr ?? '' : '',
+      funderAr: a.funderOrgId ? (await getOrganization(a.funderOrgId))?.nameAr ?? '' : '',
       stalled: a.isStalled, closedAt: a.closedAt ?? '',
     };
   });
@@ -155,7 +156,7 @@ export function cairoDateTime(iso: string | null | undefined): string {
 const yesNo = (v: unknown): string => (v ? 'نعم' : 'لا');
 const sectorAr = (v: string) => policy.sectors.find((o) => o.value === v)?.labelAr ?? v;
 
-export function reportSheet(rows: ReturnType<typeof reportRows>, full: boolean): { headers: string[]; rows: Cell[][] } {
+export function reportSheet(rows: Awaited<ReturnType<typeof reportRows>>, full: boolean): { headers: string[]; rows: Cell[][] } {
   const cols: Array<[string, (r: Record<string, unknown>) => Cell]> = [
     ['رقم الطلب', (r) => String(r.number || 'مسودة')],
     ['اسم المتقدم', (r) => String(r.applicantName ?? '')],

@@ -34,8 +34,8 @@ test('age limit is measured at cohort close: exactly 35 passes, 36 is rejected',
 });
 
 test('age reference "submission" uses the date of submission instead of cohort close', async () => {
-  const { updateCohort } = await import('../src/store/cohorts.js');
-  updateCohort(w.cohortId, { ageReference: 'submission' });
+  const { updateCohort } = await import('../store/cohorts.js');
+  await updateCohort(w.cohortId, { ageReference: 'submission' });
   try {
     // عمره اليوم 35 ويبلغ 36 قبل الإغلاق بأيام: يمر لأن المرجع هو التقديم
     const birth = addDays(addYears(todayIso(), -36), 10);
@@ -49,7 +49,7 @@ test('age reference "submission" uses the date of submission instead of cohort c
     assert.equal(r.status, 422);
     assert.equal(r.json.code, 'AGE_LIMIT_EXCEEDED');
   } finally {
-    updateCohort(w.cohortId, { ageReference: 'cohort_close' });
+    await updateCohort(w.cohortId, { ageReference: 'cohort_close' });
   }
 });
 
@@ -157,15 +157,15 @@ test('team application needs partners (max 10) with valid national IDs; individu
 });
 
 test('applications only start inside an open cohort', async () => {
-  const { getDb } = await import('../src/db/sqlite.js');
-  getDb().prepare('UPDATE cohorts SET opensAt = ?, closesAt = ?').run(addDays(todayIso(), -60), addDays(todayIso(), -1));
+  const { getDb } = await import('../db/sqlite.js');
+  await getDb().prepare('UPDATE sona3_cohorts SET opensAt = ?, closesAt = ?').run(addDays(todayIso(), -60), addDays(todayIso(), -1));
   try {
     const a = await newApplicant(srv);
     const r = await a.post('/applications', {});
     assert.equal(r.status, 409);
     assert.equal(r.json.code, 'NO_OPEN_COHORT');
   } finally {
-    getDb().prepare('UPDATE cohorts SET opensAt = ?, closesAt = ?').run(addDays(todayIso(), -30), w.closesAt);
+    await getDb().prepare('UPDATE sona3_cohorts SET opensAt = ?, closesAt = ?').run(addDays(todayIso(), -30), w.closesAt);
   }
   void makeCohort; void q;
 });
@@ -173,13 +173,13 @@ test('applications only start inside an open cohort', async () => {
 test('submit is closed if the cohort closes between draft and submit', async () => {
   const a = await newApplicant(srv);
   const id = await createCompleteDraft(a);
-  const { getDb } = await import('../src/db/sqlite.js');
-  getDb().prepare('UPDATE cohorts SET closesAt = ? WHERE id = ?').run(addDays(todayIso(), -1), w.cohortId);
+  const { getDb } = await import('../db/sqlite.js');
+  await getDb().prepare('UPDATE sona3_cohorts SET closesAt = ? WHERE id = ?').run(addDays(todayIso(), -1), w.cohortId);
   try {
     const r = await act(a, id, 'submit');
     assert.ok([409, 422].includes(r.status));
     assert.ok(['COHORT_CLOSED', 'AGE_LIMIT_EXCEEDED'].includes(r.json.code), r.json.code);
   } finally {
-    getDb().prepare('UPDATE cohorts SET closesAt = ? WHERE id = ?').run(w.closesAt, w.cohortId);
+    await getDb().prepare('UPDATE sona3_cohorts SET closesAt = ? WHERE id = ?').run(w.closesAt, w.cohortId);
   }
 });

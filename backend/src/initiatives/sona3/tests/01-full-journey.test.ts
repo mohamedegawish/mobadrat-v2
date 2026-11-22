@@ -141,8 +141,8 @@ test('full journey 01-08: draft -> submit -> eligibility -> study -> evaluation 
 });
 
 test('transitions are append-only history with webhook outbox rows per transition', async () => {
-  const rows = await q<{ n: number }>("SELECT COUNT(*) AS n FROM application_transitions");
-  const hooks = await q<{ n: number }>("SELECT COUNT(*) AS n FROM webhook_outbox WHERE eventType = 'application.state_changed'");
+  const rows = await q<{ n: number }>("SELECT COUNT(*) AS n FROM sona3_application_transitions");
+  const hooks = await q<{ n: number }>("SELECT COUNT(*) AS n FROM sona3_webhook_outbox WHERE eventType = 'application.state_changed'");
   assert.ok(rows[0].n >= 11);
   assert.equal(hooks[0].n, rows[0].n, 'one webhook event per transition');
 });

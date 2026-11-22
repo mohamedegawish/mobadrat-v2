@@ -40,7 +40,7 @@ test('eligibility correction: deficiencies restrict editable fields, resubmit re
   ok(await a.upload(`/applications/${id}/documents`, { kind: 'nationalIdFile' }, pdfVariant('nid-v2')), 'new id file');
 
   // نسخة المحاولة السابقة محفوظة (نسخ لكل محاولة) والمقيّم/IMC يريان المُرسل فقط
-  const docs = await q<{ version: number; attempt: number }>("SELECT version, attempt FROM documents WHERE applicationId = ? AND kind = 'nationalIdFile' ORDER BY version", id);
+  const docs = await q<{ version: number; attempt: number }>("SELECT version, attempt FROM sona3_documents WHERE applicationId = ? AND kind = 'nationalIdFile' ORDER BY version", id);
   assert.deepEqual(docs.map((x) => x.version), [1, 2]);
   assert.deepEqual(docs.map((x) => x.attempt), [1, 2]);
   const imcBefore = await getApp(w.imc, id);
@@ -131,7 +131,7 @@ test('withdraw: allowed before funding with a reason, not during implementation'
   // الانسحاب أثناء دراسة جهة التمويل يغلق الإحالة المعلقة
   const f = await advanceTo(srv, w, 'FUNDER_REVIEW');
   ok(await act(f.applicant, f.id, 'withdraw', { reason: 'وجدت تمويلًا آخر' }), 'withdraw in funder review');
-  const refs = await q<{ status: string }>('SELECT status FROM funding_referrals WHERE applicationId = ?', f.id);
+  const refs = await q<{ status: string }>('SELECT status FROM sona3_funding_referrals WHERE applicationId = ?', f.id);
   assert.deepEqual(refs.map((x) => x.status), ['declined']);
 });
 
@@ -150,7 +150,7 @@ test('optimistic locking: a stale expectedVersion is refused with VERSION_CONFLI
     a.post(`/applications/${id}/actions/submit`, { expectedVersion: v }),
   ]);
   assert.deepEqual([r1.status, r2.status].sort(), [200, 409]);
-  assert.equal((await q("SELECT 1 FROM application_transitions WHERE applicationId = ? AND action = 'submit'", id)).length, 1);
+  assert.equal((await q("SELECT 1 FROM sona3_application_transitions WHERE applicationId = ? AND action = 'submit'", id)).length, 1);
 });
 
 test('documents: PDF only, versioned per upload, hash stored, download audited and scoped', async () => {

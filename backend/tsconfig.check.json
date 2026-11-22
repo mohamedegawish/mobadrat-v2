@@ -1,1 +1,1 @@
-{ "extends": "./tsconfig.json", "compilerOptions": { "noEmit": true }, "include": ["src/*.ts", "src/core/**/*.ts", "src/initiatives/contract.ts", "src/initiatives/registry.ts", "src/initiatives/shams/**/*.ts"], "exclude": ["src/**/tests/**", "src/**/_legacy/**"] }
+{ "extends": "./tsconfig.json", "compilerOptions": { "noEmit": true }, "include": ["src/*.ts", "src/core/**/*.ts", "src/initiatives/contract.ts", "src/initiatives/registry.ts", "src/initiatives/shams/**/*.ts", "src/initiatives/sona3/**/*.ts"], "exclude": ["src/**/tests/**", "src/**/_legacy/**"] }

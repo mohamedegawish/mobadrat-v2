@@ -32,24 +32,24 @@ export function cohortStatus(c: Pick<Cohort, 'opensAt' | 'closesAt'>, on = today
   return 'open';
 }
 
-export function getCohort(id: string): Cohort | null {
-  const r = getDb().prepare('SELECT * FROM cohorts WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+export async function getCohort(id: string): Promise<Cohort | null> {
+  const r = await getDb().prepare('SELECT * FROM sona3_cohorts WHERE id = ?').get(id) as Record<string, unknown> | undefined;
   return r ? map(r) : null;
 }
 
-export function listCohorts(): Cohort[] {
-  return (getDb().prepare('SELECT * FROM cohorts ORDER BY opensAt DESC, createdAt DESC').all() as Array<Record<string, unknown>>).map(map);
+export async function listCohorts(): Promise<Cohort[]> {
+  return (await getDb().prepare('SELECT * FROM sona3_cohorts ORDER BY opensAt DESC, createdAt DESC').all() as Array<Record<string, unknown>>).map(map);
 }
 
 /** الدورة المفتوحة للتقديم الآن (الأحدث إن تداخلت دورتان). */
-export function openCohort(on = today()): Cohort | null {
-  const r = getDb().prepare('SELECT * FROM cohorts WHERE opensAt <= ? AND closesAt >= ? ORDER BY opensAt DESC LIMIT 1').get(on, on) as Record<string, unknown> | undefined;
+export async function openCohort(on = today()): Promise<Cohort | null> {
+  const r = await getDb().prepare('SELECT * FROM sona3_cohorts WHERE opensAt <= ? AND closesAt >= ? ORDER BY opensAt DESC LIMIT 1').get(on, on) as Record<string, unknown> | undefined;
   return r ? map(r) : null;
 }
 
 /** الأوزان تُقفل بمجرد تسليم أول تقييم في الدورة. */
-export function weightsLocked(cohortId: string): boolean {
-  return Boolean(getDb().prepare(`SELECT 1 FROM evaluator_assignments e JOIN applications a ON a.id = e.applicationId
+export async function weightsLocked(cohortId: string): Promise<boolean> {
+  return Boolean(await getDb().prepare(`SELECT 1 FROM sona3_evaluator_assignments e JOIN sona3_applications a ON a.id = e.applicationId
     WHERE a.cohortId = ? AND e.status = 'submitted' LIMIT 1`).get(cohortId));
 }
 
@@ -59,24 +59,24 @@ export interface CohortInput {
   minTechnicalScore?: number; minEvaluators?: number;
 }
 
-export function createCohort(input: CohortInput, createdBy: string | null): Cohort {
+export async function createCohort(input: CohortInput, createdBy: string | null): Promise<Cohort> {
   const id = newId('coh');
   const now = nowIso();
-  getDb().prepare(`INSERT INTO cohorts (id, nameAr, nameEn, opensAt, closesAt, evaluationTarget, selectionTarget, maxAge, ageReference, weights,
+  await getDb().prepare(`INSERT INTO sona3_cohorts (id, nameAr, nameEn, opensAt, closesAt, evaluationTarget, selectionTarget, maxAge, ageReference, weights,
       minTotalScore, minFinancialScore, minTechnicalScore, minEvaluators, createdBy, createdAt, updatedAt)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
     id, input.nameAr, input.nameEn ?? '', input.opensAt, input.closesAt, input.evaluationTarget ?? 60, input.selectionTarget ?? 15,
     input.maxAge ?? 35, input.ageReference ?? 'cohort_close', JSON.stringify(input.weights ?? policy.defaultWeights),
     input.minTotalScore ?? 50, input.minFinancialScore ?? 50, input.minTechnicalScore ?? 50, input.minEvaluators ?? 1, createdBy, now, now,
   );
-  return getCohort(id)!;
+  return (await getCohort(id))!;
 }
 
-export function updateCohort(id: string, patch: Partial<CohortInput>): Cohort | null {
-  const cur = getCohort(id);
+export async function updateCohort(id: string, patch: Partial<CohortInput>): Promise<Cohort | null> {
+  const cur = await getCohort(id);
   if (!cur) return null;
   const n = { ...cur, ...Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)) } as Cohort;
-  getDb().prepare(`UPDATE cohorts SET nameAr = ?, nameEn = ?, opensAt = ?, closesAt = ?, evaluationTarget = ?, selectionTarget = ?, maxAge = ?,
+  await getDb().prepare(`UPDATE sona3_cohorts SET nameAr = ?, nameEn = ?, opensAt = ?, closesAt = ?, evaluationTarget = ?, selectionTarget = ?, maxAge = ?,
       ageReference = ?, weights = ?, minTotalScore = ?, minFinancialScore = ?, minTechnicalScore = ?, minEvaluators = ?, updatedAt = ? WHERE id = ?`).run(
     n.nameAr, n.nameEn, n.opensAt, n.closesAt, n.evaluationTarget, n.selectionTarget, n.maxAge, n.ageReference, JSON.stringify(n.weights),
     n.minTotalScore, n.minFinancialScore, n.minTechnicalScore, n.minEvaluators, nowIso(), id,

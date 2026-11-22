@@ -17,8 +17,8 @@ export function signWebhook(secret: string, timestamp: string, body: string): st
 export async function processWebhooks(limit = 20): Promise<{ delivered: number; retried: number; failed: number }> {
   const out = { delivered: 0, retried: 0, failed: 0 };
   if (!config.platformWebhookUrl || !config.platformWebhookSecret) return out;
-  for (const w of listDueWebhooks(nowIso(), limit)) {
-    if (!claimWebhook(w.id)) continue;
+  for (const w of await listDueWebhooks(nowIso(), limit)) {
+    if (!await claimWebhook(w.id)) continue;
     const timestamp = String(Math.floor(Date.now() / 1000));
     try {
       const res = await fetch(config.platformWebhookUrl, {
@@ -33,11 +33,11 @@ export async function processWebhooks(limit = 20): Promise<{ delivered: number; 
         body: w.payload,
         signal: AbortSignal.timeout(10_000),
       });
-      if (res.ok) { markWebhookDelivered(w.id, res.status); out.delivered++; }
-      else if (markWebhookRetry(w.id, res.status, `HTTP ${res.status}`) === 'failed') out.failed++;
+      if (res.ok) { await markWebhookDelivered(w.id, res.status); out.delivered++; }
+      else if (await markWebhookRetry(w.id, res.status, `HTTP ${res.status}`) === 'failed') out.failed++;
       else out.retried++;
     } catch (e) {
-      if (markWebhookRetry(w.id, null, (e as Error).message ?? 'network error') === 'failed') out.failed++;
+      if (await markWebhookRetry(w.id, null, (e as Error).message ?? 'network error') === 'failed') out.failed++;
       else out.retried++;
     }
   }

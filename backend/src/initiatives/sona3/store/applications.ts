@@ -12,7 +12,7 @@ export interface AppRow {
   createdBy: string | null; submittedAt: string | null; stateEnteredAt: string; closedAt: string | null; createdAt: string; updatedAt: string;
 }
 
-const SELECT = 'SELECT a.*, p.organizationId AS applicantOrgId FROM applications a JOIN applicants p ON p.id = a.applicantId';
+const SELECT = 'SELECT a.*, p.organizationId AS applicantOrgId FROM sona3_applications a JOIN sona3_applicants p ON p.id = a.applicantId';
 const OPEN_STATES_SQL = "('REJECTED','NOT_SELECTED','NOT_APPROVED','CLOSED_NOT_FUNDED','COMPLETED','WITHDRAWN')";
 
 function mapApp(r: Record<string, unknown>): AppRow {
@@ -33,33 +33,33 @@ function mapApp(r: Record<string, unknown>): AppRow {
   };
 }
 
-export function getApplication(id: string): AppRow | null {
-  const r = getDb().prepare(`${SELECT} WHERE a.id = ?`).get(id) as Record<string, unknown> | undefined;
+export async function getApplication(id: string): Promise<AppRow | null> {
+  const r = await getDb().prepare(`${SELECT} WHERE a.id = ?`).get(id) as Record<string, unknown> | undefined;
   return r ? mapApp(r) : null;
 }
 
-export function findOpenApplicationForApplicant(applicantId: string): AppRow | null {
-  const r = getDb().prepare(`${SELECT} WHERE a.applicantId = ? AND a.state NOT IN ${OPEN_STATES_SQL}`).get(applicantId) as Record<string, unknown> | undefined;
+export async function findOpenApplicationForApplicant(applicantId: string): Promise<AppRow | null> {
+  const r = await getDb().prepare(`${SELECT} WHERE a.applicantId = ? AND a.state NOT IN ${OPEN_STATES_SQL}`).get(applicantId) as Record<string, unknown> | undefined;
   return r ? mapApp(r) : null;
 }
 
 /** طلب آخر مُرسل وغير نهائي بنفس الرقم القومي (المسودات لا تحجز الرقم). */
-export function findOpenSubmittedByNationalId(nationalId: string, exceptId: string): AppRow | null {
-  const r = getDb().prepare(`${SELECT} WHERE a.nationalId = ? AND a.id <> ? AND a.state <> 'DRAFT' AND a.state NOT IN ${OPEN_STATES_SQL}`)
+export async function findOpenSubmittedByNationalId(nationalId: string, exceptId: string): Promise<AppRow | null> {
+  const r = await getDb().prepare(`${SELECT} WHERE a.nationalId = ? AND a.id <> ? AND a.state <> 'DRAFT' AND a.state NOT IN ${OPEN_STATES_SQL}`)
     .get(nationalId, exceptId) as Record<string, unknown> | undefined;
   return r ? mapApp(r) : null;
 }
 
-export function createDraftApplication(applicantId: string, cohortId: string, userId: string, applicantName: string): AppRow {
+export async function createDraftApplication(applicantId: string, cohortId: string, userId: string, applicantName: string): Promise<AppRow> {
   const id = newId('app');
   const now = nowIso();
-  getDb().prepare(`INSERT INTO applications (id, applicantId, cohortId, state, version, attempt, applicantName, createdBy, stateEnteredAt, createdAt, updatedAt)
+  await getDb().prepare(`INSERT INTO sona3_applications (id, applicantId, cohortId, state, version, attempt, applicantName, createdBy, stateEnteredAt, createdAt, updatedAt)
     VALUES (?, ?, ?, 'DRAFT', 1, 0, ?, ?, ?, ?, ?)`).run(id, applicantId, cohortId, applicantName, userId, now, now, now);
-  return getApplication(id)!;
+  return (await getApplication(id))!;
 }
 
-export function listApplicantApplications(applicantId: string): AppRow[] {
-  return (getDb().prepare(`${SELECT} WHERE a.applicantId = ? ORDER BY a.createdAt DESC`).all(applicantId) as Array<Record<string, unknown>>).map(mapApp);
+export async function listApplicantApplications(applicantId: string): Promise<AppRow[]> {
+  return (await getDb().prepare(`${SELECT} WHERE a.applicantId = ? ORDER BY a.createdAt DESC`).all(applicantId) as Array<Record<string, unknown>>).map(mapApp);
 }
 
 export interface ListFilter {
@@ -72,7 +72,7 @@ export interface ListFilter {
   byScore?: boolean;
 }
 
-export function listApplications(f: ListFilter, page: number, pageSize: number, all = false): { rows: AppRow[]; total: number } {
+export async function listApplications(f: ListFilter, page: number, pageSize: number, all = false): Promise<{ rows: AppRow[]; total: number }> {
   const where: string[] = [f.scopeSql];
   const params: SqlParam[] = [...f.scopeParams];
   if (!f.includeDrafts) where.push("a.state <> 'DRAFT'");
@@ -89,52 +89,52 @@ export function listApplications(f: ListFilter, page: number, pageSize: number, 
   }
   const w = `WHERE ${where.join(' AND ')}`;
   const db = getDb();
-  const total = (db.prepare(`SELECT COUNT(*) AS n FROM applications a JOIN applicants p ON p.id = a.applicantId ${w}`).get(...params) as { n: number }).n;
+  const total = (await db.prepare(`SELECT COUNT(*) AS n FROM sona3_applications a JOIN sona3_applicants p ON p.id = a.applicantId ${w}`).get(...params) as { n: number }).n;
   const limit = all ? '' : ` LIMIT ${Number(pageSize)} OFFSET ${Number((page - 1) * pageSize)}`;
   const order = f.byScore ? 'a.score IS NULL, a.score DESC, a.submittedAt ASC' : `a.stateEnteredAt ${f.oldestFirst ? 'ASC' : 'DESC'}`;
-  const rows = (db.prepare(`${SELECT} ${w} ORDER BY ${order}, a.id${limit}`).all(...params) as Array<Record<string, unknown>>).map(mapApp);
+  const rows = (await db.prepare(`${SELECT} ${w} ORDER BY ${order}, a.id${limit}`).all(...params) as Array<Record<string, unknown>>).map(mapApp);
   return { rows, total };
 }
 
 /** طلبات الدورة في حالة معينة مرتبة بالدرجة (للاختيار). */
-export function cohortRanking(cohortId: string, states: ApplicationState[]): AppRow[] {
-  return (getDb().prepare(`${SELECT} WHERE a.cohortId = ? AND a.state IN (${states.map(() => '?').join(',')})
+export async function cohortRanking(cohortId: string, states: ApplicationState[]): Promise<AppRow[]> {
+  return (await getDb().prepare(`${SELECT} WHERE a.cohortId = ? AND a.state IN (${states.map(() => '?').join(',')})
     ORDER BY a.score IS NULL, a.score DESC, a.submittedAt ASC, a.id`).all(cohortId, ...states) as Array<Record<string, unknown>>).map(mapApp);
 }
 
 /** عدد طلبات الدورة التي دخلت حالة معينة (مرة واحدة على الأقل). */
-export function countCohortEntered(cohortId: string, state: ApplicationState): number {
-  return (getDb().prepare(`SELECT COUNT(DISTINCT a.id) AS n FROM applications a JOIN application_transitions t ON t.applicationId = a.id
+export async function countCohortEntered(cohortId: string, state: ApplicationState): Promise<number> {
+  return (await getDb().prepare(`SELECT COUNT(DISTINCT a.id) AS n FROM sona3_applications a JOIN sona3_application_transitions t ON t.applicationId = a.id
     WHERE a.cohortId = ? AND t.toState = ? AND t.fromState <> t.toState`).get(cohortId, state) as { n: number }).n;
 }
 
-export function setApplicationColumns(appId: string, cols: Partial<Record<'applicantName' | 'projectName' | 'sector' | 'governorate' | 'nationalId' | 'birthDate'
-  | 'teamSize' | 'estimatedCost' | 'requestedFunding' | 'totalInvestment' | 'expectedJobs' | 'expertId', string | number | null>>): void {
+export async function setApplicationColumns(appId: string, cols: Partial<Record<'applicantName' | 'projectName' | 'sector' | 'governorate' | 'nationalId' | 'birthDate'
+  | 'teamSize' | 'estimatedCost' | 'requestedFunding' | 'totalInvestment' | 'expectedJobs' | 'expertId', string | number | null>>): Promise<void> {
   const keys = Object.keys(cols);
   if (!keys.length) return;
-  getDb().prepare(`UPDATE applications SET ${keys.map((k) => `${k} = ?`).join(', ')}, updatedAt = ? WHERE id = ?`)
+  await getDb().prepare(`UPDATE sona3_applications SET ${keys.map((k) => `${k} = ?`).join(', ')}, updatedAt = ? WHERE id = ?`)
     .run(...keys.map((k) => (cols as Record<string, string | number | null>)[k]), nowIso(), appId);
 }
 
-export function setStalled(appId: string, stalled: boolean, note: string): void {
-  getDb().prepare('UPDATE applications SET isStalled = ?, stalledNote = ?, version = version + 1, updatedAt = ? WHERE id = ?').run(stalled ? 1 : 0, note, nowIso(), appId);
+export async function setStalled(appId: string, stalled: boolean, note: string): Promise<void> {
+  await getDb().prepare('UPDATE sona3_applications SET isStalled = ?, stalledNote = ?, version = version + 1, updatedAt = ? WHERE id = ?').run(stalled ? 1 : 0, note, nowIso(), appId);
 }
 
 // ── application_data (نسخ لكل محاولة) ──────────────────────────────────────
 
 /** آخر نسخة لقسم بحد أقصى للمحاولة (المراجع يرى ≤ attempt، والمتقدم يرى الأحدث بما فيها غير المُرسل). */
-export function getSection(appId: string, section: DataSection, maxAttempt?: number): Record<string, unknown> | undefined {
+export async function getSection(appId: string, section: DataSection, maxAttempt?: number): Promise<Record<string, unknown> | undefined> {
   const r = (maxAttempt === undefined
-    ? getDb().prepare('SELECT data FROM application_data WHERE applicationId = ? AND section = ? ORDER BY attempt DESC LIMIT 1').get(appId, section)
-    : getDb().prepare('SELECT data FROM application_data WHERE applicationId = ? AND section = ? AND attempt <= ? ORDER BY attempt DESC LIMIT 1').get(appId, section, maxAttempt)
+    ? await getDb().prepare('SELECT data FROM sona3_application_data WHERE applicationId = ? AND section = ? ORDER BY attempt DESC LIMIT 1').get(appId, section)
+    : await getDb().prepare('SELECT data FROM sona3_application_data WHERE applicationId = ? AND section = ? AND attempt <= ? ORDER BY attempt DESC LIMIT 1').get(appId, section, maxAttempt)
   ) as { data: string } | undefined;
   return r ? parseJson<Record<string, unknown>>(r.data, {}) : undefined;
 }
 
 /** يكتب نسخة المحاولة القادمة (copy-on-write) — لا يمس النسخ المُرسلة السابقة. */
-export function writeSection(appId: string, section: DataSection, attempt: number, data: Record<string, unknown>, userId: string): void {
+export async function writeSection(appId: string, section: DataSection, attempt: number, data: Record<string, unknown>, userId: string): Promise<void> {
   const now = nowIso();
-  getDb().prepare(`INSERT INTO application_data (id, applicationId, section, attempt, data, updatedBy, createdAt, updatedAt)
+  await getDb().prepare(`INSERT INTO sona3_application_data (id, applicationId, section, attempt, data, updatedBy, createdAt, updatedAt)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(applicationId, section, attempt) DO UPDATE SET data = excluded.data, updatedBy = excluded.updatedBy, updatedAt = excluded.updatedAt`)
     .run(newId('dat'), appId, section, attempt, JSON.stringify(data), userId, now, now);
@@ -148,10 +148,10 @@ export interface TransitionRow {
   payload: Record<string, unknown>; createdAt: string;
 }
 
-export function insertTransition(t: Omit<TransitionRow, 'id' | 'createdAt'>): TransitionRow {
+export async function insertTransition(t: Omit<TransitionRow, 'id' | 'createdAt'>): Promise<TransitionRow> {
   const id = newId('trn');
   const createdAt = nowIso();
-  getDb().prepare(`INSERT INTO application_transitions (id, applicationId, fromState, toState, action, actorUserId, actorRole, actorOrgId,
+  await getDb().prepare(`INSERT INTO sona3_application_transitions (id, applicationId, fromState, toState, action, actorUserId, actorRole, actorOrgId,
       actorName, reason, attempt, payload, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
     id, t.applicationId, t.fromState, t.toState, t.action, t.actorUserId, t.actorRole, t.actorOrgId, t.actorName, t.reason, t.attempt,
     JSON.stringify(t.payload ?? {}), createdAt,
@@ -159,18 +159,18 @@ export function insertTransition(t: Omit<TransitionRow, 'id' | 'createdAt'>): Tr
   return { ...t, id, createdAt };
 }
 
-export function listTransitions(appId: string): TransitionRow[] {
-  return (getDb().prepare('SELECT * FROM application_transitions WHERE applicationId = ? ORDER BY createdAt, rowid').all(appId) as Array<Record<string, unknown>>)
+export async function listTransitions(appId: string): Promise<TransitionRow[]> {
+  return (await getDb().prepare('SELECT * FROM sona3_application_transitions WHERE applicationId = ? ORDER BY createdAt, rowid').all(appId) as Array<Record<string, unknown>>)
     .map((r) => ({ ...(r as unknown as TransitionRow), payload: parseJson(r.payload, {}) }));
 }
 
-export function getTransition(id: string): TransitionRow | null {
-  const r = getDb().prepare('SELECT * FROM application_transitions WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+export async function getTransition(id: string): Promise<TransitionRow | null> {
+  const r = await getDb().prepare('SELECT * FROM sona3_application_transitions WHERE id = ?').get(id) as Record<string, unknown> | undefined;
   return r ? { ...(r as unknown as TransitionRow), payload: parseJson(r.payload, {}) } : null;
 }
 
-export function hasEnteredState(appId: string, state: ApplicationState): boolean {
-  return Boolean(getDb().prepare('SELECT 1 FROM application_transitions WHERE applicationId = ? AND toState = ? AND fromState <> toState LIMIT 1').get(appId, state));
+export async function hasEnteredState(appId: string, state: ApplicationState): Promise<boolean> {
+  return Boolean(await getDb().prepare('SELECT 1 FROM sona3_application_transitions WHERE applicationId = ? AND toState = ? AND fromState <> toState LIMIT 1').get(appId, state));
 }
 
 export interface DeficiencyRow {
@@ -178,29 +178,29 @@ export interface DeficiencyRow {
   resolvedAtTransitionId: string | null; createdAt: string;
 }
 
-export function insertDeficiency(appId: string, transitionId: string, stage: ApplicationState, field: string, note: string): void {
-  getDb().prepare('INSERT INTO deficiencies (id, applicationId, transitionId, stage, field, note, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)')
+export async function insertDeficiency(appId: string, transitionId: string, stage: ApplicationState, field: string, note: string): Promise<void> {
+  await getDb().prepare('INSERT INTO sona3_deficiencies (id, applicationId, transitionId, stage, field, note, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)')
     .run(newId('def'), appId, transitionId, stage, field, note, nowIso());
 }
 
-export function openDeficiencies(appId: string): DeficiencyRow[] {
-  return getDb().prepare('SELECT * FROM deficiencies WHERE applicationId = ? AND resolvedAtTransitionId IS NULL ORDER BY createdAt').all(appId) as unknown as DeficiencyRow[];
+export async function openDeficiencies(appId: string): Promise<DeficiencyRow[]> {
+  return await getDb().prepare('SELECT * FROM sona3_deficiencies WHERE applicationId = ? AND resolvedAtTransitionId IS NULL ORDER BY createdAt').all(appId) as unknown as DeficiencyRow[];
 }
 
-export function listDeficiencies(appId: string): DeficiencyRow[] {
-  return getDb().prepare('SELECT * FROM deficiencies WHERE applicationId = ? ORDER BY createdAt').all(appId) as unknown as DeficiencyRow[];
+export async function listDeficiencies(appId: string): Promise<DeficiencyRow[]> {
+  return await getDb().prepare('SELECT * FROM sona3_deficiencies WHERE applicationId = ? ORDER BY createdAt').all(appId) as unknown as DeficiencyRow[];
 }
 
-export function resolveDeficiencies(appId: string, transitionId: string): void {
-  getDb().prepare('UPDATE deficiencies SET resolvedAtTransitionId = ? WHERE applicationId = ? AND resolvedAtTransitionId IS NULL').run(transitionId, appId);
+export async function resolveDeficiencies(appId: string, transitionId: string): Promise<void> {
+  await getDb().prepare('UPDATE sona3_deficiencies SET resolvedAtTransitionId = ? WHERE applicationId = ? AND resolvedAtTransitionId IS NULL').run(transitionId, appId);
 }
 
 /** رقم الطلب SONA3-<السنة>-<تسلسل> — داخل معاملة الإرسال. */
-export function nextApplicationNumber(): string {
+export async function nextApplicationNumber(): Promise<string> {
   const year = new Date().getUTCFullYear();
   const db = getDb();
-  db.prepare('INSERT INTO application_counters (year, lastSeq) VALUES (?, 0) ON CONFLICT(year) DO NOTHING').run(year);
-  db.prepare('UPDATE application_counters SET lastSeq = lastSeq + 1 WHERE year = ?').run(year);
-  const { lastSeq } = db.prepare('SELECT lastSeq FROM application_counters WHERE year = ?').get(year) as { lastSeq: number };
+  await db.prepare('INSERT INTO sona3_application_counters (year, lastSeq) VALUES (?, 0) ON CONFLICT(year) DO NOTHING').run(year);
+  await db.prepare('UPDATE sona3_application_counters SET lastSeq = lastSeq + 1 WHERE year = ?').run(year);
+  const { lastSeq } = await db.prepare('SELECT lastSeq FROM sona3_application_counters WHERE year = ?').get(year) as { lastSeq: number };
   return `SONA3-${year}-${String(lastSeq).padStart(5, '0')}`;
 }

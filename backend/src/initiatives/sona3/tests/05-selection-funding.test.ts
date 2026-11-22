@@ -46,7 +46,7 @@ test('ranking is ordered by score and out-of-rank selection requires a written r
   ok(await act(w.imc, low.id, 'select', { reason: 'تنوع قطاعي: المشروع الوحيد في الصناعات الغذائية' }), 'out-of-rank select');
   const t = (await getApp(w.imc, low.id)).transitions.find((x: any) => x.action === 'select');
   assert.match(t.reason, /تنوع قطاعي/);
-  const stored = await q<{ payload: string }>("SELECT payload FROM application_transitions WHERE applicationId = ? AND action = 'select'", low.id);
+  const stored = await q<{ payload: string }>("SELECT payload FROM sona3_application_transitions WHERE applicationId = ? AND action = 'select'", low.id);
   assert.equal(JSON.parse(stored[0].payload).outOfRank, true);
 
   // الأعلى درجة (ضمن الترتيب) لا يحتاج سببًا
@@ -80,8 +80,8 @@ test('selection is IMC-only and only from EVALUATED; "selected" does not guarant
 test('approval: needs date + reference + approval document; not-approved ends the file', async () => {
   const j = await advanceTo(srv, w, 'SELECTED', { scores: scoresAll(70) }).catch(async () => {
     // قد يكون مستهدف الاختيار اكتمل في هذه الدورة؛ ارفع المستهدف لهذا الاختبار
-    const { updateCohort } = await import('../src/store/cohorts.js');
-    updateCohort(w.cohortId, { selectionTarget: 50 });
+    const { updateCohort } = await import('../store/cohorts.js');
+    await updateCohort(w.cohortId, { selectionTarget: 50 });
     return advanceTo(srv, w, 'SELECTED', { scores: scoresAll(70) });
   });
   const base = { approvalDate: todayIso(), approvalReference: 'قرار 2026/15' };
@@ -109,12 +109,12 @@ test('funding search: refer to an active funder with staff; decline returns to s
   assert.equal(bogus.status, 422);
   assert.equal(bogus.json.code, 'FUNDER_INVALID');
   // جهة بلا مستخدمين نشطين أو غير نشطة
-  const { createOrganization, updateOrganization } = await import('../src/store/organizations.js');
-  const empty = createOrganization({ type: 'funder', nameAr: 'جهة بلا مستخدمين', nameEn: 'Empty funder' });
+  const { createOrganization, updateOrganization } = await import('../store/organizations.js');
+  const empty = await createOrganization({ type: 'funder', nameAr: 'جهة بلا مستخدمين', nameEn: 'Empty funder' });
   assert.equal((await act(w.imc, j.id, 'refer_funder', { funderOrgId: empty.id })).json.code, 'FUNDER_INVALID');
-  updateOrganization(w.funderBOrg, { isActive: false });
+  await updateOrganization(w.funderBOrg, { isActive: false });
   assert.equal((await act(w.imc, j.id, 'refer_funder', { funderOrgId: w.funderBOrg })).json.code, 'FUNDER_INVALID', 'inactive funder');
-  updateOrganization(w.funderBOrg, { isActive: true });
+  await updateOrganization(w.funderBOrg, { isActive: true });
 
   ok(await act(w.imc, j.id, 'refer_funder', { funderOrgId: w.funderAOrg }), 'refer A');
   // جهة أخرى لا ترى الملف، والمحال إليها ترى الملف مع قناع الرقم القومي

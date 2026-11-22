@@ -150,9 +150,9 @@ function parsePayload(action: ActionName, from: ApplicationState, body: unknown,
 }
 
 /** يجمع آخر نسخة من أقسام الفورم (بما فيها غير المُرسل) — أساس فحص الاكتمال. */
-export function pendingFormData(appId: string, sections: readonly FormSection[]): FormData {
+export async function pendingFormData(appId: string, sections: readonly FormSection[]): Promise<FormData> {
   const data: FormData = {};
-  for (const s of sections) data[s] = getSection(appId, s) ?? {};
+  for (const s of sections) data[s] = await getSection(appId, s) ?? {};
   return data;
 }
 
@@ -172,18 +172,18 @@ function mapUniqueError(e: unknown): never {
 }
 
 /** هل يوجد مشروع أعلى درجة مستوفٍ للحدود ولم يُبت فيه بعد؟ (الاختيار خارج الترتيب يحتاج سببًا ★). */
-export function isOutOfRank(app: AppRow): boolean {
-  return cohortRanking(app.cohortId, ['EVALUATED']).some((o) => o.id !== app.id && o.passedMinimums === true && (o.score ?? 0) > (app.score ?? 0));
+export async function isOutOfRank(app: AppRow): Promise<boolean> {
+  return (await cohortRanking(app.cohortId, ['EVALUATED'])).some((o) => o.id !== app.id && o.passedMinimums === true && (o.score ?? 0) > (app.score ?? 0));
 }
 
 /** عدد المختارين في الدورة (كل من دخل SELECTED). */
-export function selectedCount(cohortId: string): number {
-  return countCohortEntered(cohortId, 'SELECTED');
+export async function selectedCount(cohortId: string): Promise<number> {
+  return await countCohortEntered(cohortId, 'SELECTED');
 }
 
 /** مراحل الصرف الافتراضية من خطة التنفيذ في الدراسة: المواعيد تراكمية بالأسابيع من اليوم. */
-function milestonesFromPlan(appId: string, attempt: number): MilestoneInput[] {
-  const phases = (getSection(appId, 'study_plan', attempt)?.phases ?? []) as Array<{ title?: string; weeks?: number; amount?: number }>;
+async function milestonesFromPlan(appId: string, attempt: number): Promise<MilestoneInput[]> {
+  const phases = ((await getSection(appId, 'study_plan', attempt))?.phases ?? []) as Array<{ title?: string; weeks?: number; amount?: number }>;
   let at = Date.now();
   return phases.map((ph) => {
     at += (Number(ph.weeks) || 0) * 7 * 86_400_000;
@@ -193,11 +193,11 @@ function milestonesFromPlan(appId: string, attempt: number): MilestoneInput[] {
 
 export interface ActionContext { ip: string }
 
-export function performAction(user: UserInternal, appId: string, actionRaw: string, body: unknown, ctx: ActionContext): AppRow {
+export async function performAction(user: UserInternal, appId: string, actionRaw: string, body: unknown, ctx: ActionContext): Promise<AppRow> {
   if (!(ACTIONS as readonly string[]).includes(actionRaw) || actionRaw === 'reopen') throw Errors.notFound('الإجراء غير معروف.', 'Unknown action.');
   const action = actionRaw as ActionName;
-  const app = getApplication(appId);
-  if (!app || !canSeeApplication(user, app)) throw Errors.notFound('الطلب غير موجود.', 'Application not found.');
+  const app = await getApplication(appId);
+  if (!app || !await canSeeApplication(user, app)) throw Errors.notFound('الطلب غير موجود.', 'Application not found.');
   const sentVersion = isObj(body) ? body.expectedVersion : undefined;
   if (typeof sentVersion === 'number' && sentVersion !== app.version && !isTerminal(app.state)) throw versionConflict();
 
@@ -214,18 +214,18 @@ export function performAction(user: UserInternal, appId: string, actionRaw: stri
   if (!def) throw new AppError(403, 'ACTION_NOT_ALLOWED', 'هذا الإجراء غير مسموح لك على هذا الطلب.', 'You are not allowed to perform this action on this application.');
 
   const req = def.requires ?? {};
-  const outOfRank = action === 'select' && policy.requireReasonForOutOfRankSelection && app.passedMinimums === true && isOutOfRank(app);
+  const outOfRank = action === 'select' && policy.requireReasonForOutOfRankSelection && app.passedMinimums === true && await isOutOfRank(app);
   const p = parsePayload(action, app.state, body, Boolean(req.reason) || outOfRank);
   if (p.expectedVersion !== app.version) throw versionConflict();
   const pending = app.attempt + 1;
-  const cohort = getCohort(app.cohortId)!;
+  const cohort = (await getCohort(app.cohortId))!;
 
   // ── فحوص ما قبل المعاملة ──
   let appData: FormData | null = null;
   let studyData: FormData | null = null;
   if (req.completeApplication) {
-    appData = pendingFormData(app.id, APPLICATION_SECTIONS);
-    const issues = completenessIssues('application', appData, countActiveByKind(app.id, pending));
+    appData = await pendingFormData(app.id, APPLICATION_SECTIONS);
+    const issues = completenessIssues('application', appData, await countActiveByKind(app.id, pending));
     if (issues.length) throw new AppError(422, 'INCOMPLETE_APPLICATION', 'الاستمارة غير مكتملة — استكمل الحقول والمستندات المطلوبة.', 'The application is incomplete.', issues);
     const personal = appData.personal!;
     // شرط السن (الشرط 1): العمر عند إغلاق باب التقديم (أو عند التقديم حسب إعداد الدورة).
@@ -238,18 +238,18 @@ export function performAction(user: UserInternal, appId: string, actionRaw: stri
     if (action === 'submit' && cohortStatus(cohort) !== 'open') {
       throw Errors.conflict('COHORT_CLOSED', 'أُغلق باب التقديم لهذه الدورة — لا يمكن إرسال طلبات جديدة.', 'Applications for this cohort are closed.');
     }
-    const holder = findOpenSubmittedByNationalId(String(personal.nationalId), app.id);
+    const holder = await findOpenSubmittedByNationalId(String(personal.nationalId), app.id);
     if (holder) {
       throw Errors.conflict('DUPLICATE_NATIONAL_ID', 'يوجد طلب مفتوح آخر بنفس الرقم القومي — لا يُسمح إلا بطلب مفتوح واحد لكل متقدم. بياناتك محفوظة.',
         'Another open application uses this national ID. Your data is saved.', [{ field: 'nationalId', issue: 'duplicate' }]);
     }
   }
   if (req.completeStudy) {
-    studyData = pendingFormData(app.id, STUDY_SECTIONS);
-    const issues = completenessIssues('study', studyData, countActiveByKind(app.id, pending));
+    studyData = await pendingFormData(app.id, STUDY_SECTIONS);
+    const issues = completenessIssues('study', studyData, await countActiveByKind(app.id, pending));
     if (issues.length) throw new AppError(422, 'INCOMPLETE_STUDY', 'دراسة الجدوى غير مكتملة — استكمل البنود المطلوبة.', 'The feasibility study is incomplete.', issues);
   }
-  const assignments = activeAssignments(app.id).filter((a) => a.status !== 'conflict');
+  const assignments = (await activeAssignments(app.id)).filter((a) => a.status !== 'conflict');
   if (req.assignedEvaluators && assignments.length === 0) {
     throw new AppError(422, 'NO_EVALUATORS', 'أسند مقيّمًا واحدًا على الأقل من لجنة التقييم قبل الإحالة.', 'Assign at least one evaluator before referring.', [{ field: 'evaluators', issue: 'required' }]);
   }
@@ -264,25 +264,25 @@ export function performAction(user: UserInternal, appId: string, actionRaw: stri
     if (app.passedMinimums !== true) {
       throw new AppError(422, 'BELOW_MINIMUM', 'لم يجتز المشروع الحد الأدنى للجدوى الفنية والمالية — لا يمكن اختياره.', 'The project did not pass the minimum thresholds.', [{ field: 'score', issue: 'below minimum' }]);
     }
-    if (selectedCount(app.cohortId) >= cohort.selectionTarget) {
+    if (await selectedCount(app.cohortId) >= cohort.selectionTarget) {
       throw Errors.conflict('SELECTION_TARGET_REACHED', `اكتمل مستهدف الاختيار للدورة (${cohort.selectionTarget} مشروعًا).`, `The cohort selection target (${cohort.selectionTarget}) is reached.`);
     }
   }
-  if (req.approval && !activeDocsAt(app.id, Math.max(app.attempt, 1)).some((d) => d.kind === 'approvalFile')) {
+  if (req.approval && !(await activeDocsAt(app.id, Math.max(app.attempt, 1))).some((d) => d.kind === 'approvalFile')) {
     throw new AppError(422, 'DOCUMENT_REQUIRED', 'ارفع مستند قرار الاعتماد قبل التسجيل.', 'Upload the approval decision document first.', [{ field: 'approvalFile', issue: 'required file' }]);
   }
   if (req.funderOrgId) {
-    const org = getOrganization(p.funderOrgId!);
-    if (!org || org.type !== 'funder' || !org.isActive || activeStaffCount(org.id) === 0) {
+    const org = await getOrganization(p.funderOrgId!);
+    if (!org || org.type !== 'funder' || !org.isActive || await activeStaffCount(org.id) === 0) {
       throw new AppError(422, 'FUNDER_INVALID', 'جهة التمويل غير متاحة (غير نشطة أو لا يوجد فيها مستخدم نشط).', 'The funder is not available.', [{ field: 'funderOrgId', issue: 'unknown or inactive funder' }]);
     }
-    if (listReferrals(app.id).some((r) => r.funderOrgId === org.id && r.status === 'declined')) {
+    if ((await listReferrals(app.id)).some((r) => r.funderOrgId === org.id && r.status === 'declined')) {
       throw new AppError(422, 'FUNDER_ALREADY_DECLINED', 'اعتذرت هذه الجهة عن تمويل المشروع من قبل — اختر جهة أخرى.', 'This funder already declined the project.', [{ field: 'funderOrgId', issue: 'already declined' }]);
     }
   }
   let milestones: MilestoneInput[] | undefined;
   if (req.funding) {
-    milestones = p.milestones ?? milestonesFromPlan(app.id, app.attempt);
+    milestones = p.milestones ?? await milestonesFromPlan(app.id, app.attempt);
     const sum = milestones.reduce((s, m) => s + m.amount, 0);
     if (!milestones.length || Math.abs(sum - p.amount!) > 1) {
       throw new AppError(422, 'MILESTONES_MISMATCH',
@@ -295,8 +295,8 @@ export function performAction(user: UserInternal, appId: string, actionRaw: stri
   const actor = { actorUserId: user.id, actorRole: user.role, actorOrgId: user.organizationId, actorName: user.nameAr };
   let funderNameAr: string | undefined;
 
-  tx(() => {
-    const cur = getApplication(app.id)!;
+  await tx(async () => {
+    const cur = (await getApplication(app.id))!;
     if (cur.version !== p.expectedVersion || cur.state !== app.state) throw versionConflict();
     const db = getDb();
     const nextAttempt = bumpsAttempt(action) ? pending : cur.attempt;
@@ -317,28 +317,28 @@ export function performAction(user: UserInternal, appId: string, actionRaw: stri
       vals.push(totals.totalInvestment, totals.totalJobs, typeof studyData.expert?.expertId === 'string' ? studyData.expert.expertId : null);
     }
     if (action === 'submit') {
-      if (!cur.number) { sets.push('number = ?'); vals.push(nextApplicationNumber()); }
+      if (!cur.number) { sets.push('number = ?'); vals.push(await nextApplicationNumber()); }
       sets.push('submittedAt = COALESCE(submittedAt, ?)'); vals.push(now);
     }
     if (action === 'refer_funder') { sets.push('funderOrgId = ?'); vals.push(p.funderOrgId!); }
     if (action === 'decline_funding') { sets.push('funderOrgId = NULL'); }
     if (action === 'complete_evaluation') {
-      const agg = aggregate(activeAssignments(cur.id));
+      const agg = aggregate(await activeAssignments(cur.id));
       const passed = agg.score !== null && agg.score >= cohort.minTotalScore
         && (agg.perCriterion.financial ?? 0) >= cohort.minFinancialScore && (agg.perCriterion.technical ?? 0) >= cohort.minTechnicalScore;
-      setApplicationScore(cur.id, agg.score, passed);
+      await setApplicationScore(cur.id, agg.score, passed);
     }
 
     try {
-      const r = db.prepare(`UPDATE applications SET ${sets.join(', ')} WHERE id = ? AND version = ?`).run(...vals, cur.id, p.expectedVersion);
+      const r = await db.prepare(`UPDATE sona3_applications SET ${sets.join(', ')} WHERE id = ? AND version = ?`).run(...vals, cur.id, p.expectedVersion);
       if (Number(r.changes) !== 1) throw versionConflict();
     } catch (e) {
       if (e instanceof AppError) throw e;
       mapUniqueError(e);
     }
 
-    const after0 = getApplication(cur.id)!;
-    const t = insertTransition({
+    const after0 = (await getApplication(cur.id))!;
+    const t = await insertTransition({
       applicationId: cur.id, fromState: cur.state, toState: def.to, action, ...actor,
       reason: p.reason ?? p.note ?? '', attempt: nextAttempt,
       payload: {
@@ -353,44 +353,44 @@ export function performAction(user: UserInternal, appId: string, actionRaw: stri
     });
 
     if (p.deficiencies && action === 'request_correction') {
-      for (const d of p.deficiencies) insertDeficiency(cur.id, t.id, cur.state, d.field, d.note || (p.reason ?? ''));
+      for (const d of p.deficiencies) await insertDeficiency(cur.id, t.id, cur.state, d.field, d.note || (p.reason ?? ''));
     }
-    if (bumpsAttempt(action) && openDeficiencies(cur.id).length) resolveDeficiencies(cur.id, t.id);
+    if (bumpsAttempt(action) && (await openDeficiencies(cur.id)).length) await resolveDeficiencies(cur.id, t.id);
 
     if (action === 'record_approval') {
-      writeSection(cur.id, 'approval', Math.max(1, nextAttempt), { approvalDate: p.approvalDate, approvalReference: p.approvalReference, note: p.note ?? '' }, user.id);
+      await writeSection(cur.id, 'approval', Math.max(1, nextAttempt), { approvalDate: p.approvalDate, approvalReference: p.approvalReference, note: p.note ?? '' }, user.id);
     }
     if (action === 'refer_funder') {
-      insertReferral(cur.id, p.funderOrgId!, user.id, p.note ?? '');
-      funderNameAr = getOrganization(p.funderOrgId!)?.nameAr;
+      await insertReferral(cur.id, p.funderOrgId!, user.id, p.note ?? '');
+      funderNameAr = (await getOrganization(p.funderOrgId!))?.nameAr;
     }
     if (action === 'approve_funding' || action === 'decline_funding' || (action === 'withdraw' && cur.state === 'FUNDER_REVIEW')) {
-      const ref = pendingReferral(cur.id);
+      const ref = await pendingReferral(cur.id);
       if (ref) {
-        funderNameAr = getOrganization(ref.funderOrgId)?.nameAr;
-        if (action === 'approve_funding') decideReferral(ref.id, user.id, { status: 'approved', amount: p.amount!, model: p.model!, terms: p.terms! });
-        else decideReferral(ref.id, user.id, { status: 'declined', reason: action === 'withdraw' ? `انسحاب المتقدم: ${p.reason}` : p.reason! });
+        funderNameAr = (await getOrganization(ref.funderOrgId))?.nameAr;
+        if (action === 'approve_funding') await decideReferral(ref.id, user.id, { status: 'approved', amount: p.amount!, model: p.model!, terms: p.terms! });
+        else await decideReferral(ref.id, user.id, { status: 'declined', reason: action === 'withdraw' ? `انسحاب المتقدم: ${p.reason}` : p.reason! });
       }
     }
-    if (action === 'approve_funding') insertMilestones(cur.id, milestones!);
+    if (action === 'approve_funding') await insertMilestones(cur.id, milestones!);
 
-    const after = getApplication(cur.id)!;
-    addAuditLog({
+    const after = (await getApplication(cur.id))!;
+    await addAuditLog({
       actorType: 'user', ...actor, ip: ctx.ip, action: `application.${action}`, entityType: 'application', entityId: cur.id, applicationId: cur.id,
       summaryAr: `${def.labelAr}: ${STATE_LABELS[cur.state].ar} ← ${STATE_LABELS[def.to].ar}`,
       details: { fromState: cur.state, toState: def.to, attempt: nextAttempt, version: after.version, transitionId: t.id, deficiencies: p.deficiencies?.length ?? 0 },
     });
-    notifyTransition({
+    await notifyTransition({
       app: after, def, transition: t, reason: p.reason,
       deficiencies: p.deficiencies ? deficiencyLabels(p.deficiencies) : undefined,
       funderNameAr, amount: p.amount, modelAr: p.model ? policy.financingModels.find((m) => m.value === p.model)?.labelAr : undefined,
     });
     const eventId = randomUUID();
-    enqueueWebhook(eventId, 'application.state_changed', t.id, {
+    await enqueueWebhook(eventId, 'application.state_changed', t.id, {
       id: eventId, type: 'application.state_changed', occurredAt: now,
       data: { applicationId: after.id, number: after.number, fromState: cur.state, toState: def.to, action, actorRole: user.role, actorOrgId: user.organizationId, attempt: nextAttempt, version: after.version },
     }, !(config.platformWebhookUrl && config.platformWebhookSecret));
   });
 
-  return getApplication(app.id)!;
+  return (await getApplication(app.id))!;
 }
