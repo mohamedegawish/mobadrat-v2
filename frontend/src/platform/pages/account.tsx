@@ -8,6 +8,7 @@ import { api, errText, fieldErrors, type Governorate, type ProfileDoc, type Prof
 import { usePlatform, store } from '../store';
 import { Alert, Loading } from '../layout';
 import { issueText } from './auth';
+import { clearPlatformFlash, peekPlatformFlash, type PlatformFlash } from '../../core/session';
 
 // ── profile field input (driven by the platform's field catalog) ──────────
 
@@ -121,7 +122,8 @@ const TONE: Record<string, string> = { success: 'ok', warning: 'warn', danger: '
 
 export const HubPage: React.FC = () => {
   const { t, isAr, me } = usePlatform();
-  useEffect(() => { void store.reloadMe(); }, []);
+  const [flash] = useState<PlatformFlash | null>(() => peekPlatformFlash());
+  useEffect(() => { clearPlatformFlash(); void store.reloadMe(); }, []);
   if (!me) return <Loading />;
   const ms = me.memberships;
   return (
@@ -130,6 +132,11 @@ export const HubPage: React.FC = () => {
         <div><h2>{t('مبادراتي', 'My initiatives')}</h2><p>{t('اختر المبادرة التي تريد الدخول على لوحتها.', 'Choose the initiative whose dashboard you want to open.')}</p></div>
         <a className="btn btn-outline" href="#initiatives"><Plus size={16} /> {t('التقديم على مبادرة أخرى', 'Apply to another initiative')}</a>
       </div>
+      {flash ? (
+        <div data-testid={flash.testId} role="status">
+          <Alert tone={flash.tone}><b>{isAr ? flash.titleAr : flash.titleEn}</b>{flash.textAr ? <div>{isAr ? flash.textAr : flash.textEn}</div> : null}</Alert>
+        </div>
+      ) : null}
       {me.user.platformRole ? (
         <div className="pf-box" style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <div><b><ShieldCheck size={18} style={{ verticalAlign: 'middle' }} /> {isAr ? me.platformRoleLabel?.ar : me.platformRoleLabel?.en}</b><div className="pf-muted">{t('لوحة الإدارة الموحدة لكل المبادرات', 'The unified administration of every initiative')}</div></div>
@@ -160,7 +167,7 @@ export const HubPage: React.FC = () => {
                 {m.access.status !== 'full' && m.access.messageAr ? <Alert tone={m.access.status === 'blocked' ? 'warn' : 'info'}>{isAr ? m.access.messageAr : m.access.messageEn}</Alert> : null}
                 {m.unread ? <div className="pf-muted" style={{ fontSize: 13 }}>{t(`${m.unread} إشعار غير مقروء`, `${m.unread} unread notification(s)`)}</div> : null}
                 <div style={{ marginTop: 'auto' }}>
-                  {m.status === 'active' ? <a className="btn btn-primary" href={`#i/${m.initiativeId}/${m.card?.view ?? m.defaultView}`}><LayoutDashboard size={16} /> {t('ادخل لوحة المبادرة', 'Open the dashboard')}</a> : null}
+                  {m.status === 'active' && m.access.status !== 'blocked' ? <a className="btn btn-primary" href={`#i/${m.initiativeId}/${m.card?.view ?? m.defaultView}`}><LayoutDashboard size={16} /> {t('ادخل لوحة المبادرة', 'Open the dashboard')}</a> : null}
                 </div>
               </div>
             </div>

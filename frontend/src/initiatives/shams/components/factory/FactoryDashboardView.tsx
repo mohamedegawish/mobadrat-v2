@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { CheckCircle2, FilePlus2, History } from 'lucide-react';
-import { takeSubmitFlash, type SubmitFlash } from '../../utils/submitFlash';
+import { clearSubmitFlash, peekSubmitFlash, type SubmitFlash } from '../../utils/submitFlash';
 import { api } from '../../api';
 import { errorText, store, useStore } from '../../store/state';
 import { useAsync, formatDate } from '../../hooks/useAsync';
@@ -19,7 +19,8 @@ export const FactoryDashboardView: React.FC = () => {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
   const [withdrawing, setWithdrawing] = useState(false);
-  const [flash, setFlash] = useState<SubmitFlash | null>(() => takeSubmitFlash());
+  const [flash, setFlash] = useState<SubmitFlash | null>(() => peekSubmitFlash());
+  useEffect(() => { clearSubmitFlash(); }, []);
 
   const startNew = async () => {
     setCreating(true); setError('');

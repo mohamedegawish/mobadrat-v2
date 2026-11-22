@@ -5,6 +5,7 @@
  */
 import { useSyncExternalStore } from 'react';
 import { api, ApiException, refreshSession, clearTokens, type Meta, type Role, type User } from '../api';
+import { getAccessToken } from '../../../core/session';
 import { validationMessage } from '../utils/validation';
 
 export type Language = 'ar' | 'en';
@@ -173,7 +174,9 @@ class Store {
   async boot() {
     const metaP = api.meta().then((meta) => this.set({ meta })).catch(() => undefined);
     try {
-      if (await refreshSession()) {
+      // Already signed in on the platform in this page (token in memory) → no extra refresh: every refresh rotates the
+      // session token, and a reload racing a rotation would look like a stolen token (the session is then ended).
+      if (getAccessToken() || await refreshSession()) {
         const user = await api.me();
         this.set({ user });
       }

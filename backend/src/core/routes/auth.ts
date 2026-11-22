@@ -100,7 +100,8 @@ authRouter.post('/auth/verify-email', emailFlowLimiter, ah(async (req, res) => {
   if (!u || !u.tokenExpiresAt || Date.parse(u.tokenExpiresAt) < Date.now()) {
     return apiError(res, 400, 'TOKEN_INVALID', 'رابط التفعيل غير صالح أو منتهي — اطلب رابطًا جديدًا.', 'The activation link is invalid or expired. Request a new one.');
   }
-  await markEmailVerified(u.id);
+  // Only the request that consumes the token goes on (a double click or a repeated request verifies once).
+  if (!(await markEmailVerified(u.id, sha256(token)))) return okMessage(res, 200, 'تم تفعيل البريد الإلكتروني — يمكنك تسجيل الدخول الآن.');
   await addAuditLog({ actorType: 'user', actorUserId: u.id, actorName: u.nameAr, ip: clientIp(req), action: 'auth.verify_email', entityType: 'user', entityId: u.id, summaryAr: 'تفعيل البريد الإلكتروني' });
   // Initiatives react to the verification (e.g. Shams submits the registration it received with the account).
   const fresh = (await getUserById(u.id))!;

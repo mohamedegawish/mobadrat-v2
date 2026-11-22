@@ -99,17 +99,28 @@ export const RegisterPage: React.FC = () => {
   );
 };
 
+/** One activation request per link, however often the page mounts (the token is single-use on the server). */
+const verifyRequests = new Map<string, Promise<{ res: Response; j: { message?: string; messageAr?: string; messageEn?: string; data?: { submitted?: boolean } } }>>();
+function verifyOnce(token: string) {
+  let p = verifyRequests.get(token);
+  if (!p) {
+    p = fetch('/api/v1/auth/verify-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ token }) })
+      .then(async (res) => ({ res, j: await res.json() }));
+    verifyRequests.set(token, p);
+  }
+  return p;
+}
+
 export const VerifyEmailPage: React.FC = () => {
   const { t, isAr, param } = usePlatform();
-  const [state, setState] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [state, setState] = useState<{ ok: boolean; msg: string; submitted?: boolean } | null>(null);
   useEffect(() => {
     if (!param) return;
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch('/api/v1/auth/verify-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ token: param }) });
-        const j = await res.json();
-        if (!cancelled) setState({ ok: res.ok, msg: res.ok ? j.message : (isAr ? j.messageAr : j.messageEn) });
+        const { res, j } = await verifyOnce(param);
+        if (!cancelled) setState({ ok: res.ok, msg: (res.ok ? j.message : (isAr ? j.messageAr : j.messageEn)) ?? '', submitted: Boolean(j.data?.submitted) });
       } catch (e) { if (!cancelled) setState({ ok: false, msg: errText(e, isAr) }); }
     })();
     return () => { cancelled = true; };
@@ -117,7 +128,9 @@ export const VerifyEmailPage: React.FC = () => {
   return (
     <div className="pf-container pf-page"><div className="pf-box pf-auth">
       <h3>{t('تفعيل البريد الإلكتروني', 'E-mail activation')}</h3>
-      {!state ? <p className="pf-muted">{t('جارٍ التفعيل…', 'Activating…')}</p> : <Alert tone={state.ok ? 'ok' : 'err'}>{state.msg}</Alert>}
+      {!state ? <p className="pf-muted">{t('جارٍ التفعيل…', 'Activating…')}</p> : (
+        <div data-testid={state.ok ? 'verify-ok' : 'verify-failed'} data-under-review={state.submitted ? '1' : '0'}><Alert tone={state.ok ? 'ok' : 'err'}>{state.msg}</Alert></div>
+      )}
       {state?.ok ? <a className="btn btn-primary" href="#login" style={{ marginTop: 14 }}>{t('تسجيل الدخول', 'Sign in')}</a> : null}
     </div></div>
   );

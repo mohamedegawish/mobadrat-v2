@@ -5,6 +5,7 @@
  */
 import { useSyncExternalStore } from 'react';
 import { api, ApiException, refreshSession, clearTokens, type Meta, type Role, type User } from '../api';
+import { getAccessToken } from '../../../core/session';
 import { validationMessage } from '../utils/validation';
 
 export type Language = 'ar' | 'en';
@@ -44,6 +45,11 @@ export const WORKSPACE_VIEWS: View[] = ['dashboard', 'work-queue', 'pmu-monitor'
 /** مصنع لم يُقبل حسابه بعد (طلب تعديل بيانات، أو تعذر إرسال طلب التسجيل): دخول مقيّد بمعالج طلبه فقط — القيد الحقيقي في السيرفر. */
 export function isRestrictedFactory(user: User | null): boolean {
   return Boolean(user && user.role === 'factory_owner' && user.accountStatus && user.accountStatus !== 'approved');
+}
+
+/** Under IMC review or not accepted: the initiative is locked for this account (the platform account itself stays valid). */
+export function isLockedFactory(user: User | null): boolean {
+  return Boolean(user && user.role === 'factory_owner' && (user.accountStatus === 'under_review' || user.accountStatus === 'rejected'));
 }
 
 export function canView(view: View, user: User | null): boolean {
@@ -171,6 +177,9 @@ class Store {
 
   /** الحساب المقيّد: الصفحة الوحيدة هي معالج طلب التسجيل المفتوح. */
   private async goRestrictedHome() {
+    // Under IMC review / not approved: the initiative is locked — the platform chooser shows why (the account stays valid).
+    const status = this.s.user?.accountStatus;
+    if (status === 'under_review' || status === 'rejected') { window.location.hash = '#hub'; return; }
     try {
       const p = await api.factoryProfile();
       if (p.openApplicationId) { this.navigate('apply', p.openApplicationId); return; }
@@ -181,7 +190,9 @@ class Store {
   async boot() {
     const metaP = api.meta().then((meta) => this.set({ meta })).catch(() => undefined);
     try {
-      if (await refreshSession()) {
+      // Already signed in on the platform in this page (token in memory) → no extra refresh: every refresh rotates the
+      // session token, and a reload racing a rotation would look like a stolen token (the session is then ended).
+      if (getAccessToken() || await refreshSession()) {
         const user = await api.me();
         this.set({ user });
       }

@@ -176,3 +176,32 @@ test('P-10 password reset is the platform\'s, for every initiative', async () =>
   assert.equal((await c.post('/auth/forgot-password', { email: 'person1@test.local' })).status, 200);
   assert.equal((await c.post('/auth/login', { email: 'person1@test.local', password: PASSWORD })).status, 200);
 });
+
+test('P-11 a factory not approved yet: the chooser opens its registration application; under review Shams is locked (no module screen)', async () => {
+  const c = await new Client(srv.base).login('person1@test.local');
+  const shams = async () => (await c.get('/me')).json.data.memberships.find((m: any) => m.initiativeId === 'shams');
+  let m = await shams();
+  assert.equal(m.access.status, 'restricted');
+  assert.match(m.card.view, /^apply\//, 'restricted: the registration application, not the dashboard');
+  const appId = m.card.view.slice('apply/'.length);
+  for (let i = 0; i < 3; i++) {
+    assert.equal((await c.upload(`/i/shams/applications/${appId}/documents`, { kind: 'electricityBill' }, pdf(`p11-bill-${i}`), `bill-${i}.pdf`)).status, 201);
+  }
+  const draft = (await c.get(`/i/shams/applications/${appId}`)).json.data;
+  const sub = await c.post(`/i/shams/applications/${appId}/actions/submit`, { expectedVersion: draft.version });
+  assert.equal(sub.status, 200, JSON.stringify(sub.json));
+  m = await shams();
+  assert.equal(m.access.status, 'blocked', 'under IMC review: the initiative screens are locked');
+  assert.equal(m.access.code, 'ACCOUNT_UNDER_REVIEW');
+  assert.equal((await c.get(`/i/shams/applications/${appId}`)).json.code, 'ACCOUNT_UNDER_REVIEW');
+  assert.equal((await c.get('/me')).status, 200, 'the platform account itself stays usable');
+
+  // IMC asks for a correction → the factory may only fix its application: the chooser opens it (not the dashboard).
+  const imc = await new Client(srv.base).login('imc1@shams.local');
+  const cur = (await imc.get(`/i/shams/applications/${appId}`)).json.data;
+  const corr = await imc.post(`/i/shams/applications/${appId}/actions/request_correction`, { expectedVersion: cur.version, deficiencies: [{ field: 'address', note: 'العنوان غير مكتمل' }] });
+  assert.equal(corr.status, 200, JSON.stringify(corr.json));
+  m = await shams();
+  assert.equal(m.access.status, 'restricted');
+  assert.equal(m.card.view, `apply/${appId}`);
+});

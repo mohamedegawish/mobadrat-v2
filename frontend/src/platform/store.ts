@@ -90,7 +90,7 @@ class Store {
   /** Where a signed-in person lands: one initiative → its dashboard; several (or staff) → the chooser. */
   goHome(me = this.s.me) {
     if (!me) { this.go('home'); return; }
-    if (!me.user.platformRole && me.memberships.length === 1 && me.memberships[0].status === 'active') {
+    if (!me.user.platformRole && me.memberships.length === 1 && me.memberships[0].status === 'active' && me.memberships[0].access?.status !== 'blocked') {
       const m = me.memberships[0];
       this.go(`i/${m.initiativeId}/${m.card?.view ?? m.defaultView}`);
       return;

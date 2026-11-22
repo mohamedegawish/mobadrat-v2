@@ -118,9 +118,17 @@ export async function setVerifyToken(id: string, hash: string, expiresAt: string
   await getDb().prepare('UPDATE users SET emailVerifyTokenHash = ?, emailVerifyExpiresAt = ?, updatedAt = ? WHERE id = ?').run(hash, expiresAt, nowIso(), id);
 }
 
-export async function markEmailVerified(id: string): Promise<void> {
+/**
+ * Marks the e-mail verified and consumes the activation token. With the token hash, only the request that still holds it
+ * wins (true): two simultaneous clicks on the same link verify once, so the initiatives' follow-ups (e.g. Shams submitting
+ * the registration) run once.
+ */
+export async function markEmailVerified(id: string, tokenHash?: string): Promise<boolean> {
   const now = nowIso();
-  await getDb().prepare('UPDATE users SET emailVerifiedAt = ?, emailVerifyTokenHash = NULL, emailVerifyExpiresAt = NULL, updatedAt = ? WHERE id = ?').run(now, now, id);
+  const r = tokenHash
+    ? await getDb().prepare('UPDATE users SET emailVerifiedAt = ?, emailVerifyTokenHash = NULL, emailVerifyExpiresAt = NULL, updatedAt = ? WHERE id = ? AND emailVerifyTokenHash = ?').run(now, now, id, tokenHash)
+    : await getDb().prepare('UPDATE users SET emailVerifiedAt = ?, emailVerifyTokenHash = NULL, emailVerifyExpiresAt = NULL, updatedAt = ? WHERE id = ?').run(now, now, id);
+  return Number(r.changes) === 1;
 }
 
 export async function setResetToken(id: string, hash: string, expiresAt: string): Promise<void> {

@@ -14,3 +14,7 @@ export function takeSubmitFlash(): SubmitFlash | null {
   return f;
 }
 
+/** Reads the message without consuming it (React may run a state initializer twice); clear it once shown. */
+export function peekSubmitFlash(): SubmitFlash | null { return pending; }
+export function clearSubmitFlash(): void { pending = null; }
+

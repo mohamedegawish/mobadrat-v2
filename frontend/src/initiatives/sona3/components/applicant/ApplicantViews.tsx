@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // شاشات المتقدم: صفحتي، استمارة التقديم، دراسة الجدوى، متابعة طلبي (التنفيذ والتقارير والتظلم).
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../../api';
 import { errorDetails, errorText, store, useStore } from '../../store/state';
 import type { ApplicantProfile, ApplicationDetail } from '../../api/schemas';
@@ -24,9 +24,15 @@ function useApp(id: string | null) {
   const [app, setApp] = useState<ApplicationDetail | null>(null);
   const [error, setError] = useState('');
   const { isAr } = useStore();
+  /** Every field save reloads the application: only the latest reload may land (an older reply would bring back older data). */
+  const seq = useRef(0);
   const reload = useCallback(async () => {
     if (!id) return;
-    try { setApp(await api.getApplication(id)); setError(''); } catch (e) { setError(errorText(e, isAr)); }
+    const mine = ++seq.current;
+    try {
+      const a = await api.getApplication(id);
+      if (mine === seq.current) { setApp(a); setError(''); }
+    } catch (e) { if (mine === seq.current) setError(errorText(e, isAr)); }
   }, [id, isAr]);
   useEffect(() => { void reload(); }, [reload]);
   return { app, setApp, error, reload };

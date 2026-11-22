@@ -131,7 +131,10 @@ export const shamsModule: InitiativeModule = {
     const task = STATE_TASKS[app.state];
     return {
       statusAr: STATE_LABELS[app.state].ar, statusEn: STATE_LABELS[app.state].en, applicationNumber: app.number,
-      nextActionAr: task?.ar, nextActionEn: task?.en, view: app.state === 'DRAFT' ? `apply/${app.id}` : 'factory-dashboard',
+      nextActionAr: task?.ar, nextActionEn: task?.en,
+      // As in the old app: an approved factory lands on its dashboard («لوحتي»); one not approved yet on its registration
+      // application, the only screen it may use.
+      view: factory!.accountStatus !== 'approved' && !isTerminal(app.state) ? `apply/${app.id}` : 'factory-dashboard',
       tone: app.state === 'CONTRACTED' ? 'success' : isTerminal(app.state) ? 'neutral' : app.state.endsWith('_CORRECTION') ? 'warning' : 'info',
     };
   },
@@ -191,7 +194,10 @@ export const shamsModule: InitiativeModule = {
         await performAction((await getUserById(user.id))!, draft.id, 'submit', { expectedVersion: draft.version }, { ip });
         kickNotificationWorker();
         return { messageAr: 'وأُرسل طلب تسجيل المصنع في «شمس الصناعة» لمراجعة مركز تحديث الصناعة (IMC). ستصلك رسالة بالقرار.', data: { submitted: true } };
-      } catch {
+      } catch (e) {
+        // Stays pending: the factory signs in (restricted) and resubmits — e.g. the registry service was unavailable.
+        const err = e as { code?: string; message?: string; details?: unknown };
+        console.warn(`[shams] auto-submit after e-mail verification failed for application ${draft.id}: ${err.code ?? ''} ${err.message ?? ''} ${err.details ? JSON.stringify(err.details) : ''}`);
         return { messageAr: 'تعذر إرسال طلب تسجيل المصنع للمراجعة الآن — افتح لوحة «شمس الصناعة» لإعادة إرساله.', data: { submitted: false } };
       }
     },

@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Lock } from 'lucide-react';
-import { canView, store, useStore, WORKSPACE_VIEWS, type View } from './store/state';
+import { canView, isLockedFactory, store, useStore, VIEW_ACCESS, WORKSPACE_VIEWS, type View } from './store/state';
 import { HeaderNavbar } from './components/layout/HeaderNavbar';
 import { Footer } from './components/layout/Footer';
 import { AdminLayout } from './components/admin/AdminLayout';
@@ -50,6 +50,11 @@ export const App: React.FC = () => {
   useEffect(() => {
     document.title = isAr ? 'مبادرة شمس الصناعة | وزارة الصناعة' : 'Shams El-Senaa Initiative | Ministry of Industry';
   }, [isAr]);
+
+  // A factory under IMC review (or not accepted) has no Shams screen: back to the platform chooser, which says why.
+  useEffect(() => {
+    if (!booting && isLockedFactory(user) && VIEW_ACCESS[view] !== 'public') window.location.hash = '#hub';
+  }, [booting, user, view]);
 
   const Screen = SCREENS[view];
   const allowed = canView(view, user);

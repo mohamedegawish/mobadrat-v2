@@ -58,3 +58,24 @@ export function modulePath(moduleId: string, path: string, publicPaths: string[]
   if (publicPaths.some((p) => rest === p || rest.startsWith(`${p}?`))) return `/api/v1/i/${moduleId}/public${rest}`;
   return `/api/v1/i/${moduleId}${rest}`;
 }
+
+/**
+ * A one-time message an initiative module leaves for the platform screen it hands over to (e.g. «your changes were sent
+ * for review» shown on the chooser after a not-yet-approved factory resubmits). Session storage, read once.
+ */
+export interface PlatformFlash { testId: string; tone: 'ok' | 'info' | 'warn'; titleAr: string; titleEn: string; textAr?: string; textEn?: string }
+const FLASH_KEY = 'platform_flash';
+export function setPlatformFlash(f: PlatformFlash): void {
+  try { sessionStorage.setItem(FLASH_KEY, JSON.stringify(f)); } catch { /* storage unavailable */ }
+}
+/** Reads the message without consuming it (render may run twice); the screen clears it once shown (clearPlatformFlash). */
+export function peekPlatformFlash(): PlatformFlash | null {
+  try {
+    const raw = sessionStorage.getItem(FLASH_KEY);
+    const f = raw ? JSON.parse(raw) as PlatformFlash : null;
+    return f && typeof f.titleAr === 'string' && typeof f.testId === 'string' ? f : null;
+  } catch { return null; }
+}
+export function clearPlatformFlash(): void {
+  try { sessionStorage.removeItem(FLASH_KEY); } catch { /* storage unavailable */ }
+}

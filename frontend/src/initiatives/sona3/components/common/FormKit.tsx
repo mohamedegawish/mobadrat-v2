@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // نموذج ديناميكي مبني على GET /meta (الاستمارة ودراسة الجدوى) + لوحة الإجراءات + قائمة المستندات.
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api';
 import { errorDetails, errorText, useStore } from '../../store/state';
 import type { ApplicationDetail, FieldMeta, FormKind, FormSection } from '../../api/schemas';
@@ -45,7 +45,24 @@ const Cell: React.FC<{ type: string; value: any; onChange: (v: any) => void; onB
 
 const FieldInput: React.FC<FieldProps> = ({ f, value, onCommit, disabled, error, opts, isAr }) => {
   const [local, setLocal] = useState<any>(value);
-  useEffect(() => { setLocal(value); }, [value]);
+  /** Focus inside the table: the person is still typing — a cell save's reply must not overwrite what they type next. */
+  const editing = useRef(false);
+  /** The table as last typed (a blur right after typing must save it, not the copy of the previous render). */
+  const latest = useRef<any>(value);
+  useEffect(() => {
+    if (f.type !== 'table') { setLocal(value); return; }
+    if (editing.current) return;
+    // The saved table comes back after every cell save: keep the rows just added and not filled yet (otherwise
+    // «+ إضافة صف» right after editing a cell looks like it did nothing — the save's reply erased the new row).
+    setLocal((prev: any) => {
+      const saved: any[] = Array.isArray(value) ? value : [];
+      const mine: any[] = Array.isArray(prev) ? prev : [];
+      const blank = (r: any) => Object.values(r ?? {}).every((x) => x === '' || x == null);
+      const merged = [...saved, ...mine.slice(saved.length).filter(blank)];
+      latest.current = merged;
+      return merged;
+    });
+  }, [value, f.type]);
   const label = isAr ? f.labelAr : f.labelEn;
   const hint = isAr ? f.hintAr : f.hintEn;
   const commit = (v: any = local) => { if (JSON.stringify(v ?? '') !== JSON.stringify(value ?? '')) onCommit(v === '' ? null : v); };
@@ -79,9 +96,11 @@ const FieldInput: React.FC<FieldProps> = ({ f, value, onCommit, disabled, error,
     case 'table': {
       const rows: any[] = Array.isArray(local) ? local : [];
       const cols = f.columns ?? [];
-      const set = (next: any[]) => setLocal(next);
+      const current = (): any[] => (Array.isArray(latest.current) ? latest.current : rows);
+      const set = (next: any[]) => { latest.current = next; setLocal(next); };
       control = (
-        <div className="tbl-wrap">
+        <div className="tbl-wrap" onFocusCapture={() => { editing.current = true; }}
+          onBlurCapture={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) editing.current = false; }}>
           <table className="tbl" aria-labelledby={`${id}-label`}>
             <thead><tr>{cols.map((c) => <th key={c.key}>{isAr ? c.labelAr : c.labelEn}</th>)}<th /></tr></thead>
             <tbody>
@@ -91,15 +110,15 @@ const FieldInput: React.FC<FieldProps> = ({ f, value, onCommit, disabled, error,
                     <td key={c.key}>
                       <Cell type={c.type} value={r[c.key]} isAr={isAr} disabled={disabled} options={opts(c.options)}
                         a11y={{ 'aria-label': `${isAr ? c.labelAr : c.labelEn} — ${isAr ? 'صف' : 'row'} ${i + 1}` }}
-                        onChange={(v) => set(rows.map((x, j) => (j === i ? { ...x, [c.key]: v } : x)))} onBlur={() => commit(local)} />
+                        onChange={(v) => set(current().map((x, j) => (j === i ? { ...x, [c.key]: v } : x)))} onBlur={() => commit(latest.current)} />
                     </td>
                   ))}
-                  <td>{!disabled ? <button type="button" className="btn btn-ghost" aria-label={`${isAr ? 'حذف الصف' : 'Remove row'} ${i + 1}`} onClick={() => { const n = rows.filter((_, j) => j !== i); setLocal(n); commit(n); }}>✕</button> : null}</td>
+                  <td>{!disabled ? <button type="button" className="btn btn-ghost" aria-label={`${isAr ? 'حذف الصف' : 'Remove row'} ${i + 1}`} onClick={() => { const n = current().filter((_, j) => j !== i); set(n); commit(n); }}>✕</button> : null}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {!disabled && (!f.maxItems || rows.length < f.maxItems) ? <button type="button" className="btn btn-secondary" onClick={() => set([...rows, {}])}>+ {isAr ? 'إضافة صف' : 'Add row'}</button> : null}
+          {!disabled && (!f.maxItems || rows.length < f.maxItems) ? <button type="button" className="btn btn-secondary" onClick={() => set([...current(), {}])}>+ {isAr ? 'إضافة صف' : 'Add row'}</button> : null}
         </div>
       );
       break;

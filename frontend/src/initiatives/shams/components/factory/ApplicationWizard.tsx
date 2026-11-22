@@ -6,6 +6,7 @@ import { useAsync, formatBytes, formatDate, formatNumber } from '../../hooks/use
 import { clientFieldIssue, validationMessage } from '../../utils/validation';
 import { completeRoofRows, DataFieldControl, FieldLabel, FormSummary, IssueList, missingFields, normalizeFieldInput, FORM_SECTION_STEPS, type FormState, type SectionData } from '../application/FormFields';
 import { setSubmitFlash } from '../../utils/submitFlash';
+import { setPlatformFlash } from '../../../../core/session';
 import { Loading, ErrorState, NotAvailable } from '../common/StateViews';
 import { ErrorBox } from '../ui/ErrorBox';
 import { ObjectionDialog } from './ObjectionDialog';
@@ -205,10 +206,17 @@ export const ApplicationWizard: React.FC = () => {
       // رسالة النجاح (رقم الطلب والحالة الجديدة) تُعرض في «لوحتي» حيث يتابع المصنع مراحل الطلب.
       setSubmitFlash({ appId: done.id, number: done.number, stateLabelAr: done.stateLabelAr, stateLabelEn: done.stateLabelEn, resubmitted: correction, signedOut: restricted });
       if (restricted) {
-        // حساب لم يُقبل بعد: أُرسل الطلب لـIMC وانتهت الجلسة على السيرفر — لا دخول حتى القرار (يصل بالبريد).
-        await api.logout().catch(() => undefined);
-        store.setUser(null);
-        store.navigate('login');
+        // حساب لم يُقبل بعد: أُرسل الطلب لـIMC — شاشات المبادرة مقفلة حتى القرار (يصل بالبريد)، والحساب على المنصة يبقى
+        // صالحًا لباقي المبادرات. الرسالة تُعرض في صفحة «مبادراتي» حيث تظهر حالة «قيد المراجعة».
+        setPlatformFlash({
+          testId: 'submitted-for-review', tone: 'ok',
+          titleAr: correction ? 'تم إرسال التعديلات للمراجعة' : 'تم إرسال طلب التسجيل للمراجعة',
+          titleEn: correction ? 'Your changes were sent for review' : 'Your registration was sent for review',
+          textAr: 'يراجع مركز تحديث الصناعة (IMC) طلبكم الآن، وسيصلكم بريد بالقرار. تُفتح لوحة «شمس الصناعة» بعد قبول الحساب.',
+          textEn: 'IMC is reviewing your registration; you will be emailed the decision. The Shams El-Senaa dashboard opens once the account is approved.',
+        });
+        try { sessionStorage.removeItem('platform_return_to'); } catch { /* storage unavailable */ }
+        window.location.hash = '#hub';
         return;
       }
       store.navigate('factory-dashboard');
