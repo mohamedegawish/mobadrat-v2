@@ -19,7 +19,11 @@ export default defineConfig({
   timeout: 180_000,
   expect: { timeout: 15_000 },
   reporter: [['list']],
-  use: { baseURL: 'http://localhost:5273', locale: 'ar-EG', trace: 'retain-on-failure', screenshot: 'only-on-failure' },
+  // SLOWMO=<ms> with --headed to watch a run step by step (each browser action waits that long).
+  use: {
+    baseURL: 'http://localhost:5273', locale: 'ar-EG', trace: 'retain-on-failure', screenshot: 'only-on-failure',
+    launchOptions: { slowMo: Number(process.env.SLOWMO || 0) },
+  },
   projects: [
     { name: 'shams', testDir: './tests/shams', testIgnore: /mobile/, use: { ...devices['Desktop Chrome'] } },
     { name: 'shams-mobile', testDir: './tests/shams', testMatch: /mobile/, use: { ...devices['Pixel 7'] }, dependencies: ['shams'] },
