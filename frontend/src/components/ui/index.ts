@@ -5,4 +5,3 @@ export { Badge } from './Badge';
 export { ErrorBox } from './ErrorBox';
 export { Modal } from './Modal';
 export { Card } from './Card';
-export { DegreeColorPicker } from './DegreeColorPicker';
