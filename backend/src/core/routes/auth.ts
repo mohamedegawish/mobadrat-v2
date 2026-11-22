@@ -24,7 +24,7 @@ import { platformPolicy } from '../policy.js';
 import { addAuditLog } from '../store/audit.js';
 import { dispatchCore } from '../notify/dispatch.js';
 import { kickNotificationWorker } from '../jobs/notificationWorker.js';
-import { createAccount, newToken, notifyExistingAccountOnRegister, sendVerification } from '../identity.js';
+import { createAccount, isAccountExistsRace, newToken, notifyExistingAccountOnRegister, sendVerification } from '../identity.js';
 import { savePersonProfile } from '../profile/store.js';
 import { MODULES } from '../../initiatives/registry.js';
 
@@ -84,11 +84,16 @@ authRouter.post('/auth/register', registerLimiter, ah(async (req, res) => {
     return done();
   }
   const passwordHash = await hashPasswordAsync(b.password as string);
-  await tx(async () => {
-    const u = await createAccount({ email: email!, nameAr: fullName!, phone: mobile!, passwordHash, ip: clientIp(req), source: 'platform' });
-    await savePersonProfile(u.id, { 'person.fullNameAr': fullName!, 'person.phone': mobile! });
-    await sendVerification(u);
-  });
+  try {
+    await tx(async () => {
+      const u = await createAccount({ email: email!, nameAr: fullName!, phone: mobile!, passwordHash, ip: clientIp(req), source: 'platform' });
+      await savePersonProfile(u.id, { 'person.fullNameAr': fullName!, 'person.phone': mobile! });
+      await sendVerification(u);
+    });
+  } catch (e) {
+    if (isAccountExistsRace(e)) return done(); // the same registration committed first (double submit)
+    throw e;
+  }
   kickNotificationWorker();
   return done();
 }));

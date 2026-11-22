@@ -5,6 +5,7 @@
 import { randomBytes } from 'node:crypto';
 import { config } from '../config.js';
 import { sha256 } from './auth/jwt.js';
+import { AppError } from './http/errors.js';
 import { platformPolicy } from './policy.js';
 import { addAuditLog } from './store/audit.js';
 import { revokeAllSessions } from './store/refreshTokens.js';
@@ -34,12 +35,29 @@ export interface CreateAccountInput {
   emailVerified?: boolean; mustChangePassword?: boolean; platformRole?: PlatformRole | null; createdBy?: string | null; id?: string;
 }
 
+/**
+ * Another registration of the same e-mail committed first (a double click, two tabs, a retry): the registration routes answer
+ * exactly as for an existing account — never a server error, never a hint.
+ */
+export function isAccountExistsRace(e: unknown): boolean {
+  return e instanceof AppError && e.code === 'ACCOUNT_EXISTS';
+}
+
 /** Creates the person's single platform account (call inside a transaction). The e-mail must not exist yet. */
 export async function createAccount(input: CreateAccountInput): Promise<CoreUser> {
-  const u = await createCoreUser({
-    id: input.id, email: input.email.toLowerCase(), nameAr: input.nameAr, nameEn: input.nameEn, phone: input.phone, passwordHash: input.passwordHash,
-    emailVerified: input.emailVerified, mustChangePassword: input.mustChangePassword, platformRole: input.platformRole ?? null, createdBy: input.createdBy ?? null,
-  });
+  let u: CoreUser;
+  try {
+    u = await createCoreUser({
+      id: input.id, email: input.email.toLowerCase(), nameAr: input.nameAr, nameEn: input.nameEn, phone: input.phone, passwordHash: input.passwordHash,
+      emailVerified: input.emailVerified, mustChangePassword: input.mustChangePassword, platformRole: input.platformRole ?? null, createdBy: input.createdBy ?? null,
+    });
+  } catch (e) {
+    const err = e as { errno?: number; message?: string };
+    if (err?.errno === 1062 && String(err.message ?? '').includes('ux_users_email')) {
+      throw new AppError(409, 'ACCOUNT_EXISTS', 'يوجد حساب بهذا البريد بالفعل.', 'An account with this e-mail already exists.');
+    }
+    throw e;
+  }
   await addAuditLog({
     initiativeId: input.source === 'platform' ? null : input.source, actorType: input.createdBy ? 'user' : 'anonymous', actorUserId: input.createdBy ?? u.id,
     actorName: input.createdBy ? '' : u.nameAr, ip: input.ip ?? '', action: 'auth.account_created', entityType: 'user', entityId: u.id,

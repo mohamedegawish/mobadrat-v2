@@ -24,9 +24,11 @@ export async function filterSeq<T>(items: readonly T[], fn: (item: T, index: num
   return out;
 }
 
+/** A page number from the query string: a whole number from 1, capped (an absurd page must not reach SQL as 1e+22). */
+export const MAX_PAGE = 1_000_000;
 export function normPage(page: unknown, fallback = 1): number {
   const n = Number(page);
-  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : fallback;
+  return Number.isFinite(n) && n >= 1 ? Math.min(Math.floor(n), MAX_PAGE) : fallback;
 }
 
 export function normPageSize(pageSize: unknown, fallback = 20, max = 100): number {

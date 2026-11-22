@@ -56,16 +56,19 @@ export function signRefresh(userId: string): { token: string; jti: string } {
   return { token, jti };
 }
 
+/** Only the algorithm the platform signs with: a token claiming another one (none, HS512…) is refused. */
+const VERIFY: jwt.VerifyOptions = { algorithms: ['HS256'] };
+
 export function verifyAccess(token: string): AccessClaims | null {
   try {
-    const p = jwt.verify(token, config.jwtSecret) as AccessClaims;
+    const p = jwt.verify(token, config.jwtSecret, VERIFY) as AccessClaims;
     return p.typ === 'access' ? p : null;
   } catch { return null; }
 }
 
 export function verifyRefresh(token: string): RefreshClaims | null {
   try {
-    const p = jwt.verify(token, config.jwtSecret) as RefreshClaims;
+    const p = jwt.verify(token, config.jwtSecret, VERIFY) as RefreshClaims;
     return p.typ === 'refresh' ? p : null;
   } catch { return null; }
 }

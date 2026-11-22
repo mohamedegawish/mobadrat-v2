@@ -241,7 +241,15 @@ meRouter.post('/me/initiatives/:slug/enroll', enrollLimiter, ah(async (req, res)
     if (blocker && !r.missing.length && !r.missingDocuments.length && !r.needsFactory) throw new AppError(409, blocker.code, blocker.messageAr, blocker.messageEn, details);
     throw new AppError(422, 'REQUIREMENTS_MISSING', 'استكمل البيانات المطلوبة للتقديم على هذه المبادرة أولًا.', 'Complete the data required by this initiative first.', details);
   }
-  const result = await tx(() => mod.enroll(user, { factoryProfileId: r.selectedFactoryId, ip: clientIp(req) }));
+  let result: Awaited<ReturnType<typeof mod.enroll>>;
+  try {
+    result = await tx(() => mod.enroll(user, { factoryProfileId: r.selectedFactoryId, ip: clientIp(req) }));
+  } catch (e) {
+    // Two enrolments of the same person at once (double click, two tabs): the other one opened the file first.
+    const won = await getMembership(user.id, mod.id);
+    if (won) return okMessage(res, 200, 'أنت مسجل بالفعل في هذه المبادرة.', { initiativeId: mod.id, view: mod.defaultView(won.role), alreadyEnrolled: true });
+    throw e;
+  }
   const fresh = (await getUserById(user.id))!;
   await dispatchCore('platform.enrolled', { name: fresh.nameAr, initiativeAr: titleAr, initiativeEn: titleEn, link: `${config.appUrl}/#i/${mod.id}/${result.view}` },
     [{ userId: fresh.id, email: fresh.email }], { dedupePrefix: `enrolled:${fresh.id}:${mod.id}`, channels: ['email'], inboxLink: `i/${mod.id}/${result.view}` });

@@ -33,7 +33,7 @@ import { addAuditLog } from '../store/audit.js';
 import { kickNotificationWorker } from '../jobs/notificationWorker.js';
 import { createMembership } from '../../../core/store/memberships.js';
 import { getUserByEmail as getCoreUserByEmail } from '../../../core/store/users.js';
-import { createAccount, notifyExistingAccountOnRegister, sendVerification } from '../../../core/identity.js';
+import { createAccount, isAccountExistsRace, notifyExistingAccountOnRegister, sendVerification } from '../../../core/identity.js';
 import { savePersonProfile, createFactoryProfile, addProfileDocument } from '../../../core/profile/store.js';
 import { copyStoredFile, namespaceDir } from '../../../core/http/upload.js';
 import { factoryProfileFromSections } from '../requirements.js';
@@ -155,6 +155,8 @@ publicAuthRouter.post('/register', registerLimiter, registrationUpload, ah(async
     return done();
   } catch (e) {
     dropAll();
+    // The same registration committed first (double submit): the same answer as for an existing account.
+    if (isAccountExistsRace(e)) return okMessage(res, 201, 'تم استلام التسجيل — راجع بريدك الإلكتروني لإكمال الخطوة التالية.', { email: String((req.body as Record<string, unknown>)?.email ?? '').trim().toLowerCase(), emailVerified: false });
     throw e;
   }
 }));

@@ -21,7 +21,7 @@ import { addAuditLog } from '../store/audit.js';
 import { kickNotificationWorker } from '../jobs/notificationWorker.js';
 import { createMembership } from '../../../core/store/memberships.js';
 import { getUserByEmail as getCoreUserByEmail } from '../../../core/store/users.js';
-import { createAccount, notifyExistingAccountOnRegister, sendVerification } from '../../../core/identity.js';
+import { createAccount, isAccountExistsRace, notifyExistingAccountOnRegister, sendVerification } from '../../../core/identity.js';
 import { savePersonProfile } from '../../../core/profile/store.js';
 import { MODULE_ID } from '../config.js';
 
@@ -51,7 +51,8 @@ publicAuthRouter.post('/register', registerLimiter, ah(async (req, res) => {
     return done();
   }
   const passwordHash = await hashPasswordAsync(b.password as string);
-  await tx(async () => {
+  try {
+   await tx(async () => {
     const account = await createAccount({ email: email!, nameAr: fullName!, phone: mobile!, passwordHash, ip: clientIp(req), source: MODULE_ID });
     await savePersonProfile(account.id, { 'person.fullNameAr': fullName!, 'person.phone': mobile! });
     const org = await createOrganization({ type: 'applicant', nameAr: fullName!, nameEn: fullName!, contactEmail: email! });
@@ -61,7 +62,11 @@ publicAuthRouter.post('/register', registerLimiter, ah(async (req, res) => {
     await sendVerification(account);
     await addAuditLog({ actorType: 'user', actorUserId: account.id, actorName: account.nameAr, actorRole: 'applicant', actorOrgId: org.id, ip: clientIp(req),
       action: 'auth.register', entityType: 'applicant', entityId: applicant.id, summaryAr: `تسجيل متقدم جديد: ${fullName}` });
-  });
+   });
+  } catch (e) {
+    if (isAccountExistsRace(e)) return done(); // the same registration committed first (double submit)
+    throw e;
+  }
   kickNotificationWorker();
   return done();
 }));
