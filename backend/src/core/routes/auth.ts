@@ -112,7 +112,9 @@ authRouter.post('/auth/verify-email', emailFlowLimiter, ah(async (req, res) => {
     if (r?.data) data[m.id] = r.data;
   }
   kickNotificationWorker();
-  return okMessage(res, 200, messages.length ? messages.join(' ') : 'تم تفعيل البريد الإلكتروني — يمكنك تسجيل الدخول الآن.', Object.keys(data).length ? data : undefined);
+  // Each module's result is under its id; the fields are also merged at the top level for the initiative screens.
+  const merged = Object.assign({}, ...Object.values(data)) as Record<string, unknown>;
+  return okMessage(res, 200, messages.length ? `تم تفعيل البريد الإلكتروني. ${messages.join(' ')}` : 'تم تفعيل البريد الإلكتروني — يمكنك تسجيل الدخول الآن.', Object.keys(data).length ? { ...merged, modules: data } : undefined);
 }));
 
 authRouter.post('/auth/resend-verification', emailFlowLimiter, ah(async (req, res) => {

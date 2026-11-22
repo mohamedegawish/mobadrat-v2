@@ -1,40 +1,28 @@
-/** صندوق الإشعارات داخل المنصة. كل دالة قراءة/تعديل مقيدة بـuserId صاحب الصف — لا يرى مستخدم إشعار غيره. */
-import { getDb, nowIso } from '../db/sqlite.js';
-import { newId } from '../http/helpers.js';
+/**
+ * In-app inbox — the platform's single inbox, scoped to this initiative. Every read/update is limited to the row owner.
+ * Links stored here are relative to this module's screens; the platform bell prefixes them with i/<module>/.
+ */
+import * as core from '../../../core/store/userNotifications.js';
+import { MODULE_ID } from '../config.js';
 
-export interface UserNotification {
-  id: string; userId: string; applicationId: string | null; templateKey: string; title: string; body: string; link: string;
-  dedupeKey: string; readAt: string | null; createdAt: string;
+export type UserNotification = core.UserNotification;
+
+export function insertUserNotification(n: { userId: string; applicationId?: string | null; templateKey: string; title: string; body: string; link: string; dedupeKey: string }): Promise<boolean> {
+  return core.insertUserNotification({ ...n, initiativeId: MODULE_ID });
 }
 
-/** يدخل الإشعار إن لم يوجد بنفس المفتاح. يرجع true عند الإدخال الفعلي. */
-export async function insertUserNotification(n: { userId: string; applicationId?: string | null; templateKey: string; title: string; body: string; link: string; dedupeKey: string }): Promise<boolean> {
-  const r = await getDb().prepare(`INSERT OR IGNORE INTO user_notifications (id, userId, applicationId, templateKey, title, body, link, dedupeKey, createdAt)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(newId('inb'), n.userId, n.applicationId ?? null, n.templateKey, n.title.slice(0, 300), n.body, n.link.slice(0, 200), n.dedupeKey, nowIso());
-  return Number(r.changes) > 0;
+export function listUserNotifications(userId: string, f: { unreadOnly?: boolean }, page: number, pageSize: number): Promise<{ rows: UserNotification[]; total: number }> {
+  return core.listUserNotifications(userId, { ...f, initiativeId: MODULE_ID }, page, pageSize);
 }
 
-export async function listUserNotifications(userId: string, f: { unreadOnly?: boolean }, page: number, pageSize: number): Promise<{ rows: UserNotification[]; total: number }> {
-  const where = `userId = ?${f.unreadOnly ? ' AND readAt IS NULL' : ''}`;
-  const db = getDb();
-  const total = (await db.prepare(`SELECT COUNT(*) AS n FROM user_notifications WHERE ${where}`).get(userId) as { n: number }).n;
-  const rows = await db.prepare(`SELECT * FROM user_notifications WHERE ${where} ORDER BY createdAt DESC, rowid DESC LIMIT ? OFFSET ?`)
-    .all(userId, pageSize, (page - 1) * pageSize) as unknown as UserNotification[];
-  return { rows, total };
+export function unreadCount(userId: string): Promise<number> {
+  return core.unreadCount(userId, MODULE_ID);
 }
 
-export async function unreadCount(userId: string): Promise<number> {
-  return (await getDb().prepare('SELECT COUNT(*) AS n FROM user_notifications WHERE userId = ? AND readAt IS NULL').get(userId) as { n: number }).n;
+export function markRead(userId: string, id: string): Promise<'marked' | 'already' | 'not_found'> {
+  return core.markRead(userId, id);
 }
 
-/** true = وُسم الآن مقروءًا؛ false = غير موجود لهذا المستخدم (أو مقروء من قبل). */
-export async function markRead(userId: string, id: string): Promise<'marked' | 'already' | 'not_found'> {
-  const db = getDb();
-  const r = await db.prepare('UPDATE user_notifications SET readAt = ? WHERE id = ? AND userId = ? AND readAt IS NULL').run(nowIso(), id, userId);
-  if (Number(r.changes) > 0) return 'marked';
-  return await db.prepare('SELECT 1 FROM user_notifications WHERE id = ? AND userId = ?').get(id, userId) ? 'already' : 'not_found';
-}
-
-export async function markAllRead(userId: string): Promise<number> {
-  return Number((await getDb().prepare('UPDATE user_notifications SET readAt = ? WHERE userId = ? AND readAt IS NULL').run(nowIso(), userId)).changes);
+export function markAllRead(userId: string): Promise<number> {
+  return core.markAllRead(userId, MODULE_ID);
 }

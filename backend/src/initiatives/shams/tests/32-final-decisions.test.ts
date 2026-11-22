@@ -48,7 +48,7 @@ test('G-03a «تم التعاقد» requires date, amount and the evidence docum
   const doc = app.documents.find((d: any) => d.kind === 'contractFile');
   assert.ok(doc && doc.submitted, 'evidence kept and marked submitted with the outcome');
   assert.equal(doc.attempt, app.attempt, 'evidence belongs to the attempt that recorded the outcome');
-  assert.equal((await q("SELECT payload FROM application_transitions WHERE applicationId = ? AND action = 'record_contract'", id)).length, 1);
+  assert.equal((await q("SELECT payload FROM shams_application_transitions WHERE applicationId = ? AND action = 'record_contract'", id)).length, 1);
 });
 
 test('G-03b the evidence must be a real PDF within the size limit; the upload is only possible at the outcome step, after the bank choice', async () => {

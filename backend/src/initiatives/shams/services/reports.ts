@@ -20,7 +20,7 @@ export type StageLimit = ApplicationState[] | null;
 export async function buildSummary(scope: Scope, stageLimit: StageLimit = null) {
   const db = getDb();
   const draftFilter = scope.includeDrafts ? '' : " AND a.state <> 'DRAFT'";
-  const base = `FROM applications a JOIN factories f ON f.id = a.factoryId WHERE ${scope.sql}${draftFilter}`;
+  const base = `FROM shams_applications a JOIN shams_factories f ON f.id = a.factoryId WHERE ${scope.sql}${draftFilter}`;
   const byStateRows = await db.prepare(`SELECT a.state AS state, COUNT(*) AS n ${base} GROUP BY a.state`).all(...scope.params) as Array<{ state: ApplicationState; n: number }>;
   const byState: Record<string, number> = {};
   let passedOn = 0;
@@ -39,7 +39,7 @@ export async function buildSummary(scope: Scope, stageLimit: StageLimit = null) 
   const avgRows = await db.prepare(`WITH t AS (
       SELECT tr.applicationId, tr.toState AS state, tr.createdAt AS enteredAt,
         LEAD(tr.createdAt) OVER (PARTITION BY tr.applicationId ORDER BY tr.createdAt, tr.rowid) AS leftAt
-      FROM application_transitions tr
+      FROM shams_application_transitions tr
       WHERE tr.fromState <> tr.toState AND tr.applicationId IN (SELECT a.id ${base})
     )
     SELECT state, AVG(${sqlDaysBetween('enteredAt', 'leftAt')}) AS avgDays, COUNT(*) AS n FROM t WHERE leftAt IS NOT NULL GROUP BY state`)
@@ -50,17 +50,17 @@ export async function buildSummary(scope: Scope, stageLimit: StageLimit = null) 
     avgDaysPerState[r.state] = { avgDays: Math.round(r.avgDays * 100) / 100, samples: r.n };
   }
 
-  const returnsRows = await db.prepare(`SELECT tr.fromState AS state, COUNT(*) AS n FROM application_transitions tr
+  const returnsRows = await db.prepare(`SELECT tr.fromState AS state, COUNT(*) AS n FROM shams_application_transitions tr
       WHERE tr.applicationId IN (SELECT a.id ${base}) AND (${RETURN_ACTIONS.map(() => '(tr.fromState = ? AND tr.action = ?)').join(' OR ')})
       GROUP BY tr.fromState`)
     .all(...scope.params, ...RETURN_ACTIONS.flatMap((r) => [r.from, r.action])) as Array<{ state: ApplicationState; n: number }>;
   const returnsByStage: Record<string, number> = {};
   for (const r of returnsRows) if (!stageLimit || stageLimit.includes(r.state)) returnsByStage[r.state] = r.n;
 
-  const contracts = stageLimit ? null : await db.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(r.contractAmount), 0) AS amount FROM bank_referrals r
+  const contracts = stageLimit ? null : await db.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(r.contractAmount), 0) AS amount FROM shams_bank_referrals r
       WHERE r.contractStatus = 'contracted' AND r.applicationId IN (SELECT a.id ${base})`).get(...scope.params) as { n: number; amount: number } | null;
   // التعاقد عن طريق شركة توزيع الكهرباء (قبول PMU لموافقتها) — يُحتسب تعاقدًا، بلا قيمة مالية مسجلة.
-  const distributionContracts = stageLimit ? null : await db.prepare(`SELECT COUNT(*) AS n FROM distribution_contracts d
+  const distributionContracts = stageLimit ? null : await db.prepare(`SELECT COUNT(*) AS n FROM shams_distribution_contracts d
       WHERE d.reviewStatus = 'approved' AND d.applicationId IN (SELECT a.id ${base})`).get(...scope.params) as { n: number } | null;
 
   const byGovernorate = await db.prepare(`SELECT a.governorate AS governorate, COUNT(*) AS n ${base} AND a.governorate <> '' GROUP BY a.governorate ORDER BY n DESC`)
@@ -87,7 +87,7 @@ export async function buildSummary(scope: Scope, stageLimit: StageLimit = null) 
 }
 
 async function contractsAboveAlert(base: string, params: SqlParam[]): Promise<number> {
-  return (await getDb().prepare(`SELECT COUNT(*) AS n FROM bank_referrals r WHERE r.contractStatus = 'contracted' AND r.contractAmount > ? AND r.applicationId IN (SELECT a.id ${base})`)
+  return (await getDb().prepare(`SELECT COUNT(*) AS n FROM shams_bank_referrals r WHERE r.contractStatus = 'contracted' AND r.contractAmount > ? AND r.applicationId IN (SELECT a.id ${base})`)
     .get(shamsPolicy.contractAmountAlertEGP, ...params) as { n: number }).n;
 }
 

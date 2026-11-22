@@ -59,7 +59,7 @@ export function cleanProviderInput(body: unknown, creating: boolean): ProviderIn
  * بيانات الاتصال الاختيارية لا تُعرض للمصانع (قرار الإدارة: الدليل = اسم + تفاصيل + شعار).
  */
 export function publicProvider(p: ServiceProvider, full: boolean) {
-  const logoUrl = p.logoStoredName ? `/api/v1/service-providers/${p.id}/logo?v=${encodeURIComponent(p.logoSha256?.slice(0, 12) ?? '')}` : null;
+  const logoUrl = p.logoStoredName ? `/api/v1/i/shams/service-providers/${p.id}/logo?v=${encodeURIComponent(p.logoSha256?.slice(0, 12) ?? '')}` : null;
   const base = { id: p.id, nameAr: p.nameAr, nameEn: p.nameEn, description: p.description, website: p.website, hasLogo: Boolean(p.logoStoredName), logoUrl, status: p.status };
   if (!full) return base;
   return {

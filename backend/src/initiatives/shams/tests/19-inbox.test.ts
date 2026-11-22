@@ -104,7 +104,7 @@ test('pagination, auth and no sensitive content: verification/reset/setup links 
 
 test('no duplicates: re-dispatching with the same key adds no inbox row, and the inbox works with email not configured', async () => {
   await closeOpen();
-  const { dispatch } = await import('../src/notifications/notify.js');
+  const { dispatch } = await import('../notifications/notify.js');
   const userId = c.factory.user.id as string;
   const rec = [{ userId, email: 'factory@shams.local' }];
   const args = [{ appId: 'app-x', number: 'SHAMS-2026-99999', companyName: 'م' }, rec, { dedupePrefix: 'dup-test-1', channels: ['email' as const] }] as const;
@@ -147,7 +147,7 @@ test('new events: provider selection, offer receipt, electricity receipt and acc
   // إعادة رفع العرض بعد تصحيح تُنتج إيصالًا جديدًا (مفتاح الانتقال مختلف)
   const mails = after.filter((m) => m.templateKey === 'app.offer_received').length;
   assert.equal(mails, 1, 'one receipt for the single offer submission');
-  const { renderTemplate } = await import('../src/notifications/templates.js');
+  const { renderTemplate } = await import('../notifications/templates.js');
   for (const key of ['app.provider_selected', 'app.offer_received', 'app.electricity_received', 'app.electricity_accepted', 'app.bank_selected'] as const) {
     const r = renderTemplate(key, { appId: 'app-1', number: 'SHAMS-2026-00001', companyName: 'مصنع', providerNameAr: 'مقدم', bankNameAr: 'بنك' });
     assert.ok(r.subject.includes('SHAMS-2026-00001') || key === 'app.provider_selected', key);

@@ -11,11 +11,11 @@ before(async () => { srv = await startServer(); c = await clients(srv.base); });
 after(async () => { await srv.close(); await env.cleanup(); });
 
 test('likePattern escapes %, _ and backslash so they match literally', async () => {
-  const { likePattern } = await import('../src/http/helpers.js');
+  const { likePattern } = await import('../http/helpers.js');
   assert.equal(likePattern('a%b_c'), '%a\\%b\\_c%');
   assert.equal(likePattern('x\\y'), '%x\\\\y%');
   assert.equal(likePattern('plain'), '%plain%');
-  const { getDb } = await import('../src/db/sqlite.js');
+  const { getDb } = await import('../db/sqlite.js');
   const db = getDb();
   if (onMysql) {
     // MySQL: a TEMPORARY table is per connection (the pool would not see it) — a plain table in this file's test database;

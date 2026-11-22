@@ -12,7 +12,7 @@ export interface AppRow {
   contractPath: ContractPath | null;
 }
 
-const SELECT = 'SELECT a.*, f.organizationId AS factoryOrgId FROM applications a JOIN factories f ON f.id = a.factoryId';
+const SELECT = 'SELECT a.*, f.organizationId AS factoryOrgId FROM shams_applications a JOIN shams_factories f ON f.id = a.factoryId';
 
 function mapApp(r: Record<string, unknown>): AppRow {
   return {
@@ -49,7 +49,7 @@ export async function findOpenSubmittedByRegistry(registryNumber: string, except
 export async function createDraftApplication(factoryId: string, userId: string, companyName: string): Promise<AppRow> {
   const id = newId('app');
   const now = nowIso();
-  await getDb().prepare(`INSERT INTO applications (id, factoryId, state, version, attempt, companyName, createdBy, stateEnteredAt, createdAt, updatedAt)
+  await getDb().prepare(`INSERT INTO shams_applications (id, factoryId, state, version, attempt, companyName, createdBy, stateEnteredAt, createdAt, updatedAt)
     VALUES (?, ?, 'DRAFT', 1, 0, ?, ?, ?, ?, ?)`).run(id, factoryId, companyName, userId, now, now, now);
   return (await getApplication(id))!;
 }
@@ -85,7 +85,7 @@ export async function listApplications(f: ListFilter, page: number, pageSize: nu
   }
   const w = `WHERE ${where.join(' AND ')}`;
   const db = getDb();
-  const total = (await db.prepare(`SELECT COUNT(*) AS n FROM applications a JOIN factories f ON f.id = a.factoryId ${w}`).get(...params) as { n: number }).n;
+  const total = (await db.prepare(`SELECT COUNT(*) AS n FROM shams_applications a JOIN shams_factories f ON f.id = a.factoryId ${w}`).get(...params) as { n: number }).n;
   const limit = all ? '' : ` LIMIT ${Number(pageSize)} OFFSET ${Number((page - 1) * pageSize)}`;
   const rows = (await db.prepare(`${SELECT} ${w} ORDER BY a.stateEnteredAt ${f.oldestFirst ? 'ASC' : 'DESC'}, a.id${limit}`).all(...params) as Array<Record<string, unknown>>).map(mapApp);
   return { rows, total };
@@ -96,8 +96,8 @@ export async function listApplications(f: ListFilter, page: number, pageSize: nu
 /** آخر نسخة لقسم بحد أقصى للمحاولة (المراجع يرى ≤ attempt، والمصنع يرى الأحدث بما فيها غير المُرسل). */
 export async function getSection(appId: string, section: DataSection, maxAttempt?: number): Promise<Record<string, unknown> | undefined> {
   const r = (maxAttempt === undefined
-    ? await getDb().prepare('SELECT data FROM application_data WHERE applicationId = ? AND section = ? ORDER BY attempt DESC LIMIT 1').get(appId, section)
-    : await getDb().prepare('SELECT data FROM application_data WHERE applicationId = ? AND section = ? AND attempt <= ? ORDER BY attempt DESC LIMIT 1').get(appId, section, maxAttempt)
+    ? await getDb().prepare('SELECT data FROM shams_application_data WHERE applicationId = ? AND section = ? ORDER BY attempt DESC LIMIT 1').get(appId, section)
+    : await getDb().prepare('SELECT data FROM shams_application_data WHERE applicationId = ? AND section = ? AND attempt <= ? ORDER BY attempt DESC LIMIT 1').get(appId, section, maxAttempt)
   ) as { data: string } | undefined;
   return r ? parseJson<Record<string, unknown>>(r.data, {}) : undefined;
 }
@@ -105,14 +105,14 @@ export async function getSection(appId: string, section: DataSection, maxAttempt
 /** يكتب نسخة المحاولة القادمة (copy-on-write) — لا يمس النسخ المُرسلة السابقة. */
 export async function writeSection(appId: string, section: DataSection, attempt: number, data: Record<string, unknown>, userId: string): Promise<void> {
   const now = nowIso();
-  await getDb().prepare(`INSERT INTO application_data (id, applicationId, section, attempt, data, updatedBy, createdAt, updatedAt)
+  await getDb().prepare(`INSERT INTO shams_application_data (id, applicationId, section, attempt, data, updatedBy, createdAt, updatedAt)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(applicationId, section, attempt) DO UPDATE SET data = excluded.data, updatedBy = excluded.updatedBy, updatedAt = excluded.updatedAt`)
     .run(newId('dat'), appId, section, attempt, JSON.stringify(data), userId, now, now);
 }
 
 export async function sectionHistory(appId: string, section: DataSection): Promise<Array<{ attempt: number; data: Record<string, unknown>; updatedAt: string }>> {
-  return (await getDb().prepare('SELECT attempt, data, updatedAt FROM application_data WHERE applicationId = ? AND section = ? ORDER BY attempt').all(appId, section) as Array<{ attempt: number; data: string; updatedAt: string }>)
+  return (await getDb().prepare('SELECT attempt, data, updatedAt FROM shams_application_data WHERE applicationId = ? AND section = ? ORDER BY attempt').all(appId, section) as Array<{ attempt: number; data: string; updatedAt: string }>)
     .map((r) => ({ attempt: r.attempt, data: parseJson(r.data, {}), updatedAt: r.updatedAt }));
 }
 
@@ -127,7 +127,7 @@ export interface TransitionRow {
 export async function insertTransition(t: Omit<TransitionRow, 'id' | 'createdAt'>): Promise<TransitionRow> {
   const id = newId('trn');
   const createdAt = nowIso();
-  await getDb().prepare(`INSERT INTO application_transitions (id, applicationId, fromState, toState, action, actorUserId, actorRole, actorOrgId,
+  await getDb().prepare(`INSERT INTO shams_application_transitions (id, applicationId, fromState, toState, action, actorUserId, actorRole, actorOrgId,
       actorName, reason, attempt, payload, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
     id, t.applicationId, t.fromState, t.toState, t.action, t.actorUserId, t.actorRole, t.actorOrgId, t.actorName, t.reason, t.attempt,
     JSON.stringify(t.payload ?? {}), createdAt,
@@ -136,14 +136,14 @@ export async function insertTransition(t: Omit<TransitionRow, 'id' | 'createdAt'
 }
 
 export async function listTransitions(appId: string): Promise<TransitionRow[]> {
-  return (await getDb().prepare('SELECT * FROM application_transitions WHERE applicationId = ? ORDER BY createdAt, rowid').all(appId) as Array<Record<string, unknown>>)
+  return (await getDb().prepare('SELECT * FROM shams_application_transitions WHERE applicationId = ? ORDER BY createdAt, rowid').all(appId) as Array<Record<string, unknown>>)
     .map((r) => ({ ...(r as unknown as TransitionRow), payload: parseJson(r.payload, {}) }));
 }
 
 export async function hasEnteredState(appId: string, state: ApplicationState): Promise<boolean> {
   // PR-P2: `+toState` keeps SQLite on idx_transitions_app (this application's few rows) instead of idx_transitions_to
   // (every application's rows in that state), which it chooses without ANALYZE statistics. Same result.
-  return Boolean(await getDb().prepare('SELECT 1 FROM application_transitions WHERE applicationId = ? AND +toState = ? AND fromState <> toState LIMIT 1').get(appId, state));
+  return Boolean(await getDb().prepare('SELECT 1 FROM shams_application_transitions WHERE applicationId = ? AND +toState = ? AND fromState <> toState LIMIT 1').get(appId, state));
 }
 
 export interface DeficiencyRow {
@@ -152,29 +152,29 @@ export interface DeficiencyRow {
 }
 
 export async function insertDeficiency(appId: string, transitionId: string, stage: ApplicationState, field: string, note: string): Promise<void> {
-  await getDb().prepare('INSERT INTO deficiencies (id, applicationId, transitionId, stage, field, note, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)')
+  await getDb().prepare('INSERT INTO shams_deficiencies (id, applicationId, transitionId, stage, field, note, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)')
     .run(newId('def'), appId, transitionId, stage, field, note, nowIso());
 }
 
 export async function openDeficiencies(appId: string): Promise<DeficiencyRow[]> {
-  return await getDb().prepare('SELECT * FROM deficiencies WHERE applicationId = ? AND resolvedAtTransitionId IS NULL ORDER BY createdAt').all(appId) as unknown as DeficiencyRow[];
+  return await getDb().prepare('SELECT * FROM shams_deficiencies WHERE applicationId = ? AND resolvedAtTransitionId IS NULL ORDER BY createdAt').all(appId) as unknown as DeficiencyRow[];
 }
 
 export async function listDeficiencies(appId: string): Promise<DeficiencyRow[]> {
-  return await getDb().prepare('SELECT * FROM deficiencies WHERE applicationId = ? ORDER BY createdAt').all(appId) as unknown as DeficiencyRow[];
+  return await getDb().prepare('SELECT * FROM shams_deficiencies WHERE applicationId = ? ORDER BY createdAt').all(appId) as unknown as DeficiencyRow[];
 }
 
 export async function resolveDeficiencies(appId: string, transitionId: string): Promise<void> {
-  await getDb().prepare('UPDATE deficiencies SET resolvedAtTransitionId = ? WHERE applicationId = ? AND resolvedAtTransitionId IS NULL').run(transitionId, appId);
+  await getDb().prepare('UPDATE shams_deficiencies SET resolvedAtTransitionId = ? WHERE applicationId = ? AND resolvedAtTransitionId IS NULL').run(transitionId, appId);
 }
 
 /** رقم الطلب SHAMS-<السنة>-<تسلسل> — داخل معاملة الإرسال. */
 export async function nextApplicationNumber(): Promise<string> {
   const year = new Date().getUTCFullYear();
   const db = getDb();
-  await db.prepare('INSERT INTO application_counters (year, lastSeq) VALUES (?, 0) ON CONFLICT(year) DO NOTHING').run(year);
-  await db.prepare('UPDATE application_counters SET lastSeq = lastSeq + 1 WHERE year = ?').run(year);
-  const { lastSeq } = await db.prepare('SELECT lastSeq FROM application_counters WHERE year = ?').get(year) as { lastSeq: number };
+  await db.prepare('INSERT INTO shams_application_counters (year, lastSeq) VALUES (?, 0) ON CONFLICT(year) DO NOTHING').run(year);
+  await db.prepare('UPDATE shams_application_counters SET lastSeq = lastSeq + 1 WHERE year = ?').run(year);
+  const { lastSeq } = await db.prepare('SELECT lastSeq FROM shams_application_counters WHERE year = ?').get(year) as { lastSeq: number };
   return `SHAMS-${year}-${String(lastSeq).padStart(5, '0')}`;
 }
 
@@ -192,7 +192,7 @@ export interface OwnershipCheck { status: 'not_available' | 'match' | 'mismatch'
 export async function insertRegistryVerification(v: Omit<RegistryVerificationRow, 'id' | 'checkedAt'>, checkedBy: string): Promise<RegistryVerificationRow> {
   const id = newId('reg');
   const checkedAt = nowIso();
-  await getDb().prepare(`INSERT INTO registry_verifications (id, applicationId, registryNumber, result, facilityData, adapter, errorCode, checkedBy, checkedAt, ownershipCheck)
+  await getDb().prepare(`INSERT INTO shams_registry_verifications (id, applicationId, registryNumber, result, facilityData, adapter, errorCode, checkedBy, checkedAt, ownershipCheck)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, v.applicationId, v.registryNumber, v.result, v.facilityData ? JSON.stringify(v.facilityData) : null,
     v.adapter, v.errorCode, checkedBy, checkedAt, v.ownershipCheck ? JSON.stringify(v.ownershipCheck) : null);
   return { ...v, id, checkedAt };
@@ -200,12 +200,12 @@ export async function insertRegistryVerification(v: Omit<RegistryVerificationRow
 
 export async function getRegistryVerification(id: string | null): Promise<RegistryVerificationRow | null> {
   if (!id) return null;
-  const r = await getDb().prepare('SELECT * FROM registry_verifications WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+  const r = await getDb().prepare('SELECT * FROM shams_registry_verifications WHERE id = ?').get(id) as Record<string, unknown> | undefined;
   return r ? { ...(r as unknown as RegistryVerificationRow), facilityData: parseJson(r.facilityData, null), ownershipCheck: parseJson(r.ownershipCheck, null) } : null;
 }
 
 export async function latestRegistryVerification(appId: string): Promise<RegistryVerificationRow | null> {
-  const r = await getDb().prepare('SELECT * FROM registry_verifications WHERE applicationId = ? ORDER BY checkedAt DESC, rowid DESC LIMIT 1').get(appId) as Record<string, unknown> | undefined;
+  const r = await getDb().prepare('SELECT * FROM shams_registry_verifications WHERE applicationId = ? ORDER BY checkedAt DESC, rowid DESC LIMIT 1').get(appId) as Record<string, unknown> | undefined;
   return r ? { ...(r as unknown as RegistryVerificationRow), facilityData: parseJson(r.facilityData, null), ownershipCheck: parseJson(r.ownershipCheck, null) } : null;
 }
 
@@ -219,7 +219,7 @@ export interface BankReferralRow {
 }
 
 export async function getBankReferral(appId: string): Promise<BankReferralRow | null> {
-  return (await getDb().prepare('SELECT * FROM bank_referrals WHERE applicationId = ?').get(appId) as unknown as BankReferralRow | undefined) ?? null;
+  return (await getDb().prepare('SELECT * FROM shams_bank_referrals WHERE applicationId = ?').get(appId) as unknown as BankReferralRow | undefined) ?? null;
 }
 
 /** PERF-3: getBankReferral for many applications in one round trip per 500 ids (one referral per application: ux_referrals_app). */
@@ -227,7 +227,7 @@ export async function getBankReferralsFor(appIds: string[]): Promise<Map<string,
   const out = new Map<string, BankReferralRow>();
   for (let i = 0; i < appIds.length; i += 500) {
     const chunk = appIds.slice(i, i + 500);
-    const rows = await getDb().prepare(`SELECT * FROM bank_referrals WHERE applicationId IN (${chunk.map(() => '?').join(',')})`).all(...chunk) as unknown as BankReferralRow[];
+    const rows = await getDb().prepare(`SELECT * FROM shams_bank_referrals WHERE applicationId IN (${chunk.map(() => '?').join(',')})`).all(...chunk) as unknown as BankReferralRow[];
     for (const r of rows) out.set(r.applicationId, r);
   }
   return out;
@@ -239,7 +239,7 @@ export async function listTransitionsFor(appIds: string[]): Promise<Map<string, 
   for (const id of appIds) out.set(id, []);
   for (let i = 0; i < appIds.length; i += 500) {
     const chunk = appIds.slice(i, i + 500);
-    const rows = await getDb().prepare(`SELECT * FROM application_transitions WHERE applicationId IN (${chunk.map(() => '?').join(',')}) ORDER BY applicationId, createdAt, rowid`)
+    const rows = await getDb().prepare(`SELECT * FROM shams_application_transitions WHERE applicationId IN (${chunk.map(() => '?').join(',')}) ORDER BY applicationId, createdAt, rowid`)
       .all(...chunk) as Array<Record<string, unknown>>;
     for (const r of rows) out.get(String(r.applicationId))!.push({ ...(r as unknown as TransitionRow), payload: parseJson(r.payload, {}) });
   }
@@ -259,7 +259,7 @@ function mapDistribution(r: Record<string, unknown>): DistributionContractRow {
 }
 
 export async function getDistributionContract(appId: string): Promise<DistributionContractRow | null> {
-  const r = await getDb().prepare('SELECT * FROM distribution_contracts WHERE applicationId = ?').get(appId) as Record<string, unknown> | undefined;
+  const r = await getDb().prepare('SELECT * FROM shams_distribution_contracts WHERE applicationId = ?').get(appId) as Record<string, unknown> | undefined;
   return r ? mapDistribution(r) : null;
 }
 
@@ -268,7 +268,7 @@ export async function getDistributionContractsFor(appIds: string[]): Promise<Map
   const out = new Map<string, DistributionContractRow>();
   for (let i = 0; i < appIds.length; i += 500) {
     const chunk = appIds.slice(i, i + 500);
-    const rows = await getDb().prepare(`SELECT * FROM distribution_contracts WHERE applicationId IN (${chunk.map(() => '?').join(',')})`).all(...chunk) as Array<Record<string, unknown>>;
+    const rows = await getDb().prepare(`SELECT * FROM shams_distribution_contracts WHERE applicationId IN (${chunk.map(() => '?').join(',')})`).all(...chunk) as Array<Record<string, unknown>>;
     for (const r of rows) out.set(String(r.applicationId), mapDistribution(r));
   }
   return out;
@@ -281,12 +281,12 @@ export interface ReferralHistoryRow {
 
 /** الإحالات السابقة (قبل إعادة الإحالة لبنك آخر). */
 export async function referralHistory(appId: string): Promise<ReferralHistoryRow[]> {
-  return await getDb().prepare('SELECT * FROM bank_referral_history WHERE applicationId = ? ORDER BY endedAt').all(appId) as unknown as ReferralHistoryRow[];
+  return await getDb().prepare('SELECT * FROM shams_bank_referral_history WHERE applicationId = ? ORDER BY endedAt').all(appId) as unknown as ReferralHistoryRow[];
 }
 
 /** عدد الطلبات المفتوحة التي اختارت هذا البنك ولم تسجل نتيجة التعاقد بعد (G-01/G-02: الاختيار بعد قبول الكهرباء فقط). */
 export async function openBankLoad(bankOrgId: string): Promise<{ referrals: number; pendingSelections: number }> {
-  const referrals = (await getDb().prepare("SELECT COUNT(*) AS n FROM applications WHERE bankOrgId = ? AND state = 'CONTRACT_OUTCOME'").get(bankOrgId) as { n: number }).n;
+  const referrals = (await getDb().prepare("SELECT COUNT(*) AS n FROM shams_applications WHERE bankOrgId = ? AND state = 'CONTRACT_OUTCOME'").get(bankOrgId) as { n: number }).n;
   return { referrals, pendingSelections: 0 };
 }
 

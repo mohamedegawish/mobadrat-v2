@@ -15,21 +15,31 @@ let c: Awaited<ReturnType<typeof clients>>;
 let seq = 0;
 
 before(async () => { srv = await startServer(); c = await clients(srv.base); });
-after(async () => { const { setRegistryClientForTests } = await import('../src/integrations/registry/index.js'); setRegistryClientForTests(null); await srv.close(); await env.cleanup(); });
+after(async () => { const { setRegistryClientForTests } = await import('../integrations/registry/index.js'); setRegistryClientForTests(null); await srv.close(); await env.cleanup(); });
 
 const PASSWORD = 'Factory123';
-async function flush() { const { processNotifications } = await import('../src/jobs/notificationWorker.js'); await processNotifications(200); }
+async function flush() { const { processNotifications } = await import('../jobs/notificationWorker.js'); await processNotifications(200); }
 async function status(email: string): Promise<string> {
-  return (await q<{ s: string }>('SELECT f.accountStatus AS s FROM factories f JOIN users u ON u.organizationId = f.organizationId WHERE u.email = ?', email))[0].s;
+  return (await q<{ s: string }>(`SELECT f.accountStatus AS s FROM shams_factories f JOIN initiative_memberships m ON m.organizationId = f.organizationId AND m.initiativeId = 'shams' JOIN users u ON u.id = m.userId WHERE u.email = ?`, email))[0].s;
 }
 async function appOf(email: string): Promise<string> {
-  return (await q<{ id: string }>('SELECT a.id FROM applications a JOIN factories f ON f.id = a.factoryId JOIN users u ON u.organizationId = f.organizationId WHERE u.email = ? ORDER BY a.createdAt DESC', email))[0].id;
+  return (await q<{ id: string }>(`SELECT a.id FROM shams_applications a JOIN shams_factories f ON f.id = a.factoryId JOIN initiative_memberships m ON m.organizationId = f.organizationId AND m.initiativeId = 'shams' JOIN users u ON u.id = m.userId WHERE u.email = ? ORDER BY a.createdAt DESC`, email))[0].id;
 }
 async function templatesFor(email: string): Promise<string[]> {
   await flush();
   return (await q<{ k: string }>("SELECT templateKey AS k FROM notification_outbox WHERE recipientAddress = ? AND channel = 'email' ORDER BY createdAt", email)).map((r) => r.k);
 }
-const login = (email: string) => new Client(srv.base).post('/auth/login', { email, password: PASSWORD });
+/**
+ * Platform: one account for every initiative — signing in always works for a verified account; the factory's Shams screens
+ * are what stays closed while the registration is under review or rejected. This returns the Shams answer after sign-in.
+ */
+const login = async (email: string) => {
+  const cl = new Client(srv.base);
+  const r = await cl.post('/auth/login', { email, password: PASSWORD });
+  if (r.status !== 200) return r;
+  cl.token = r.json.data.accessToken;
+  return cl.get('/factory/profile');
+};
 
 /** تسجيل كامل + تفعيل البريد → الطلب لدى IMC. */
 async function registeredAndVerified(tag: string): Promise<{ email: string; appId: string }> {
@@ -96,18 +106,19 @@ test('ACC-2 correction request: branded email, restricted sign-in (edit requeste
   const re = await act(f, appId, 'resubmit');
   assert.equal(re.status, 200, JSON.stringify(re.json));
   assert.equal(await status(email), 'under_review');
-  // The session ended, and signing in is refused until IMC decides.
+  // The Shams screens close again until IMC decides (the platform session itself stays valid for other initiatives).
   const after = await f.get(`/applications/${appId}`);
-  assert.equal(after.status, 401);
+  assert.equal(after.status, 403);
+  assert.equal(after.json.code, 'ACCOUNT_UNDER_REVIEW');
   assert.equal((await login(email)).json.code, 'ACCOUNT_UNDER_REVIEW');
-  assert.equal((await f.post('/auth/refresh', {})).status, 401, 'refresh token revoked too');
+  assert.equal((await f.post('/auth/refresh', {})).status, 200, 'the platform session is not revoked');
 });
 
 test('ACC-3 IMC acceptance approves the account: branded email with a sign-in button, full access, workflow continues', async () => {
   const { email, appId } = await registeredAndVerified('ok');
   assert.equal((await act(c.imc, appId, 'accept')).status, 200);
   assert.equal(await status(email), 'approved');
-  assert.ok((await q<{ a: string | null }>('SELECT f.approvedAt AS a FROM factories f JOIN users u ON u.organizationId = f.organizationId WHERE u.email = ?', email))[0].a);
+  assert.ok((await q<{ a: string | null }>(`SELECT f.approvedAt AS a FROM shams_factories f JOIN initiative_memberships m ON m.organizationId = f.organizationId AND m.initiativeId = 'shams' JOIN users u ON u.id = m.userId WHERE u.email = ?`, email))[0].a);
   const keys = await templatesFor(email);
   assert.ok(keys.includes('account.approved') && !keys.includes('app.imc_accepted'), keys.join(','));
   const mail = [...sentMails].reverse().find((m) => m.to.includes(email) && /تم قبول حساب مصنعكم/.test(m.subject));
@@ -142,7 +153,7 @@ test('ACC-4 IMC rejection rejects the account: branded email with the reason, an
 });
 
 test('ACC-5 if submitting at activation fails (registry down), the factory signs in restricted and submits again', async () => {
-  const { setRegistryClientForTests } = await import('../src/integrations/registry/index.js');
+  const { setRegistryClientForTests } = await import('../integrations/registry/index.js');
   const email = `acc.down.${++seq}@test.local`;
   assert.equal((await registerFactory(new Client(srv.base), registrationPayload(email, `IND-ACC-DOWN-${seq}`))).status, 201);
   setRegistryClientForTests({ name: 'mock', verify: async () => ({ result: 'unavailable', errorCode: 'TEST_DOWN' }) });
@@ -162,7 +173,7 @@ test('ACC-5 if submitting at activation fails (registry down), the factory signs
 });
 
 test('ACC-6 existing and seeded factories are approved and unaffected', async () => {
-  assert.deepEqual((await q<{ s: string }>("SELECT DISTINCT f.accountStatus AS s FROM factories f JOIN users u ON u.organizationId = f.organizationId WHERE u.email IN (?, ?)", DEV.factory, DEV.factory2)).map((r) => r.s), ['approved']);
+  assert.deepEqual((await q<{ s: string }>("SELECT DISTINCT f.accountStatus AS s FROM shams_factories f JOIN initiative_memberships m ON m.organizationId = f.organizationId AND m.initiativeId = 'shams' JOIN users u ON u.id = m.userId WHERE u.email IN (?, ?)", DEV.factory, DEV.factory2)).map((r) => r.s), ['approved']);
   assert.equal(c.factory.user.accountStatus, 'approved');
   assert.equal((await c.factory.get('/applications')).status, 200);
   const imcUser = (await c.imc.get('/auth/me')).json.data.user;

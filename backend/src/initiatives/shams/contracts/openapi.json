@@ -1,0 +1,2313 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Shams El-Senaa — Site API",
+    "version": "1.0.0",
+    "description": "API موقع «شمس الصناعة» (الواجهة). مصادقة: access token (Bearer، في الذاكرة) + refresh في كوكي httpOnly دوّار (shams_refresh، المسار /api/v1/auth). الرد الناجح { message, status: 'ok', data } والخطأ { code, messageAr, messageEn, details? }. الصلاحيات والرؤية تُفحص في السيرفر لكل طلب؛ x-roles توضح من يصل لكل endpoint. الأنواع التفصيلية في contracts/api.contracts.ts."
+  },
+  "servers": [
+    {
+      "url": "/api/v1/i/shams",
+      "description": "Shams El-Senaa module on the platform (sign-in, refresh and password flows are the platform's /api/v1/auth/*)"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "paths": {
+    "/meta": {
+      "get": {
+        "summary": "تعريف الفورم والحقول الإجبارية، المحافظات والمناطق، الحالات وجهاتها، جدول الانتقالات، البنوك النشطة",
+        "security": [],
+        "x-roles": [
+          "public"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/public/meta": {
+      "get": {
+        "summary": "تعريف الفورم والحقول الإجبارية، المحافظات والمناطق، الحالات وجهاتها، جدول الانتقالات، البنوك النشطة",
+        "security": [],
+        "x-roles": [
+          "public"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/public/register": {
+      "post": {
+        "summary": "تسجيل مصنع جديد (للمصانع فقط) — يرسل بريد تفعيل ولا يرجع أي توكن",
+        "security": [],
+        "x-roles": [
+          "public"
+        ],
+        "x-rate-limit": "20/15min/IP",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "companyName",
+                  "contactName",
+                  "email",
+                  "mobile",
+                  "password"
+                ],
+                "properties": {
+                  "companyName": {
+                    "type": "string"
+                  },
+                  "contactName": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "mobile": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 8
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "summary": "المستخدم الحالي",
+        "x-roles": [
+          "any"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/factory/profile": {
+      "get": {
+        "summary": "ملف المصنع وطلباته («لوحتي»)",
+        "x-roles": [
+          "factory_owner"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "put": {
+        "summary": "تعديل اسم المصنع",
+        "x-roles": [
+          "factory_owner"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/applications": {
+      "get": {
+        "summary": "قائمة الطلبات في نطاق المستخدم (المصنع: طلباته، IMC/ENCPC: ما وصل لمرحلتهم، البنك: المحال لبنكه، PMU/الأدمن: الكل)",
+        "x-roles": [
+          "any"
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "maximum": 100
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "governorate",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "bankOrgId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "overdue",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
+          },
+          {
+            "name": "mine",
+            "in": "query",
+            "description": "بانتظار إجراء مني",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "oldest = الأقدم انتظارًا أولًا (الافتراضي: الأحدث؛ وبانتظار قراري دائمًا الأقدم)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "oldest"
+              ]
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "post": {
+        "summary": "إنشاء مسودة طلب (طلب واحد غير نهائي لكل مصنع)",
+        "x-roles": [
+          "factory_owner"
+        ],
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/applications/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "get": {
+        "summary": "تفاصيل الطلب بالبيانات المسموح بها + allowedActions + currentTask",
+        "x-roles": [
+          "any (حسب الرؤية)"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/applications/{id}/data/{section}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        },
+        {
+          "name": "section",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "enum": [
+              "general",
+              "contact",
+              "company",
+              "engineering"
+            ]
+          }
+        }
+      ],
+      "put": {
+        "summary": "حفظ قسم (حفظ تلقائي للمسودة، أو تعديل حقول النواقص فقط في التصحيح)",
+        "x-roles": [
+          "factory_owner"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/applications/{id}/documents": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "post": {
+        "summary": "رفع مستند PDF (multipart: file + kind) — نسخة جديدة دون حذف السابقة",
+        "x-roles": [
+          "factory_owner"
+        ],
+        "x-rate-limit": "30/min/user",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file",
+                  "kind"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "commercialRegisterFile",
+                      "industrialRegisterFile",
+                      "taxCardFile",
+                      "electricityBill",
+                      "ownershipProofFile",
+                      "technicalOfferFile",
+                      "electricityApprovalFile",
+                      "contractFile",
+                      "distributionApprovalFile"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/applications/{id}/documents/{docId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        },
+        {
+          "name": "docId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "delete": {
+        "summary": "إزالة فاتورة كهرباء من المحاولة القادمة (تبقى في السجل)",
+        "x-roles": [
+          "factory_owner"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/applications/{id}/documents/{docId}/download": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        },
+        {
+          "name": "docId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "inline",
+          "in": "query",
+          "schema": {
+            "type": "string",
+            "enum": [
+              "1"
+            ]
+          }
+        }
+      ],
+      "get": {
+        "summary": "تنزيل مستند بعد فحص الرؤية",
+        "x-roles": [
+          "any (حسب الرؤية)"
+        ],
+        "responses": {
+          "200": {
+            "description": "PDF",
+            "content": {
+              "application/pdf": {}
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/applications/{id}/actions/{action}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        },
+        {
+          "name": "action",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "enum": [
+              "submit",
+              "resubmit",
+              "accept",
+              "request_correction",
+              "reject",
+              "compliant",
+              "non_compliant",
+              "select_provider",
+              "submit_offer",
+              "submit_electricity",
+              "select_bank",
+              "record_contract",
+              "record_no_contract",
+              "withdraw",
+              "select_distribution_path",
+              "submit_distribution_approval",
+              "reject_distribution"
+            ]
+          }
+        }
+      ],
+      "post": {
+        "summary": "تنفيذ إجراء من جدول الانتقالات (expectedVersion إجباري؛ 409 عند تعارض النسخة أو الحالة النهائية)",
+        "x-roles": [
+          "حسب جدول الانتقالات"
+        ],
+        "x-rate-limit": "60/min/user",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActionBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/service-providers": {
+      "get": {
+        "summary": "دليل مقدمي الخدمة: المصنع وباقي الأدوار يرون المتاحين للاختيار فقط (الاسم والتفاصيل والشعار والموقع)؛ ENCPC وPMU يرون كل الحالات بكل الحقول",
+        "x-roles": [
+          "any"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "post": {
+        "summary": "ENCPC تضيف مقدم خدمة (غير مفعّل وبانتظار الاعتماد): الاسم إجباري، والتفاصيل والموقع والاتصال اختيارية",
+        "x-roles": [
+          "encpc_reviewer"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "nameAr"
+                ],
+                "properties": {
+                  "nameAr": {
+                    "type": "string",
+                    "minLength": 2
+                  },
+                  "nameEn": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "website": {
+                    "type": "string"
+                  },
+                  "contactName": {
+                    "type": "string"
+                  },
+                  "contactPhone": {
+                    "type": "string"
+                  },
+                  "contactEmail": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "notes": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/service-providers/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "put": {
+        "summary": "ENCPC تعدّل بيانات مقدم الخدمة (الاسم، التفاصيل، الموقع، الاتصال)",
+        "x-roles": [
+          "encpc_reviewer"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [],
+                "properties": {
+                  "nameAr": {
+                    "type": "string",
+                    "minLength": 2
+                  },
+                  "nameEn": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "website": {
+                    "type": "string"
+                  },
+                  "contactName": {
+                    "type": "string"
+                  },
+                  "contactPhone": {
+                    "type": "string"
+                  },
+                  "contactEmail": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "notes": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/service-providers/{id}/activate": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "post": {
+        "summary": "ENCPC تفعّل ظهور مقدم الخدمة للمصانع. إن كان اعتماد PMU مطلوبًا (★) فلا يظهر قبله وتُنبَّه PMU",
+        "x-roles": [
+          "encpc_reviewer"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/service-providers/{id}/deactivate": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "post": {
+        "summary": "ENCPC تلغي تفعيل مقدم الخدمة: يختفي عن المصانع، والطلبات التي اختارته تتبع القاعدة F (قبل العرض: إعادة اختيار، أثناء مراجعته: عودة آلية لرفع العرض، بعد قبوله: تنبيه فقط)",
+        "x-roles": [
+          "encpc_reviewer"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/service-providers/{id}/approve": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "post": {
+        "summary": "اعتماد PMU لمقدم الخدمة ★ (مطلوب ما دامت shamsPolicy.providerApprovalRequired، وإلا 409)",
+        "x-roles": [
+          "pmu_reviewer"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/service-providers/{id}/suspend": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "post": {
+        "summary": "إيقاف PMU لمقدم الخدمة ★ — نفس أثر إلغاء التفعيل على الطلبات (القاعدة F)",
+        "x-roles": [
+          "pmu_reviewer"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/service-providers/{id}/logo": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "get": {
+        "summary": "شعار مقدم الخدمة (صورة): للمستخدمين المسجلين إن كان متاحًا للاختيار، وغير المتاح لـENCPC وPMU فقط (404 لغيرهم)",
+        "x-roles": [
+          "any"
+        ],
+        "responses": {
+          "200": {
+            "description": "image/png | image/jpeg | image/webp"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "summary": "ENCPC ترفع الشعار أو تستبدله (multipart: file). PNG/JPEG/WebP فقط بفحص الـmagic bytes وحد 1 ميجابايت؛ SVG مرفوض. الشعار القديم يُحذف",
+        "x-roles": [
+          "encpc_reviewer"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/notifications": {
+      "get": {
+        "summary": "صندوق إشعاراتي داخل المنصة (للمستخدم صاحب الجلسة فقط): pagination + unread=1 لغير المقروء + عدّاد unread. يُكتب مع كل بريد/SMS بنفس مفتاح عدم التكرار، والحساس (روابط التفعيل/الاستعادة) لا يُخزَّن",
+        "x-roles": [
+          "any"
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "maximum": 100
+            }
+          },
+          {
+            "name": "unread",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/notifications/unread-count": {
+      "get": {
+        "summary": "عدد الإشعارات غير المقروءة (للجرس)",
+        "x-roles": [
+          "any"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/notifications/read-all": {
+      "post": {
+        "summary": "وسم كل إشعاراتي مقروءة",
+        "x-roles": [
+          "any"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/notifications/{id}/read": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "post": {
+        "summary": "وسم إشعار واحد مقروءًا — إشعار مستخدم آخر 404",
+        "x-roles": [
+          "any"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/dashboard": {
+      "get": {
+        "summary": "لوحة الدور (IMC / ENCPC / PMU / البنك): بطاقات وأرقام حقيقية بنطاق رؤية الدور، «بانتظار قراري» بنفس منطق قائمة العمل، بنود الانتباه (PMU)، آخر النشاط ضمن ما يحق للدور رؤيته. المصنع والأدمن 403",
+        "x-roles": [
+          "imc_reviewer",
+          "encpc_reviewer",
+          "pmu_reviewer",
+          "bank_reviewer"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/reports/summary": {
+      "get": {
+        "summary": "ملخص في نطاق المستخدم (IMC/ENCPC: مرحلتهم فقط)",
+        "x-roles": [
+          "any"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/reports/applications": {
+      "get": {
+        "summary": "صفوف تقرير Excel (تُصدَّر في الواجهة) — يُدقَّق التصدير",
+        "x-roles": [
+          "any"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/admin/organizations": {
+      "get": {
+        "summary": "الجهات",
+        "x-roles": [
+          "system_admin"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "post": {
+        "summary": "إضافة بنك",
+        "x-roles": [
+          "system_admin"
+        ],
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/admin/organizations/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "put": {
+        "summary": "تعديل/إيقاف جهة. إيقاف بنك له طلبات مفتوحة يرجع 409 OPEN_REFERRALS بعددها ما لم يُرسل confirmOpenReferrals: true (ويُنبَّه PMU)",
+        "x-roles": [
+          "system_admin"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/admin/users": {
+      "get": {
+        "summary": "الحسابات",
+        "x-roles": [
+          "system_admin"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "post": {
+        "summary": "إنشاء حساب جهة بكلمة مؤقتة (تظهر مرة واحدة)",
+        "x-roles": [
+          "system_admin"
+        ],
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/admin/users/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "put": {
+        "summary": "تعديل/إيقاف حساب أو إعادة تعيين كلمة المرور. إيقاف آخر مستخدم نشط في بنك له طلبات مفتوحة يحتاج confirmOpenReferrals: true (409 OPEN_REFERRALS بدونه)",
+        "x-roles": [
+          "system_admin"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/admin/audit-logs": {
+      "get": {
+        "summary": "سجل التدقيق بصفحات وفلاتر",
+        "x-roles": [
+          "system_admin"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/admin/audit-logs/export": {
+      "post": {
+        "summary": "تسجيل عملية تصدير السجل (التصدير نفسه في الواجهة)",
+        "x-roles": [
+          "system_admin"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/admin/integration-keys": {
+      "get": {
+        "summary": "مفاتيح الربط (بلا القيم السرية)",
+        "x-roles": [
+          "system_admin"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "post": {
+        "summary": "إنشاء مفتاح (يظهر نصه مرة واحدة)",
+        "x-roles": [
+          "system_admin"
+        ],
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/admin/integration-keys/{id}/revoke": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "post": {
+        "summary": "إلغاء مفتاح",
+        "x-roles": [
+          "system_admin"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/admin/integration-keys/{id}/rotate": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "post": {
+        "summary": "تدوير مفتاح (جديد بنفس النطاقات، والقديم يُلغى)",
+        "x-roles": [
+          "system_admin"
+        ],
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/admin/notifications": {
+      "get": {
+        "summary": "سجل الإشعارات (metadata فقط، بلا محتوى)",
+        "x-roles": [
+          "system_admin"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/admin/notifications/{id}/retry": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "post": {
+        "summary": "إعادة محاولة إشعار فاشل/متخطى",
+        "x-roles": [
+          "system_admin"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/admin/webhooks": {
+      "get": {
+        "summary": "سجل الـwebhooks",
+        "x-roles": [
+          "system_admin"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/admin/readiness": {
+      "get": {
+        "summary": "جاهزية التشغيل (B2): جهات بلا مستخدمين نشطين، بنوك بلا مستخدمين، مقدمو خدمة معتمدون، طلبات عالقة، رسائل فاشلة، قناة الاستفسار — نفس فحص npm run check:readiness",
+        "x-roles": [
+          "system_admin"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/admin/account-requests": {
+      "get": {
+        "summary": "طلبات الحسابات (H2): الأدمن يرى كل الطلبات الأخيرة وحالتها",
+        "x-roles": [
+          "system_admin"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/admin/users/{id}/reset-password": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "post": {
+        "summary": "إعادة تعيين إدارية: رابط تعيين لمرة واحدة على بريد الحساب الحالي فقط وإنهاء كل الجلسات (لا كلمة مؤقتة). لا يُطبق على حسابات المصانع",
+        "x-roles": [
+          "system_admin"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/users/{id}/email-change-request": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "post": {
+        "summary": "طلب تغيير بريد حساب جهة قرار (H2): يُنفذ بعد موافقة مستخدم نشط من الجهة نفسها. حسابات المصانع عبر /recovery-requests",
+        "x-roles": [
+          "system_admin"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "newEmail",
+                  "reason"
+                ],
+                "properties": {
+                  "newEmail": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/account-requests": {
+      "get": {
+        "summary": "طلبات الحسابات المعلقة التي يملك المستخدم الموافقة عليها (أو كلها للأدمن للعرض). مقدم الطلب لا يرى طلبه للموافقة",
+        "x-roles": [
+          "imc_reviewer",
+          "encpc_reviewer",
+          "pmu_reviewer",
+          "bank_reviewer",
+          "system_admin"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/account-requests/{id}/approve": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "post": {
+        "summary": "موافقة على طلب حساب/تغيير بريد (H2): مستخدم نشط من الجهة نفسها (وPMU للبنوك)، وليس مقدم الطلب ولا الأدمن. ينشئ الحساب برابط تعيين كلمة المرور",
+        "x-roles": [
+          "imc_reviewer",
+          "encpc_reviewer",
+          "pmu_reviewer",
+          "bank_reviewer"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [],
+                "properties": {
+                  "note": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/account-requests/{id}/reject": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "post": {
+        "summary": "رفض طلب حساب/تغيير بريد (H2) — الملاحظة إجبارية",
+        "x-roles": [
+          "imc_reviewer",
+          "encpc_reviewer",
+          "pmu_reviewer",
+          "bank_reviewer"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "note"
+                ],
+                "properties": {
+                  "note": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/recovery-requests": {
+      "get": {
+        "summary": "طلبات استرداد بريد حسابات المصانع (H4): للأدمن (مقدم الطلب) وPMU (المراجِع)",
+        "x-roles": [
+          "system_admin",
+          "pmu_reviewer"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "post": {
+        "summary": "الأدمن يسجل طلب استرداد (multipart): userId + newEmail + reason + requestReference + file (PDF رسمي). لا يتغير شيء حتى موافقة PMU ثم مهلة الانتظار",
+        "x-roles": [
+          "system_admin"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "userId",
+                  "newEmail",
+                  "reason",
+                  "requestReference",
+                  "file"
+                ],
+                "properties": {
+                  "userId": {
+                    "type": "string"
+                  },
+                  "newEmail": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10
+                  },
+                  "requestReference": {
+                    "type": "string",
+                    "minLength": 3
+                  },
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/recovery-requests/{id}/document": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "get": {
+        "summary": "المستند الرسمي لطلب الاسترداد (PDF): مقدم الطلب (الأدمن) وPMU فقط",
+        "x-roles": [
+          "system_admin",
+          "pmu_reviewer"
+        ],
+        "responses": {
+          "200": {
+            "description": "PDF"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/recovery-requests/{id}/approve": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "post": {
+        "summary": "موافقة PMU (ليس مقدم الطلب) ← تبدأ مهلة الانتظار 48 ساعة ويُبلَّغ المالك برابط إلغاء جديد",
+        "x-roles": [
+          "pmu_reviewer"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [],
+                "properties": {
+                  "note": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/recovery-requests/{id}/reject": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "post": {
+        "summary": "رفض PMU لطلب الاسترداد — السبب إجباري",
+        "x-roles": [
+          "pmu_reviewer"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "reason"
+                ],
+                "properties": {
+                  "reason": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/recovery-requests/{id}/cancel": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "post": {
+        "summary": "إلغاء PMU لطلب استرداد مفتوح (قبل التنفيذ)",
+        "x-roles": [
+          "pmu_reviewer"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "reason"
+                ],
+                "properties": {
+                  "reason": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/public/recovery/cancel": {
+      "post": {
+        "summary": "إلغاء طلب استرداد الحساب من صاحبه برابط لمرة واحدة وصله على بريده وهاتفه (H4)",
+        "security": [],
+        "x-roles": [
+          "public"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "token"
+                ],
+                "properties": {
+                  "token": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/integration-keys/pending": {
+      "get": {
+        "summary": "مفاتيح الربط ذات نطاقات البيانات بانتظار الاعتماد (H1) — تعمل فقط عند تفعيل نطاقات البيانات",
+        "x-roles": [
+          "pmu_reviewer"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/integration-keys/{id}/approve": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "post": {
+        "summary": "اعتماد PMU لمفتاح ربط بنطاقات بيانات (H1)",
+        "x-roles": [
+          "pmu_reviewer"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [],
+                "properties": {
+                  "reason": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/integration-keys/{id}/reject": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "post": {
+        "summary": "رفض PMU لمفتاح ربط بنطاقات بيانات (H1) — السبب إجباري",
+        "x-roles": [
+          "pmu_reviewer"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "reason"
+                ],
+                "properties": {
+                  "reason": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/registry-disputes": {
+      "get": {
+        "summary": "نزاعات أرقام السجل مجمعة بالرقم: التعارضات، الحظر وكيف رُفع، الاعتراضات، والطلب الحاجز، والمصنع المخوَّل بعد القرار (القاعدة G) — تاريخ كامل",
+        "x-roles": [
+          "pmu_reviewer"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/registry-disputes/decide": {
+      "post": {
+        "summary": "PMU تحسم النزاع بتسمية المصنع المخوَّل بالرقم (من بين المصانع المعنية) بسبب ومرجع إجباريين؛ الاعتراضات المعلقة تُغلق بالقرار، ويُبلَّغ الأطراف وIMC. طلب مفتوح لمصنع آخر لا يُغلق آليًا",
+        "x-roles": [
+          "pmu_reviewer"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "registryNumber",
+                  "allowedFactoryId",
+                  "reason",
+                  "reference"
+                ],
+                "properties": {
+                  "registryNumber": {
+                    "type": "string"
+                  },
+                  "allowedFactoryId": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10
+                  },
+                  "reference": {
+                    "type": "string",
+                    "minLength": 3
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/registry-objections": {
+      "get": {
+        "summary": "الاعتراضات: المصنع يرى اعتراضاته فقط، وPMU ترى كلها",
+        "x-roles": [
+          "factory_owner",
+          "pmu_reviewer"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "post": {
+        "summary": "المصنع المتضرر (رقمه محظور أو محجوز، أو سبق تعارضه) يعترض بمستند PDF (multipart: registryNumber + note + file). اعتراض واحد معلق لكل رقم. يبقى الرقم موقوفًا حتى قرار PMU",
+        "x-roles": [
+          "factory_owner"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "registryNumber",
+                  "file"
+                ],
+                "properties": {
+                  "registryNumber": {
+                    "type": "string"
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/registry-objections/{id}/document": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "get": {
+        "summary": "مستند الاعتراض (PDF): PMU وصاحب الاعتراض فقط، وغيرهم 404",
+        "x-roles": [
+          "factory_owner",
+          "pmu_reviewer"
+        ],
+        "responses": {
+          "200": {
+            "description": "PDF"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/registry-objections/{id}/accept": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "post": {
+        "summary": "PMU تقبل الاعتراض: يُرفع الحظر ويُحجز الرقم للمنشأة المعترضة فقط (سبب + مرجع)",
+        "x-roles": [
+          "pmu_reviewer"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "reason",
+                  "reference"
+                ],
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10
+                  },
+                  "reference": {
+                    "type": "string",
+                    "minLength": 3
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/registry-objections/{id}/reject": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "post": {
+        "summary": "PMU ترفض الاعتراض (سبب + مرجع) — لا يتغير الحظر",
+        "x-roles": [
+          "pmu_reviewer"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "reason",
+                  "reference"
+                ],
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10
+                  },
+                  "reference": {
+                    "type": "string",
+                    "minLength": 3
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/registry-blocks": {
+      "get": {
+        "summary": "حظر أرقام السجل بعد رفض IMC بسبب registry_ownership_mismatch (I3). all=1 يشمل المرفوع",
+        "x-roles": [
+          "pmu_reviewer"
+        ],
+        "parameters": [
+          {
+            "name": "all",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/registry-blocks/{id}/release": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "post": {
+        "summary": "رفع الحظر عن الرقم لمصنع واحد محدد بإجراء موثق من PMU (سبب + مرجع + allowedFactoryId) — مدقق",
+        "x-roles": [
+          "pmu_reviewer"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "reason",
+                  "reference",
+                  "allowedFactoryId"
+                ],
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10
+                  },
+                  "reference": {
+                    "type": "string",
+                    "minLength": 3
+                  },
+                  "allowedFactoryId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/webhooks/{id}/retry": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "post": {
+        "summary": "إعادة محاولة webhook",
+        "x-roles": [
+          "system_admin"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "parameters": {
+      "id": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "responses": {
+      "Ok": {
+        "description": "{ message, status: 'ok', data }",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "required": [
+                "message",
+                "status"
+              ],
+              "properties": {
+                "message": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "const": "ok"
+                },
+                "data": {}
+              }
+            }
+          }
+        }
+      },
+      "Error": {
+        "description": "{ code, messageAr, messageEn, details? }",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiError"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ApiError": {
+        "type": "object",
+        "required": [
+          "code",
+          "messageAr",
+          "messageEn"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "messageAr": {
+            "type": "string"
+          },
+          "messageEn": {
+            "type": "string"
+          },
+          "details": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "issue": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ActionBody": {
+        "type": "object",
+        "required": [
+          "expectedVersion"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "expectedVersion": {
+            "type": "integer"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "reasonCode": {
+            "type": "string",
+            "enum": [
+              "registry_ownership_mismatch",
+              "other"
+            ],
+            "description": "reject (IMC) فقط. registry_ownership_mismatch يحظر الرقم على نفس المصنع حتى رفع موثق من PMU"
+          },
+          "deficiencies": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "field",
+                "note"
+              ],
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "note": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "providerId": {
+            "type": "string"
+          },
+          "distributionCompany": {
+            "type": "string"
+          },
+          "bankOrgId": {
+            "type": "string",
+            "description": "select_bank فقط (بعد قبول PMU لموافقة الكهرباء)"
+          },
+          "contractDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "contractAmount": {
+            "type": "number"
+          },
+          "contractNotes": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

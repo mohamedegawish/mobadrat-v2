@@ -22,7 +22,7 @@ after(async () => { await srv.close(); await env.cleanup(); });
 
 const ok = (r: { status: number; json: unknown }, what: string) => assert.equal(r.status, 200, `${what}: ${r.status} ${JSON.stringify(r.json)}`);
 async function flush() {
-  const { processNotifications } = await import('../src/jobs/notificationWorker.js');
+  const { processNotifications } = await import('../jobs/notificationWorker.js');
   for (let i = 0; i < 20; i++) { const r = await processNotifications(500); if (r.sent + r.skipped + r.retried + r.failed === 0) return; }
 }
 /** Delivered emails (after the worker ran) for an application and template, from the outbox rows actually marked sent. */
@@ -41,7 +41,7 @@ async function register(tag: string) {
   assert.equal(r.status, 201, JSON.stringify(r.json));
   const v = await new Client(srv.base).post('/auth/verify-email', { token: await activationTokenFor(email) });
   ok(v, 'verify email');
-  const appId = (await q<{ id: string }>('SELECT a.id FROM applications a JOIN factories f ON f.id = a.factoryId JOIN users u ON u.organizationId = f.organizationId WHERE u.email = ?', email))[0].id;
+  const appId = (await q<{ id: string }>(`SELECT a.id FROM shams_applications a JOIN shams_factories f ON f.id = a.factoryId JOIN initiative_memberships m ON m.organizationId = f.organizationId AND m.initiativeId = 'shams' JOIN users u ON u.id = m.userId WHERE u.email = ?`, email))[0].id;
   return { email, appId, company: `مصنع التحقق ${tag} ${seq}` };
 }
 
@@ -106,8 +106,8 @@ function onePerRecipient(rows: Array<{ recipientAddress: string }>, what: string
 // ── Bank path, every return loop, evidence re-upload, success ─────────────────────────────────────────────────────────
 test('V1 registration → every correction loop → bank chosen → evidence re-uploaded → contracted; history and emails complete', async () => {
   const { email, appId, company, f, number } = await toContractOutcome('bank', true);
-  const taskLink = `${APP_URL}/#task/${appId}`;
-  const appLink = `${APP_URL}/#application/${appId}`;
+  const taskLink = `${APP_URL}/#i/shams/task/${appId}`;
+  const appLink = `${APP_URL}/#i/shams/application/${appId}`;
   const accepted = (await delivered(appId, 'app.electricity_accepted')).filter((m) => m.recipientAddress === email);
   assert.equal(accepted.length, 1);
   assertEmail(accepted[0], { number, company, link: taskLink, includes: [/مسار التعاقد/, /من خلال بنك/, /شركة توزيع الكهرباء/, /مسار التعاقد \/ التعاقد البنكي/] }, 'electricity accepted');
@@ -151,15 +151,15 @@ test('V2 bank path, not contracted: the reason is recorded and emailed; red outc
   assert.equal(app.state, 'CLOSED_NOT_CONTRACTED');
   assert.equal(app.bankReferral.notContractedReason, 'رفض البنك التمويل');
   const m = (await delivered(appId, 'app.closed')).find((x) => x.recipientAddress === email);
-  assertEmail(m, { number, company, link: `${APP_URL}/#application/${appId}`, includes: [/لم يتم التعاقد/, /رفض البنك التمويل/] }, 'closed (no contract)');
+  assertEmail(m, { number, company, link: `${APP_URL}/#i/shams/application/${appId}`, includes: [/لم يتم التعاقد/, /رفض البنك التمويل/] }, 'closed (no contract)');
   assert.equal((await act(f, appId, 'select_distribution_path')).status, 409, 'no switching after closure');
 });
 
 // ── Distribution path: success, with re-upload, notes and every email checked ─────────────────────────────────────────
 test('V3 registration → distribution path → re-upload → submission with a note → PMU accepts with a note → contracted; emails verified', async () => {
   const { email, appId, company, f, number } = await toContractOutcome('dist', false);
-  const taskLink = `${APP_URL}/#task/${appId}`;
-  const appLink = `${APP_URL}/#application/${appId}`;
+  const taskLink = `${APP_URL}/#i/shams/task/${appId}`;
+  const appLink = `${APP_URL}/#i/shams/application/${appId}`;
   ok(await act(f, appId, 'select_distribution_path'), 'choose the distribution path');
   const chosen = (await delivered(appId, 'app.distribution_path_selected'));
   onePerRecipient(chosen, 'path selected');
@@ -223,7 +223,7 @@ test('V4 distribution path rejected: final decision, the rejection email carries
   const raced = await getApp(race.f, race.appId);
   assert.equal(raced.state, ra.status === 200 ? 'CLOSED_NOT_CONTRACTED' : 'CONTRACTED');
   assert.equal(raced.distributionContract.reviewStatus, ra.status === 200 ? 'rejected' : 'approved');
-  assert.equal((await q('SELECT 1 FROM application_transitions WHERE applicationId = ? AND fromState = ?', race.appId, 'DISTRIBUTION_REVIEW')).length, 1);
+  assert.equal((await q('SELECT 1 FROM shams_application_transitions WHERE applicationId = ? AND fromState = ?', race.appId, 'DISTRIBUTION_REVIEW')).length, 1);
   onePerRecipient(await delivered(race.appId, 'app.closed'), 'app.closed (race)');
   assert.equal((await race.f.post(`/applications/${race.appId}/actions/withdraw`, { expectedVersion: raced.version, reason: 'xxxx' })).status, 409, 'closed after the race');
 
@@ -239,7 +239,7 @@ test('V4 distribution path rejected: final decision, the rejection email carries
   const closed = await delivered(appId, 'app.closed');
   onePerRecipient(closed, 'app.closed');
   assert.deepEqual(closed.map((m) => m.recipientAddress).sort(), [email, PMU].sort());
-  assertEmail(closed.find((m) => m.recipientAddress === email), { number, company, link: `${APP_URL}/#application/${appId}`, includes: [/رُفضت موافقة شركة التوزيع/, /سبب الرفض/, /الموافقة صادرة لموقع مختلف/, /قرار نهائي/, /طلب جديد/] }, 'closed (distribution, rejected)');
+  assertEmail(closed.find((m) => m.recipientAddress === email), { number, company, link: `${APP_URL}/#i/shams/application/${appId}`, includes: [/رُفضت موافقة شركة التوزيع/, /سبب الرفض/, /الموافقة صادرة لموقع مختلف/, /قرار نهائي/, /طلب جديد/] }, 'closed (distribution, rejected)');
   // closed for good: no action, no upload, no edit, no document removal
   for (const [cl, action, body] of [[f, 'submit_distribution_approval', {}], [f, 'withdraw', { reason: 'xxxx' }], [f, 'select_bank', { bankOrgId: BANK_A }], [c.pmu, 'accept', {}], [c.pmu, 'reject_distribution', { reason: 'xxxx' }]] as const) {
     assert.equal((await act(cl, appId, action, body as Record<string, unknown>)).status, 409, `${action} on a closed application`);
@@ -277,5 +277,5 @@ test('V5 direct API manipulation is refused: unknown actions, injected fields, s
   assert.equal((await c.factory2.get(`/applications/${appId}`)).status, 404, 'other factory: the application does not exist for it');
   assert.equal((await c.factory2.post(`/applications/${appId}/actions/withdraw`, { expectedVersion: sv, reason: 'محاولة' })).status, 404);
   // the result row is never written by an unauthorised request
-  assert.equal((await q<{ s: string | null }>('SELECT reviewStatus AS s FROM distribution_contracts WHERE applicationId = ?', appId))[0].s, null);
+  assert.equal((await q<{ s: string | null }>('SELECT reviewStatus AS s FROM shams_distribution_contracts WHERE applicationId = ?', appId))[0].s, null);
 });

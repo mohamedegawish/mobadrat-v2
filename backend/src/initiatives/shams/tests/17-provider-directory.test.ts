@@ -26,7 +26,7 @@ async function closeOpen() {
   }
 }
 async function flushMail() {
-  const { processNotifications } = await import('../src/jobs/notificationWorker.js');
+  const { processNotifications } = await import('../jobs/notificationWorker.js');
   await processNotifications(200);
 }
 const factoryList = async (client: Client = c.factory) => (await client.get('/service-providers')).json.data.items as Array<Record<string, any>>;
@@ -105,7 +105,7 @@ test('visibility: a provider reaches factories only when ENCPC activated it AND 
 });
 
 test('gate off (providerApprovalRequired = false): ENCPC activation alone publishes; PMU approve/suspend are refused', async () => {
-  const { shamsPolicy } = await import('../src/config/shamsPolicy.js');
+  const { shamsPolicy } = await import('../config/shamsPolicy.js');
   shamsPolicy.providerApprovalRequired = false;
   try {
     const p = await newProvider();
@@ -133,28 +133,28 @@ test('logo: PNG/JPEG/WebP only (magic bytes), size-limited, replaced files are d
   assert.equal((await up(PDF, 'logo.png', 'image/png')).status, 400, 'a PDF renamed .png is refused');
   assert.equal((await up(Buffer.from('just text, not an image at all'), 'logo.png')).status, 400);
   assert.equal((await up(Buffer.concat([PNG, Buffer.alloc(1_100_000)]))).status, 413, 'over 1 MB');
-  assert.equal((await q<{ logoStoredName: string | null }>('SELECT logoStoredName FROM service_providers WHERE id = ?', p.id))[0].logoStoredName, null);
+  assert.equal((await q<{ logoStoredName: string | null }>('SELECT logoStoredName FROM shams_service_providers WHERE id = ?', p.id))[0].logoStoredName, null);
   // مقبول
   const ok = await up(PNG);
   assert.equal(ok.status, 200, JSON.stringify(ok.json));
   assert.equal(ok.json.data.hasLogo, true);
-  assert.match(ok.json.data.logoUrl, /^\/api\/v1\/service-providers\/.+\/logo\?v=/);
-  const { config } = await import('../src/config.js');
-  const row1 = (await q<{ logoStoredName: string; logoMime: string }>('SELECT logoStoredName, logoMime FROM service_providers WHERE id = ?', p.id))[0];
+  assert.match(ok.json.data.logoUrl, /^\/api\/v1\/i\/shams\/service-providers\/.+\/logo\?v=/);
+  const { config } = await import('../config.js');
+  const row1 = (await q<{ logoStoredName: string; logoMime: string }>('SELECT logoStoredName, logoMime FROM shams_service_providers WHERE id = ?', p.id))[0];
   assert.equal(row1.logoMime, 'image/png');
   assert.match(row1.logoStoredName, /^[0-9a-f-]{36}\.png$/, 'random name, not the uploaded file name');
-  const file1 = path.join(config.uploadDir, 'providers', row1.logoStoredName);
+  const file1 = path.join(config.uploadDir, 'shams', 'providers', row1.logoStoredName);
   assert.ok(fs.existsSync(file1));
   // استبدال: الجديد يُحفظ والقديم يُحذف
   assert.equal((await up(JPEG, 'new.jpg', 'image/jpeg')).status, 200);
-  const row2 = (await q<{ logoStoredName: string; logoMime: string }>('SELECT logoStoredName, logoMime FROM service_providers WHERE id = ?', p.id))[0];
+  const row2 = (await q<{ logoStoredName: string; logoMime: string }>('SELECT logoStoredName, logoMime FROM shams_service_providers WHERE id = ?', p.id))[0];
   assert.equal(row2.logoMime, 'image/jpeg');
   assert.notEqual(row2.logoStoredName, row1.logoStoredName);
   await new Promise((r) => setTimeout(r, 100));
   assert.equal(fs.existsSync(file1), false, 'the replaced logo file is deleted');
-  assert.ok(fs.existsSync(path.join(config.uploadDir, 'providers', row2.logoStoredName)));
+  assert.ok(fs.existsSync(path.join(config.uploadDir, 'shams', 'providers', row2.logoStoredName)));
   // التقديم: غير المنشور لـENCPC وPMU فقط (404 لغيرهم)، وبعد النشر لكل مسجَّل، ولا دخول بلا توكن
-  const get = (client: Client) => fetch(`${srv.base}/service-providers/${p.id}/logo`, { headers: client.token ? { Authorization: `Bearer ${client.token}` } : {} });
+  const get = (client: Client) => fetch(`${srv.base}/i/shams/service-providers/${p.id}/logo`, { headers: client.token ? { Authorization: `Bearer ${client.token}` } : {} });
   assert.equal((await get(c.encpc)).status, 200);
   assert.equal((await get(c.pmu)).status, 200);
   for (const client of [c.factory, c.factory2, c.imc, c.admin]) assert.equal((await get(client)).status, 404, 'hidden provider: no logo for others');
@@ -165,7 +165,7 @@ test('logo: PNG/JPEG/WebP only (magic bytes), size-limited, replaced files are d
   assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
   assert.match(res.headers.get('content-security-policy') ?? '', /sandbox/);
   assert.equal((await get(new Client(srv.base))).status, 401);
-  assert.equal((await fetch(`${srv.base}/service-providers/sp-none/logo`, { headers: { Authorization: `Bearer ${c.factory.token}` } })).status, 404);
+  assert.equal((await fetch(`${srv.base}/i/shams/service-providers/sp-none/logo`, { headers: { Authorization: `Bearer ${c.factory.token}` } })).status, 404);
   // ملف مؤقت لغير المخوَّل لا يبقى في التخزين
   const before = fs.readdirSync(path.join(config.uploadDir, 'tmp')).length;
   assert.equal((await c.factory.upload(`/service-providers/${p.id}/logo`, {}, PNG)).status, 403);
@@ -184,7 +184,7 @@ test('selection email: lists the available providers (name, details, website), e
   assert.equal((await act(c.encpc, appId, 'compliant')).status, 200);
   await flushMail();
   // الصندوق قد يحمل رسائل مطابقة قديمة من اختبارات سابقة: نختار رسالة هذا الطلب بالذات برابطه.
-  const mail = sentMails.find((m) => m.to.includes('factory@shams.local') && /اختر مقدم الخدمة/.test(m.subject) && m.html.includes(`#task/${appId}`));
+  const mail = sentMails.find((m) => m.to.includes('factory@shams.local') && /اختر مقدم الخدمة/.test(m.subject) && m.html.includes(`#i/shams/task/${appId}`));
   assert.ok(mail, 'factory email sent');
   assert.match(mail!.html, /مقدم بشعار للبريد/);
   assert.match(mail!.html, /خبرة في الطاقة الشمسية الصناعية/);
@@ -193,7 +193,7 @@ test('selection email: lists the available providers (name, details, website), e
   assert.match(mail!.html, new RegExp(`cid:provider-logo-${withLogo.id}`), 'logo referenced inline');
   assert.ok(mail!.attachments.some((a) => a.cid === `provider-logo-${withLogo.id}`), 'logo attached for inline display');
   assert.ok(!mail!.attachments.some((a) => a.cid === `provider-logo-${hidden.id}`));
-  assert.match(mail!.html, new RegExp(`#task/${appId}`), 'the CTA opens the selection page of this application');
+  assert.match(mail!.html, new RegExp(`#i/shams/task/${appId}`), 'the CTA opens the selection page of this application');
   assert.doesNotMatch(mail!.html, /#task\/[^"]*[?&]token|[a-f0-9]{64}/, 'no token or secret in the link');
   assert.match(mail!.text, /مقدم بشعار للبريد/, 'the plain-text part lists the providers as well');
   assert.doesNotMatch(mail!.html, /secret@provider|contactEmail/, 'no contact data in the email');
@@ -247,7 +247,7 @@ test('integration API cannot publish a provider: created inactive and pending, s
   assert.ok(!(await factoryList()).some((x) => x.id === id), 'not visible to factories');
   assert.equal((await call('PUT', `/service-providers/${id}`, { isActive: true })).status, 400);
   assert.equal((await call('PUT', `/service-providers/${id}`, { status: 'approved' })).status, 400);
-  const row = (await q<{ isActive: number; status: string }>('SELECT isActive, status FROM service_providers WHERE id = ?', id))[0];
+  const row = (await q<{ isActive: number; status: string }>('SELECT isActive, status FROM shams_service_providers WHERE id = ?', id))[0];
   assert.equal(row.isActive, 0);
   assert.equal(row.status, 'pending');
 });

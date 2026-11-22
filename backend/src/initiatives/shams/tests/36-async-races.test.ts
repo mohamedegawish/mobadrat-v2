@@ -16,12 +16,12 @@ after(async () => { await srv.close(); await env.cleanup(); });
 test('RACE-1 concurrent refreshes of one refresh token: exactly one succeeds, the reuse revokes the family', async () => {
   const c = new Client(srv.base);
   await c.login(DEV.factory);
-  const cookie = c.cookies.get('shams_refresh');
+  const cookie = c.cookies.get('mobadrat_refresh');
   assert.ok(cookie, 'refresh cookie issued at login');
   const userId = c.user.id as string;
 
   const N = 6;
-  const racers = Array.from({ length: N }, () => { const r = new Client(srv.base); r.cookies.set('shams_refresh', cookie!); return r; });
+  const racers = Array.from({ length: N }, () => { const r = new Client(srv.base); r.cookies.set('mobadrat_refresh', cookie!); return r; });
   const results = await Promise.all(racers.map((r) => r.post('/auth/refresh')));
   const ok = results.filter((r) => r.status === 200);
   assert.equal(ok.length, 1, `exactly one concurrent refresh may rotate the token (got ${results.map((r) => r.status).join(',')})`);
@@ -48,7 +48,7 @@ test('RACE-2 concurrent failed logins for one (email, IP) are all counted by the
 });
 
 test('RACE-3 one password-reset link used twice concurrently: only one request sets the password', async () => {
-  const { sha256 } = await import('../src/auth/jwt.js');
+  const { sha256 } = await import('../auth/jwt.js');
   const token = 'a1'.repeat(32);
   const [user] = await q<{ id: string }>('SELECT id FROM users WHERE email = ?', DEV.encpc);
   await q('UPDATE users SET passwordResetTokenHash = ?, passwordResetExpiresAt = ? WHERE id = ?', sha256(token), new Date(Date.now() + 3_600_000).toISOString(), user.id);
@@ -62,7 +62,7 @@ test('RACE-3 one password-reset link used twice concurrently: only one request s
 });
 
 test('SHUTDOWN-1 graceful stop waits for a running background job, bounded by its timeout', async () => {
-  const { trackJob, drainJobs, runningJobs } = await import('../src/jobs/inflight.js');
+  const { trackJob, drainJobs, runningJobs } = await import('../jobs/inflight.js');
   let finished = false;
   void trackJob(new Promise<void>((r) => setTimeout(() => { finished = true; r(); }, 150)));
   void trackJob(Promise.reject(new Error('a failed round must not break the drain'))).catch(() => undefined);

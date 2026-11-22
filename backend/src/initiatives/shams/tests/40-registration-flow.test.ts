@@ -88,11 +88,11 @@ test('RF-1 registration with every field of the form: data and files are stored 
     assert.equal(dl.headers.get('content-type'), 'application/pdf');
     assert.equal(dl.headers.get('cache-control'), 'private, no-store');
     assert.equal(sha(dl.raw!), sha(body), `bytes of ${docId}`);
-    const [row] = await q<{ storedName: string; sha256: string; uploadedBy: string }>('SELECT storedName, sha256, uploadedBy FROM documents WHERE id = ?', docId);
+    const [row] = await q<{ storedName: string; sha256: string; uploadedBy: string }>('SELECT storedName, sha256, uploadedBy FROM shams_documents WHERE id = ?', docId);
     assert.match(row.storedName, /^[0-9a-f-]{36}\.pdf$/);
     assert.equal(row.sha256, sha(body));
     assert.equal(row.uploadedBy, c.factory.user.id);
-    assert.ok(fs.existsSync(path.join(env.dir, 'uploads', 'documents', row.storedName)));
+    assert.ok(fs.existsSync(path.join(env.dir, 'uploads', 'shams', 'documents', row.storedName)));
     const direct = await fetch(`${srv.origin}/uploads/documents/${row.storedName}`);
     assert.notEqual(direct.headers.get('content-type'), 'application/pdf', 'stored files are never served directly');
   }
@@ -103,7 +103,7 @@ test('RF-1 registration with every field of the form: data and files are stored 
   assert.equal(app.state, 'IMC_REVIEW', 'submission goes to the existing IMC review stage');
   assert.ok(app.number, 'an application number is assigned');
   const [tr] = await q<{ fromState: string; toState: string; action: string; attempt: number }>(
-    "SELECT fromState, toState, action, attempt FROM application_transitions WHERE applicationId = ? AND action = 'submit'", id);
+    "SELECT fromState, toState, action, attempt FROM shams_application_transitions WHERE applicationId = ? AND action = 'submit'", id);
   assert.deepEqual({ ...tr }, { fromState: 'DRAFT', toState: 'IMC_REVIEW', action: 'submit', attempt: 1 });
   const audit = (await q<{ action: string }>('SELECT action FROM audit_logs WHERE applicationId = ? ORDER BY at', id)).map((x) => x.action);
   assert.ok(audit.includes('application.create') && audit.includes('document.upload'), audit.join(','));
@@ -134,9 +134,9 @@ test('RF-2 optional fields of the form (phone 2, fax, website, contact phone / f
 
 test('RF-3 unsupported and oversized files are refused with an Arabic message, leave no file behind and add no document', async () => {
   const id = await freshDraft();
-  const count = async () => (await q<{ n: number }>('SELECT COUNT(*) AS n FROM documents WHERE applicationId = ?', id))[0].n;
+  const count = async () => (await q<{ n: number }>('SELECT COUNT(*) AS n FROM shams_documents WHERE applicationId = ?', id))[0].n;
   const tmp = () => { try { return fs.readdirSync(path.join(env.dir, 'uploads', 'tmp')).length; } catch { return 0; } };
-  const stored = () => fs.readdirSync(path.join(env.dir, 'uploads', 'documents')).length;
+  const stored = () => fs.readdirSync(path.join(env.dir, 'uploads', 'shams', 'documents')).length;
   const storedBefore = stored();
   const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
   const cases: Array<[string, Buffer, string, string]> = [
@@ -310,9 +310,9 @@ test('RF-7 draft documents can be replaced and removed; a removed file blocks su
   assert.equal(rm.status, 200, JSON.stringify(rm.json));
   assert.equal((await current('taxCardFile')).length, 0);
   assert.equal((await c.factory.del(`/applications/${id}/documents/${tax.id}`)).status, 404, 'already removed');
-  const [row] = await q<{ status: string; storedName: string }>('SELECT status, storedName FROM documents WHERE id = ?', tax.id);
+  const [row] = await q<{ status: string; storedName: string }>('SELECT status, storedName FROM shams_documents WHERE id = ?', tax.id);
   assert.equal(row.status, 'removed', 'kept as a removed version, not deleted');
-  assert.ok(fs.existsSync(path.join(env.dir, 'uploads', 'documents', row.storedName)));
+  assert.ok(fs.existsSync(path.join(env.dir, 'uploads', 'shams', 'documents', row.storedName)));
   const [audit] = await q<{ n: number }>("SELECT COUNT(*) AS n FROM audit_logs WHERE action = 'document.remove' AND entityId = ?", tax.id);
   assert.equal(audit.n, 1);
   // Remove one of two bills.
@@ -366,7 +366,7 @@ test('RF-8 IMC correction loop keeps working: only requested documents can be re
   const taxVersions = imc.documents.filter((d: any) => d.kind === 'taxCardFile');
   assert.equal(taxVersions.length, 2, 'IMC sees the old submitted version and the new one');
   assert.equal(taxVersions.filter((d: any) => d.isCurrent).length, 1);
-  const states = (await q<{ toState: string }>('SELECT toState FROM application_transitions WHERE applicationId = ? ORDER BY createdAt', id)).map((x) => x.toState);
+  const states = (await q<{ toState: string }>('SELECT toState FROM shams_application_transitions WHERE applicationId = ? ORDER BY createdAt', id)).map((x) => x.toState);
   assert.deepEqual(states, ['IMC_REVIEW', 'IMC_CORRECTION', 'IMC_REVIEW']);
 });
 

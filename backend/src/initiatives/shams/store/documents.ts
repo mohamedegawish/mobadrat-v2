@@ -10,11 +10,11 @@ export interface DocumentRow {
 }
 
 export async function listDocuments(appId: string): Promise<DocumentRow[]> {
-  return await getDb().prepare('SELECT * FROM documents WHERE applicationId = ? ORDER BY kind, version').all(appId) as unknown as DocumentRow[];
+  return await getDb().prepare('SELECT * FROM shams_documents WHERE applicationId = ? ORDER BY kind, version').all(appId) as unknown as DocumentRow[];
 }
 
 export async function getDocument(appId: string, docId: string): Promise<DocumentRow | null> {
-  return (await getDb().prepare('SELECT * FROM documents WHERE id = ? AND applicationId = ?').get(docId, appId) as unknown as DocumentRow | undefined) ?? null;
+  return (await getDb().prepare('SELECT * FROM shams_documents WHERE id = ? AND applicationId = ?').get(docId, appId) as unknown as DocumentRow | undefined) ?? null;
 }
 
 /** المستند ساري المفعول كما في المحاولة N (المراجع يرى ≤ attempt المُرسل؛ المصنع يرى المحاولة القادمة). */
@@ -53,12 +53,12 @@ export interface NewDocument {
 export async function addDocumentVersion(d: NewDocument, multi: boolean): Promise<DocumentRow> {
   const db = getDb();
   if (!multi) {
-    await db.prepare(`UPDATE documents SET supersededAtAttempt = ?, status = 'superseded'
+    await db.prepare(`UPDATE shams_documents SET supersededAtAttempt = ?, status = 'superseded'
       WHERE applicationId = ? AND kind = ? AND supersededAtAttempt IS NULL`).run(d.attempt, d.applicationId, d.kind);
   }
-  const { v } = await db.prepare('SELECT COALESCE(MAX(version), 0) + 1 AS v FROM documents WHERE applicationId = ? AND kind = ?').get(d.applicationId, d.kind) as { v: number };
+  const { v } = await db.prepare('SELECT COALESCE(MAX(version), 0) + 1 AS v FROM shams_documents WHERE applicationId = ? AND kind = ?').get(d.applicationId, d.kind) as { v: number };
   const id = newId('doc');
-  await db.prepare(`INSERT INTO documents (id, applicationId, kind, version, attempt, status, uploadedInState, originalName, storedName, mimeType,
+  await db.prepare(`INSERT INTO shams_documents (id, applicationId, kind, version, attempt, status, uploadedInState, originalName, storedName, mimeType,
       sizeBytes, sha256, uploadedBy, createdAt) VALUES (?, ?, ?, ?, ?, 'current', ?, ?, ?, 'application/pdf', ?, ?, ?, ?)`).run(
     id, d.applicationId, d.kind, v, d.attempt, d.uploadedInState, d.originalName, d.storedName, d.sizeBytes, d.sha256, d.uploadedBy, nowIso(),
   );
@@ -67,7 +67,7 @@ export async function addDocumentVersion(d: NewDocument, multi: boolean): Promis
 
 /** إزالة نسخة (فواتير متعددة) من المحاولة القادمة — تبقى محفوظة في السجل. */
 export async function removeDocumentAt(doc: DocumentRow, attempt: number): Promise<void> {
-  await getDb().prepare("UPDATE documents SET supersededAtAttempt = ?, status = 'removed' WHERE id = ?").run(attempt, doc.id);
+  await getDb().prepare("UPDATE shams_documents SET supersededAtAttempt = ?, status = 'removed' WHERE id = ?").run(attempt, doc.id);
 }
 
 /**
@@ -76,28 +76,28 @@ export async function removeDocumentAt(doc: DocumentRow, attempt: number): Promi
  */
 export async function discardUnsentVersions(appId: string, kind: DocumentKind, attempt: number): Promise<string[]> {
   const db = getDb();
-  const ids = (await db.prepare('SELECT id FROM documents WHERE applicationId = ? AND kind = ? AND attempt = ? AND supersededAtAttempt IS NULL').all(appId, kind, attempt) as Array<{ id: string }>).map((r) => r.id);
+  const ids = (await db.prepare('SELECT id FROM shams_documents WHERE applicationId = ? AND kind = ? AND attempt = ? AND supersededAtAttempt IS NULL').all(appId, kind, attempt) as Array<{ id: string }>).map((r) => r.id);
   if (ids.length) {
-    await db.prepare("UPDATE documents SET supersededAtAttempt = attempt, status = 'superseded' WHERE applicationId = ? AND kind = ? AND attempt = ? AND supersededAtAttempt IS NULL").run(appId, kind, attempt);
+    await db.prepare("UPDATE shams_documents SET supersededAtAttempt = attempt, status = 'superseded' WHERE applicationId = ? AND kind = ? AND attempt = ? AND supersededAtAttempt IS NULL").run(appId, kind, attempt);
   }
   return ids;
 }
 
 /** هل رُفعت نسخة جديدة من النوع في المحاولة القادمة (شرط إرسال العرض/الموافقة)؟ */
 export async function hasNewVersionAt(appId: string, kind: DocumentKind, attempt: number): Promise<boolean> {
-  return Boolean(await getDb().prepare('SELECT 1 FROM documents WHERE applicationId = ? AND kind = ? AND attempt = ? AND supersededAtAttempt IS NULL LIMIT 1').get(appId, kind, attempt));
+  return Boolean(await getDb().prepare('SELECT 1 FROM shams_documents WHERE applicationId = ? AND kind = ? AND attempt = ? AND supersededAtAttempt IS NULL LIMIT 1').get(appId, kind, attempt));
 }
 
 /** F-05: كل النسخ التي رُفعت لهذا النوع في هذه المحاولة، بما فيها المستبدَلة والمُزالة (كلها تبقى على القرص). */
 export async function countVersionsAtAttempt(appId: string, kind: DocumentKind, attempt: number): Promise<number> {
-  return (await getDb().prepare('SELECT COUNT(*) AS n FROM documents WHERE applicationId = ? AND kind = ? AND attempt = ?').get(appId, kind, attempt) as { n: number }).n;
+  return (await getDb().prepare('SELECT COUNT(*) AS n FROM shams_documents WHERE applicationId = ? AND kind = ? AND attempt = ?').get(appId, kind, attempt) as { n: number }).n;
 }
 
 /** F-05: مجموع أحجام كل الملفات المحفوظة للطلب (كل النسخ، لا النسخ الحالية فقط). */
 export async function retainedBytes(appId: string): Promise<number> {
-  return Number((await getDb().prepare('SELECT COALESCE(SUM(sizeBytes), 0) AS n FROM documents WHERE applicationId = ?').get(appId) as { n: number }).n);
+  return Number((await getDb().prepare('SELECT COALESCE(SUM(sizeBytes), 0) AS n FROM shams_documents WHERE applicationId = ?').get(appId) as { n: number }).n);
 }
 
 export async function countDocuments(): Promise<number> {
-  return (await getDb().prepare('SELECT COUNT(*) AS n FROM documents').get() as { n: number }).n;
+  return (await getDb().prepare('SELECT COUNT(*) AS n FROM shams_documents').get() as { n: number }).n;
 }

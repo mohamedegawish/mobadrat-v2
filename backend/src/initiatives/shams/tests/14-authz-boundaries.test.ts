@@ -100,9 +100,9 @@ test('BOLA (G-01/G-03): bank choice, contract evidence and outcome belong to the
   // two concurrent selections with the same version → exactly one
   const sel = await Promise.all([BANK_A, BANK_B].map((bankOrgId) => c.factory.post(`/applications/${id}/actions/select_bank`, { expectedVersion: v, bankOrgId })));
   assert.deepEqual(sel.map((r) => r.status).sort(), [200, 409]);
-  assert.equal((await q("SELECT 1 FROM application_transitions WHERE applicationId = ? AND action = 'select_bank'", id)).length, 1);
+  assert.equal((await q("SELECT 1 FROM shams_application_transitions WHERE applicationId = ? AND action = 'select_bank'", id)).length, 1);
   const winner = (await getApp(c.factory, id)).bank.id;
-  assert.equal((await q<any>('SELECT bankOrgId FROM bank_referrals WHERE applicationId = ?', id))[0].bankOrgId, winner, 'stored choice = the visible one');
+  assert.equal((await q<any>('SELECT bankOrgId FROM shams_bank_referrals WHERE applicationId = ?', id))[0].bankOrgId, winner, 'stored choice = the visible one');
 
   await uploadContractFile(c.factory, id, 'ev');
   v = (await getApp(c.factory, id)).version;
@@ -121,7 +121,7 @@ test('BOLA (G-01/G-03): bank choice, contract evidence and outcome belong to the
   assert.deepEqual(rs.map((r) => r.status).sort(), [200, 409]);
   const after = await getApp(c.factory, id);
   assert.ok(['CONTRACTED', 'CLOSED_NOT_CONTRACTED'].includes(after.state));
-  assert.equal((await q("SELECT 1 FROM application_transitions WHERE applicationId = ? AND toState IN ('CONTRACTED','CLOSED_NOT_CONTRACTED')", id)).length, 1, 'one final result');
+  assert.equal((await q("SELECT 1 FROM shams_application_transitions WHERE applicationId = ? AND toState IN ('CONTRACTED','CLOSED_NOT_CONTRACTED')", id)).length, 1, 'one final result');
   // closed: the result and the evidence cannot be changed
   assert.equal((await act(c.factory, id, after.state === 'CONTRACTED' ? 'record_no_contract' : 'record_contract', { reason: 'تغيير', contractDate: '2026-10-06', contractAmount: 5 })).status, 409);
   assert.ok((await c.factory.upload(`/applications/${id}/documents`, { kind: 'contractFile' }, pdfVariant('late'), 'late.pdf')).status >= 400, 'no new evidence after closure');
@@ -167,7 +167,7 @@ test('provider selection: only the owner, only an approved provider, and two con
   const results = await Promise.all([c.factory.post(`/applications/${id}/actions/select_provider`, body), c.factory.post(`/applications/${id}/actions/select_provider`, body)]);
   const codes = results.map((r) => r.status).sort();
   assert.deepEqual(codes, [200, 409], JSON.stringify(results.map((r) => r.json?.code)));
-  const rows = await q("SELECT 1 FROM application_transitions WHERE applicationId = ? AND action = 'select_provider'", id);
+  const rows = await q("SELECT 1 FROM shams_application_transitions WHERE applicationId = ? AND action = 'select_provider'", id);
   assert.equal(rows.length, 1, 'one transition, one timestamp');
   const view = await getApp(c.factory, id);
   assert.equal(view.state, 'OFFER_UPLOAD');
@@ -193,7 +193,7 @@ test('system admin: no decision on an application, no provider/registry power, a
   assert.equal((await c.admin.post('/account-requests/acr-none/approve', {})).status, 403);
   assert.equal((await c.admin.post('/recovery-requests/rec-none/approve', {})).status, 403);
   assert.equal((await c.admin.get('/integration-keys/pending')).status, 403);
-  assert.equal((await q("SELECT 1 FROM application_transitions WHERE applicationId = ? AND actorRole = 'system_admin'", id)).length, 0);
+  assert.equal((await q("SELECT 1 FROM shams_application_transitions WHERE applicationId = ? AND actorRole = 'system_admin'", id)).length, 0);
 });
 
 test('unauthenticated and malformed tokens get 401 on every protected resource', async () => {

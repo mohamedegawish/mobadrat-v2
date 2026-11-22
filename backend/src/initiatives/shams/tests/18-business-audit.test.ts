@@ -81,7 +81,7 @@ afterEach(async () => {
 });
 
 async function appRow(id: string) {
-  return (await q<any>('SELECT state, number, attempt, submittedAt, industrialRegistryNumber, verifiedRegistryNumber, registryVerificationId, bankOrgId FROM applications WHERE id = ?', id))[0];
+  return (await q<any>('SELECT state, number, attempt, submittedAt, industrialRegistryNumber, verifiedRegistryNumber, registryVerificationId, bankOrgId FROM shams_applications WHERE id = ?', id))[0];
 }
 const count = async (sql: string, ...p: Array<string | number>) => Number((await q<{ n: number }>(sql, ...p))[0].n);
 
@@ -94,8 +94,8 @@ async function assertNothingSubmitted(id: string) {
   assert.equal(a.attempt, 0);
   assert.equal(a.verifiedRegistryNumber, null);
   assert.equal(a.registryVerificationId, null);
-  assert.equal(await count("SELECT COUNT(*) AS n FROM registry_verifications WHERE applicationId = ? AND result = 'valid'", id), 0, 'no stale valid verification');
-  assert.equal(await count('SELECT COUNT(*) AS n FROM application_transitions WHERE applicationId = ?', id), 0, 'no transition');
+  assert.equal(await count("SELECT COUNT(*) AS n FROM shams_registry_verifications WHERE applicationId = ? AND result = 'valid'", id), 0, 'no stale valid verification');
+  assert.equal(await count('SELECT COUNT(*) AS n FROM shams_application_transitions WHERE applicationId = ?', id), 0, 'no transition');
 }
 
 /** تقديم ناجح متسق: الأعمدة = بيانات المحاولة المُرسلة = الرقم الذي تحقق منه السجل، وانتقال واحد فقط، والمستندات الفعالة موجودة. */
@@ -103,17 +103,17 @@ async function assertConsistentSubmission(id: string, expectedNumber: string) {
   const a = await appRow(id);
   assert.equal(a.state, 'IMC_REVIEW');
   assert.match(a.number, /^SHAMS-\d{4}-\d{5}$/);
-  const data = JSON.parse((await q<{ data: string }>("SELECT data FROM application_data WHERE applicationId = ? AND section = 'company' AND attempt = ?", id, a.attempt))[0].data);
+  const data = JSON.parse((await q<{ data: string }>("SELECT data FROM shams_application_data WHERE applicationId = ? AND section = 'company' AND attempt = ?", id, a.attempt))[0].data);
   assert.equal(data.industrialRegistryNumber, expectedNumber, 'submitted data holds the verified number');
   assert.equal(a.industrialRegistryNumber, expectedNumber, 'column matches submitted data');
   assert.equal(a.verifiedRegistryNumber, expectedNumber);
-  const v = (await q<any>('SELECT registryNumber, result FROM registry_verifications WHERE id = ?', a.registryVerificationId))[0];
+  const v = (await q<any>('SELECT registryNumber, result FROM shams_registry_verifications WHERE id = ?', a.registryVerificationId))[0];
   assert.deepEqual({ ...v }, { registryNumber: expectedNumber, result: 'valid' });
-  assert.equal(await count("SELECT COUNT(*) AS n FROM application_transitions WHERE applicationId = ? AND toState = 'IMC_REVIEW'", id), 1, 'exactly one transition');
+  assert.equal(await count("SELECT COUNT(*) AS n FROM shams_application_transitions WHERE applicationId = ? AND toState = 'IMC_REVIEW'", id), 1, 'exactly one transition');
   for (const kind of FORM_DOCS) {
-    assert.ok(await count('SELECT COUNT(*) AS n FROM documents WHERE applicationId = ? AND kind = ? AND supersededAtAttempt IS NULL', id, kind) >= 1, `active ${kind}`);
+    assert.ok(await count('SELECT COUNT(*) AS n FROM shams_documents WHERE applicationId = ? AND kind = ? AND supersededAtAttempt IS NULL', id, kind) >= 1, `active ${kind}`);
   }
-  assert.ok(await count("SELECT COUNT(*) AS n FROM documents WHERE applicationId = ? AND kind = 'electricityBill' AND supersededAtAttempt IS NULL", id) >= 1, 'active electricity bill');
+  assert.ok(await count("SELECT COUNT(*) AS n FROM shams_documents WHERE applicationId = ? AND kind = 'electricityBill' AND supersededAtAttempt IS NULL", id) >= 1, 'active electricity bill');
 }
 
 // ── 1–4: الحالات الأساسية ────────────────────────────────────────────────────
@@ -131,7 +131,7 @@ test('F-01/2) invalid registry number: stays DRAFT, no number, no valid verifica
   assert.equal(r.json.code, 'REGISTRY_INVALID');
   const a = await appRow(id);
   assert.equal(a.state, 'DRAFT'); assert.equal(a.number, null);
-  assert.equal(await count("SELECT COUNT(*) AS n FROM registry_verifications WHERE applicationId = ? AND result = 'valid'", id), 0);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM shams_registry_verifications WHERE applicationId = ? AND result = 'valid'", id), 0);
 });
 
 test('F-01/3) registry timeout: unavailable (TIMEOUT), nothing submitted', async () => {
@@ -141,7 +141,7 @@ test('F-01/3) registry timeout: unavailable (TIMEOUT), nothing submitted', async
     const r = await act(c.factory, id, 'submit');
     assert.equal(r.status, 422);
     assert.equal(r.json.code, 'REGISTRY_UNAVAILABLE');
-    assert.equal((await q<any>("SELECT errorCode, result FROM registry_verifications WHERE applicationId = ?", id))[0].errorCode, 'TIMEOUT');
+    assert.equal((await q<any>("SELECT errorCode, result FROM shams_registry_verifications WHERE applicationId = ?", id))[0].errorCode, 'TIMEOUT');
     const a = await appRow(id);
     assert.equal(a.state, 'DRAFT'); assert.equal(a.number, null);
   } finally { delete process.env.REGISTRY_TIMEOUT_MS; }
@@ -217,7 +217,7 @@ test('F-01/8) a document replaced during the registry delay → 409, nothing sub
   assert.equal(r.status, 409, JSON.stringify(r.json));
   assert.equal(r.json.code, 'SUBMISSION_DATA_CHANGED');
   await assertNothingSubmitted(id);
-  assert.equal(await count("SELECT COUNT(*) AS n FROM documents WHERE applicationId = ? AND kind = 'taxCardFile'", id), 2, 'history kept');
+  assert.equal(await count("SELECT COUNT(*) AS n FROM shams_documents WHERE applicationId = ? AND kind = 'taxCardFile'", id), 2, 'history kept');
 });
 
 // ── 9: تقديم متزامن من نفس المصنع ────────────────────────────────────────────
@@ -238,7 +238,7 @@ test('F-01/9) two concurrent submissions of the same draft: exactly one wins, on
     assert.equal([r1, r2].find((r) => r.status === 409)!.json.code, 'VERSION_CONFLICT');
   } finally { releaseAll(); }
   await assertConsistentSubmission(id, 'IND-AUD-9');
-  assert.equal(await count("SELECT COUNT(*) AS n FROM registry_verifications WHERE applicationId = ? AND result = 'valid'", id), 1);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM shams_registry_verifications WHERE applicationId = ? AND result = 'valid'", id), 1);
 });
 
 // ── 10: مصنعان بنفس رقم السجل ────────────────────────────────────────────────
@@ -262,7 +262,7 @@ test('F-01/10) two factories submit the same registry number concurrently: one w
   await assertConsistentSubmission(winner, 'IND-AUD-10');
   assert.equal((await appRow(loser)).state, 'DRAFT');
   assert.equal((await appRow(loser)).number, null);
-  const conflicts = await q<any>('SELECT attemptedApplicationId, holdingApplicationId FROM registry_conflicts WHERE registryNumber = ?', 'IND-AUD-10');
+  const conflicts = await q<any>('SELECT attemptedApplicationId, holdingApplicationId FROM shams_registry_conflicts WHERE registryNumber = ?', 'IND-AUD-10');
   assert.equal(conflicts.length, 1, 'the losing submission is recorded as a conflict (rule I3)');
   assert.deepEqual({ ...conflicts[0] }, { attemptedApplicationId: loser, holdingApplicationId: winner });
   assert.ok(await count("SELECT COUNT(*) AS n FROM notification_outbox WHERE applicationId = ? AND templateKey = 'ops.registry_conflict'", winner) >= 1, 'IMC/PMU notified');
@@ -290,13 +290,13 @@ test('F-01/12) an "invalid registry" answer is not recorded against data that ch
   });
   assert.equal(r.status, 409, JSON.stringify(r.json));
   assert.equal(r.json.code, 'SUBMISSION_DATA_CHANGED');
-  assert.equal(await count('SELECT COUNT(*) AS n FROM registry_verifications WHERE applicationId = ?', id), 0, 'no verification row of any kind');
-  assert.equal(await count('SELECT COUNT(*) AS n FROM application_transitions WHERE applicationId = ?', id), 0);
+  assert.equal(await count('SELECT COUNT(*) AS n FROM shams_registry_verifications WHERE applicationId = ?', id), 0, 'no verification row of any kind');
+  assert.equal(await count('SELECT COUNT(*) AS n FROM shams_application_transitions WHERE applicationId = ?', id), 0);
 });
 
 test('F-01/13) a registry block created during the registry delay is enforced against the submitted snapshot', async () => {
   const id = await draft(c.factory, 'IND-AUD-13');
-  const { insertBlock } = await import('../src/store/registry.js');
+  const { insertBlock } = await import('../store/registry.js');
   const r = await submitWhileMutating(c.factory, id, async () => {
     await insertBlock({ registryNumber: 'IND-AUD-13', factoryId: null, applicationId: null, transitionId: null, source: 'pmu_dispute', createdBy: c.pmu.user.id });
   });
@@ -324,7 +324,7 @@ test('F-01/14) another factory takes the number during the registry delay: the s
   assert.equal(rSlow.json.code, 'DUPLICATE_REGISTRY');
   await assertNothingSubmitted(slow);
   await assertConsistentSubmission(fast, 'IND-AUD-14');
-  const conflicts = await q<any>('SELECT attemptedApplicationId, holdingApplicationId FROM registry_conflicts WHERE registryNumber = ?', 'IND-AUD-14');
+  const conflicts = await q<any>('SELECT attemptedApplicationId, holdingApplicationId FROM shams_registry_conflicts WHERE registryNumber = ?', 'IND-AUD-14');
   assert.deepEqual(conflicts.map((x) => ({ ...x })), [{ attemptedApplicationId: slow, holdingApplicationId: fast }]);
   assert.ok(await count("SELECT COUNT(*) AS n FROM notification_outbox WHERE applicationId = ? AND templateKey = 'ops.registry_conflict'", fast) >= 1);
 });
@@ -334,7 +334,7 @@ test('F-01/14) another factory takes the number during the registry delay: the s
 
 type Limits = Partial<{ maxVersionsPerKindPerAttempt: number; maxApplicationStorageMB: number }>;
 async function withLimits(patch: Limits, fn: () => Promise<void>) {
-  const { shamsPolicy } = await import('../src/config/shamsPolicy.js');
+  const { shamsPolicy } = await import('../config/shamsPolicy.js');
   const saved = { ...shamsPolicy.documentLimits };
   Object.assign(shamsPolicy.documentLimits, patch);
   try { await fn(); } finally { Object.assign(shamsPolicy.documentLimits, saved); }
@@ -346,16 +346,16 @@ const up = (cl: Client, id: string, kind: string, tag: string, bytes?: Buffer) =
 /** كل ملف مخزن له صف، وكل صف له ملف، ولا بقايا في المجلد المؤقت (الحذف المؤقت غير متزامن فننتظر قليلًا). */
 async function assertNoOrphans() {
   await new Promise((r) => setTimeout(r, 200));
-  const docsDir = path.join(process.env.UPLOAD_DIR!, 'documents');
+  const docsDir = path.join(process.env.UPLOAD_DIR!, 'shams', 'documents');
   const tmpDir = path.join(process.env.UPLOAD_DIR!, 'tmp');
   const files = (fs.existsSync(docsDir) ? fs.readdirSync(docsDir) : []).sort();
-  const rows = (await q<{ storedName: string }>('SELECT storedName FROM documents')).map((r) => r.storedName).sort();
+  const rows = (await q<{ storedName: string }>('SELECT storedName FROM shams_documents')).map((r) => r.storedName).sort();
   assert.deepEqual(files, rows, 'stored files and document rows match one to one');
   assert.deepEqual(fs.existsSync(tmpDir) ? fs.readdirSync(tmpDir) : [], [], 'no temporary leftovers');
 }
 
 const versionsOf = async (id: string, kind: string) =>
-  (await q<any>('SELECT version, status, supersededAtAttempt FROM documents WHERE applicationId = ? AND kind = ? ORDER BY version', id, kind)).map((r) => ({ ...r }));
+  (await q<any>('SELECT version, status, supersededAtAttempt FROM shams_documents WHERE applicationId = ? AND kind = ? ORDER BY version', id, kind)).map((r) => ({ ...r }));
 
 test('F-05/1) version limit per kind per attempt: 422 TOO_MANY_VERSIONS, the current version and the history are untouched', async () => {
   await withLimits({ maxVersionsPerKindPerAttempt: 3 }, async () => {
@@ -392,15 +392,15 @@ test('F-05/2) the version limit restarts with each attempt: a correction round c
 
 test('F-05/3) storage limit counts every retained version: 413 STORAGE_LIMIT even when the active documents would fit', async () => {
   const id = await draft(c.factory, 'IND-F05-3');
-  const used = Number((await q<{ n: number }>('SELECT SUM(sizeBytes) AS n FROM documents WHERE applicationId = ?', id))[0].n);
+  const used = Number((await q<{ n: number }>('SELECT SUM(sizeBytes) AS n FROM shams_documents WHERE applicationId = ?', id))[0].n);
   const size = pdfVariant('s1').length;
   await withLimits({ maxApplicationStorageMB: (used + size * 1.5) / 1048576 }, async () => {
     assert.equal((await up(c.factory, id, 'taxCardFile', 's1')).status, 201, 'fits');
-    const before = (await q('SELECT 1 FROM documents WHERE applicationId = ?', id)).length;
+    const before = (await q('SELECT 1 FROM shams_documents WHERE applicationId = ?', id)).length;
     const r = await up(c.factory, id, 'taxCardFile', 's2');
     assert.equal(r.status, 413, JSON.stringify(r.json));
     assert.equal(r.json.code, 'STORAGE_LIMIT');
-    assert.equal((await q('SELECT 1 FROM documents WHERE applicationId = ?', id)).length, before, 'nothing was stored');
+    assert.equal((await q('SELECT 1 FROM shams_documents WHERE applicationId = ?', id)).length, before, 'nothing was stored');
     assert.deepEqual((await versionsOf(id, 'taxCardFile')).map((v) => v.status), ['superseded', 'current'], 'history kept, current untouched');
     await assertNoOrphans();
   });
@@ -408,14 +408,14 @@ test('F-05/3) storage limit counts every retained version: 413 STORAGE_LIMIT eve
 
 test('F-05/4) an individual file over the size limit is refused (413 FILE_TOO_LARGE) and leaves nothing behind', async () => {
   const id = await draft(c.factory, 'IND-F05-4');
-  const before = (await q('SELECT 1 FROM documents WHERE applicationId = ?', id)).length;
+  const before = (await q('SELECT 1 FROM shams_documents WHERE applicationId = ?', id)).length;
   process.env.MAX_FILE_SIZE_MB = '1'; // الإعداد الحقيقي أعداد صحيحة؛ القيم الكسرية يتجاهلها محلل multipart وليست حالة إنتاج
   try {
     const r = await up(c.factory, id, 'taxCardFile', 'big', Buffer.concat([PDF, Buffer.alloc(2 * 1024 * 1024, 0x41)]));
     assert.equal(r.status, 413, JSON.stringify(r.json));
     assert.equal(r.json.code, 'FILE_TOO_LARGE');
   } finally { delete process.env.MAX_FILE_SIZE_MB; }
-  assert.equal((await q('SELECT 1 FROM documents WHERE applicationId = ?', id)).length, before);
+  assert.equal((await q('SELECT 1 FROM shams_documents WHERE applicationId = ?', id)).length, before);
   await assertNoOrphans();
 });
 
@@ -440,24 +440,24 @@ test('F-05/6) electricity bills: the 12-file cap holds under two simultaneous up
   const [r1, r2] = await Promise.all([up(c.factory, id, 'electricityBill', 'bill-race-a'), up(c.factory, id, 'electricityBill', 'bill-race-b')]);
   assert.deepEqual([r1.status, r2.status].sort(), [201, 422], JSON.stringify([r1.json, r2.json]));
   assert.equal([r1, r2].find((r) => r.status === 422)!.json.code, 'TOO_MANY_FILES');
-  assert.equal(await count("SELECT COUNT(*) AS n FROM documents WHERE applicationId = ? AND kind = 'electricityBill' AND supersededAtAttempt IS NULL", id), 12);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM shams_documents WHERE applicationId = ? AND kind = 'electricityBill' AND supersededAtAttempt IS NULL", id), 12);
   await assertNoOrphans();
 });
 
 test('F-05/7) rejected uploads change nothing: invalid PDF, another factory, and an application in a final state', async () => {
   const id = await draft(c.factory, 'IND-F05-7');
-  const before = (await q('SELECT 1 FROM documents WHERE applicationId = ?', id)).length;
+  const before = (await q('SELECT 1 FROM shams_documents WHERE applicationId = ?', id)).length;
   const fake = await up(c.factory, id, 'taxCardFile', 'fake', Buffer.from('MZ\x90\x00 an exe renamed to pdf'));
   assert.equal(fake.status, 400);
   assert.equal(fake.json.code, 'INVALID_FILE_TYPE');
   const foreign = await up(c.factory2, id, 'taxCardFile', 'foreign');
   assert.equal(foreign.status, 404, 'another factory cannot even see the application');
-  assert.equal((await q('SELECT 1 FROM documents WHERE applicationId = ?', id)).length, before);
+  assert.equal((await q('SELECT 1 FROM shams_documents WHERE applicationId = ?', id)).length, before);
   assert.equal((await act(c.factory, id, 'withdraw', { reason: 'إنهاء' })).status, 200);
   const late = await up(c.factory, id, 'taxCardFile', 'late');
   assert.equal(late.status, 409, JSON.stringify(late.json));
   assert.equal(late.json.code, 'INVALID_STATE');
-  assert.equal((await q('SELECT 1 FROM documents WHERE applicationId = ?', id)).length, before);
+  assert.equal((await q('SELECT 1 FROM shams_documents WHERE applicationId = ?', id)).length, before);
   await assertNoOrphans();
 });
 
@@ -474,14 +474,14 @@ async function approvedProvider(extra: Record<string, unknown> = {}) {
   assert.equal((await c.pmu.post(`/service-providers/${id}/approve`, {})).status, 200);
   return id;
 }
-const providerRow = async (id: string) => (await q<any>('SELECT status, isActive, approvedBy, approvedAt, suspendedAt FROM service_providers WHERE id = ?', id))[0];
+const providerRow = async (id: string) => (await q<any>('SELECT status, isActive, approvedBy, approvedAt, suspendedAt FROM shams_service_providers WHERE id = ?', id))[0];
 const lastAudit = async (action: string, id: string) => {
   const r = (await q<any>('SELECT actorType, actorUserId, actorRole, actorOrgId, integrationKeyId, actorName, details FROM audit_logs WHERE action = ? AND entityId = ? ORDER BY at DESC, rowid DESC LIMIT 1', action, id))[0];
   return r ? { ...r, details: JSON.parse(r.details) } : null;
 };
 const changedNotices = async () => count("SELECT COUNT(*) AS n FROM notification_outbox WHERE templateKey = 'ops.provider_changed' AND channel = 'email'");
 const changedInbox = async () => count("SELECT COUNT(*) AS n FROM user_notifications WHERE templateKey = 'ops.provider_changed'");
-const pmuEmails = async () => count("SELECT COUNT(DISTINCT lower(email)) AS n FROM users WHERE organizationId = 'org-pmu' AND role = 'pmu_reviewer' AND isActive = 1");
+const pmuEmails = async () => count("SELECT COUNT(DISTINCT lower(email)) AS n FROM users u JOIN initiative_memberships m ON m.userId = u.id AND m.initiativeId = 'shams' WHERE m.organizationId = 'org-pmu' AND m.role = 'pmu_reviewer' AND u.isActive = 1 AND m.status = 'active'");
 const visibleToFactory = async (id: string) => ((await c.factory.get('/service-providers')).json.data.items as any[]).some((p) => p.id === id);
 
 test('F-04/1) ENCPC edits an approved provider: structured diff, actor and source in the audit; PMU notified once; approval and visibility unchanged', async () => {
@@ -601,7 +601,7 @@ test('F-04/7) the notification waits in the outbox for retry when mail cannot be
   const rows = await q<any>("SELECT status, attempts, dedupeKey FROM notification_outbox WHERE templateKey = 'ops.provider_changed' AND dedupeKey LIKE ? ", `spc:${id}:%`);
   assert.equal(rows.length, await pmuEmails());
   assert.ok(rows.every((r) => ['pending', 'skipped'].includes(r.status)), 'queued, not lost');
-  const { processNotifications } = await import('../src/jobs/notificationWorker.js');
+  const { processNotifications } = await import('../jobs/notificationWorker.js');
   await processNotifications(200);
   await processNotifications(200);
   assert.equal((await q("SELECT 1 FROM notification_outbox WHERE templateKey = 'ops.provider_changed' AND dedupeKey LIKE ?", `spc:${id}:%`)).length, rows.length, 'no duplicates from the worker');
@@ -617,7 +617,7 @@ async function inFlight(target: Parameters<typeof advanceTo>[0], regNumber: stri
   return id;
 }
 const returnPayload = async (id: string) =>
-  JSON.parse((await q<{ payload: string }>("SELECT payload FROM application_transitions WHERE applicationId = ? AND action = 'provider_suspended_return'", id))[0].payload);
+  JSON.parse((await q<{ payload: string }>("SELECT payload FROM shams_application_transitions WHERE applicationId = ? AND action = 'provider_suspended_return'", id))[0].payload);
 const appAudit = async (action: string, id: string) => {
   const r = (await q<any>('SELECT actorType, actorUserId, actorRole, actorOrgId, details FROM audit_logs WHERE action = ? AND applicationId = ? ORDER BY at DESC, rowid DESC LIMIT 1', action, id))[0];
   return r ? { ...r, details: JSON.parse(r.details) } : null;
@@ -753,7 +753,7 @@ test('F-07) an offer uploaded for a provider that became unavailable, and never 
     assert.deepEqual(pmuOffers, [], 'PMU must not see an offer that was never submitted for review');
     assert.equal((await c.pmu.get(`/applications/${id}/documents/${oldDocId}/download`)).status, 404);
     assert.ok((await getApp(c.factory, id)).documents.some((d: any) => d.id === oldDocId), 'the factory keeps it in its history');
-    assert.equal(await count('SELECT COUNT(*) AS n FROM documents WHERE id = ?', oldDocId), 1, 'never deleted');
+    assert.equal(await count('SELECT COUNT(*) AS n FROM shams_documents WHERE id = ?', oldDocId), 1, 'never deleted');
     // بعد رفع عرض جديد وإرساله: PMU ترى العرض الجديد وحده
     assert.equal((await c.factory.upload(`/applications/${id}/documents`, { kind: 'technicalOfferFile' }, pdfVariant('offer-new-provider'), 'offer-new-provider.pdf')).status, 201);
     assert.equal((await act(c.factory, id, 'submit_offer')).status, 200);
@@ -781,7 +781,7 @@ test('F-09) a stale expectedVersion from someone who could never perform the act
 });
 
 // ══ المرحلة 8 (F-10, F-11) ═══════════════════════════════════════════════════════════════════════════════════════════
-const sqlDb = async () => (await import('../src/db/sqlite.js')).getDb();
+const sqlDb = async () => (await import('../db/sqlite.js')).getDb();
 
 test('F-10/1) official history cannot be edited or deleted even with direct SQL: transitions, referral history, decided deficiencies', async () => {
   const db = await sqlDb();
@@ -789,36 +789,36 @@ test('F-10/1) official history cannot be edited or deleted even with direct SQL:
   // السجل التاريخي للانتقالات + النواقص (تعديل مسموح لإغلاق النقص فقط)
   const id = await inFlight('IMC_REVIEW', 'IND-F10-1');
   assert.equal((await act(c.imc, id, 'request_correction', { deficiencies: [{ field: 'address', note: 'العنوان ناقص' }] })).status, 200);
-  await assert.rejects(async () => await db.prepare("UPDATE application_transitions SET reason = 'tampered' WHERE applicationId = ?").run(id), hist);
-  await assert.rejects(async () => await db.prepare('DELETE FROM application_transitions WHERE applicationId = ?').run(id), hist);
-  await assert.rejects(async () => await db.prepare("UPDATE deficiencies SET note = 'tampered' WHERE applicationId = ?").run(id), hist, 'an open deficiency\'s content is immutable');
-  await assert.rejects(async () => await db.prepare('DELETE FROM deficiencies WHERE applicationId = ?').run(id), hist);
+  await assert.rejects(async () => await db.prepare("UPDATE shams_application_transitions SET reason = 'tampered' WHERE applicationId = ?").run(id), hist);
+  await assert.rejects(async () => await db.prepare('DELETE FROM shams_application_transitions WHERE applicationId = ?').run(id), hist);
+  await assert.rejects(async () => await db.prepare("UPDATE shams_deficiencies SET note = 'tampered' WHERE applicationId = ?").run(id), hist, 'an open deficiency\'s content is immutable');
+  await assert.rejects(async () => await db.prepare('DELETE FROM shams_deficiencies WHERE applicationId = ?').run(id), hist);
   // الإغلاق الشرعي عبر إعادة تقديم المصنع ما زال يعمل
   assert.equal((await c.factory.put(`/applications/${id}/data/general`, { address: 'عنوان مكتمل' })).status, 200);
   assert.equal((await act(c.factory, id, 'resubmit')).status, 200);
-  const resolved = (await q<any>('SELECT id, resolvedAtTransitionId FROM deficiencies WHERE applicationId = ?', id))[0];
+  const resolved = (await q<any>('SELECT id, resolvedAtTransitionId FROM shams_deficiencies WHERE applicationId = ?', id))[0];
   assert.ok(resolved.resolvedAtTransitionId, 'resolution by the factory resubmission still works');
   // بعد الإغلاق: لا إعادة فتح ولا تعديل
-  await assert.rejects(async () => await db.prepare('UPDATE deficiencies SET resolvedAtTransitionId = NULL WHERE id = ?').run(resolved.id), hist);
-  await assert.rejects(async () => await db.prepare("UPDATE deficiencies SET note = 'x' WHERE id = ?").run(resolved.id), hist);
+  await assert.rejects(async () => await db.prepare('UPDATE shams_deficiencies SET resolvedAtTransitionId = NULL WHERE id = ?').run(resolved.id), hist);
+  await assert.rejects(async () => await db.prepare("UPDATE shams_deficiencies SET note = 'x' WHERE id = ?").run(resolved.id), hist);
   // حذف الطلب نفسه (CASCADE) لا يمحو تاريخه
-  await assert.rejects(async () => await db.prepare('DELETE FROM applications WHERE id = ?').run(id));
-  assert.ok(await count('SELECT COUNT(*) AS n FROM application_transitions WHERE applicationId = ?', id) >= 3);
+  await assert.rejects(async () => await db.prepare('DELETE FROM shams_applications WHERE id = ?').run(id));
+  assert.ok(await count('SELECT COUNT(*) AS n FROM shams_application_transitions WHERE applicationId = ?', id) >= 3);
 
   // تاريخ الإحالات السابقة (المصنع له طلب مفتوح واحد: نُنهي الأول — الانسحاب يُلحق سطرًا ولا يعدّل شيئًا)
   assert.equal((await act(c.factory, id, 'withdraw', { reason: 'إنهاء لأغراض الاختبار' })).status, 200);
   // G-02: لا إعادة إحالة جديدة، لكن صفوف bank_referral_history التاريخية (من قبل الإلغاء) تبقى محمية. نُنشئ صفًا بالطريقة القديمة نفسها (إدراج).
   const bank = await inFlight('CONTRACT_OUTCOME', 'IND-F10-2');
-  const trId = (await q<any>("SELECT id FROM application_transitions WHERE applicationId = ? AND action = 'select_bank'", bank))[0].id;
-  await db.prepare(`INSERT INTO bank_referral_history (id, applicationId, bankOrgId, referredAt, referredBy, endedAt, endedBy, endReason, transitionId)
+  const trId = (await q<any>("SELECT id FROM shams_application_transitions WHERE applicationId = ? AND action = 'select_bank'", bank))[0].id;
+  await db.prepare(`INSERT INTO shams_bank_referral_history (id, applicationId, bankOrgId, referredAt, referredBy, endedAt, endedBy, endReason, transitionId)
     VALUES ('rfh-legacy-f10', ?, 'org-bank-demo-a', '2026-01-01T00:00:00.000Z', NULL, '2026-01-02T00:00:00.000Z', NULL, 'سجل تاريخي', ?)`).run(bank, trId);
-  assert.equal(await count('SELECT COUNT(*) AS n FROM bank_referral_history WHERE applicationId = ?', bank), 1);
-  await assert.rejects(async () => await db.prepare("UPDATE bank_referral_history SET endReason = 'tampered' WHERE applicationId = ?").run(bank), hist);
-  await assert.rejects(async () => await db.prepare('DELETE FROM bank_referral_history WHERE applicationId = ?').run(bank), hist);
+  assert.equal(await count('SELECT COUNT(*) AS n FROM shams_bank_referral_history WHERE applicationId = ?', bank), 1);
+  await assert.rejects(async () => await db.prepare("UPDATE shams_bank_referral_history SET endReason = 'tampered' WHERE applicationId = ?").run(bank), hist);
+  await assert.rejects(async () => await db.prepare('DELETE FROM shams_bank_referral_history WHERE applicationId = ?').run(bank), hist);
 });
 
 test('F-11) allowReapplyAfterTerminal = false is enforced by the server, not only by the UI', async () => {
-  const { shamsPolicy } = await import('../src/config/shamsPolicy.js');
+  const { shamsPolicy } = await import('../config/shamsPolicy.js');
   // المصنع يملك طلبًا منتهيًا (منسحبًا) ولا طلب مفتوح له الآن — لا اعتماد على اختبارات سابقة
   const prior = await draft(c.factory2, 'IND-F11-1');
   assert.equal((await act(c.factory2, prior, 'withdraw', { reason: 'إنهاء لأغراض الاختبار' })).status, 200);
@@ -842,7 +842,7 @@ test('F-11) allowReapplyAfterTerminal = false is enforced by the server, not onl
 const dupRecipients = async (appId: string, tpl: string) =>
   q<any>('SELECT recipientAddress, channel, COUNT(*) AS n FROM notification_outbox WHERE applicationId = ? AND templateKey = ? GROUP BY recipientAddress, channel HAVING COUNT(*) > 1', appId, tpl);
 const transitionsOf = (appId: string, from: string, to: string) =>
-  count('SELECT COUNT(*) AS n FROM application_transitions WHERE applicationId = ? AND fromState = ? AND toState = ?', appId, from, to);
+  count('SELECT COUNT(*) AS n FROM shams_application_transitions WHERE applicationId = ? AND fromState = ? AND toState = ?', appId, from, to);
 /** يرسل الإجراءات من العملاء بنفس expectedVersion في آن واحد. */
 async function race(pairs: Array<{ cl: Client; action: string; body?: Record<string, unknown> }>, appId: string, viewer: Client) {
   const version = (await getApp(viewer, appId)).version;
@@ -870,7 +870,7 @@ test('C2) PMU accepts the electricity approval twice at once: one transition to 
   const rs = await race([{ cl: c.pmu, action: 'accept' }, { cl: c.pmu, action: 'accept' }], id, c.pmu);
   oneWinner(rs);
   assert.equal(await transitionsOf(id, 'ELECTRICITY_REVIEW', 'CONTRACT_OUTCOME'), 1);
-  assert.equal(await count('SELECT COUNT(*) AS n FROM bank_referrals WHERE applicationId = ?', id), 0, 'G-01: no bank yet — the factory chooses after acceptance');
+  assert.equal(await count('SELECT COUNT(*) AS n FROM shams_bank_referrals WHERE applicationId = ?', id), 0, 'G-01: no bank yet — the factory chooses after acceptance');
   assert.equal((await appRow(id)).bankOrgId, null);
   assert.ok(await count("SELECT COUNT(*) AS n FROM notification_outbox WHERE applicationId = ? AND templateKey = 'app.electricity_accepted'", id) >= 1);
   assert.deepEqual(await dupRecipients(id, 'app.electricity_accepted'), []);
@@ -879,7 +879,7 @@ test('C2) PMU accepts the electricity approval twice at once: one transition to 
 test('C3) the factory chooses the bank twice at once, and with two different banks: one choice, consistent everywhere', async () => {
   const same = await inFlight('BANK_SELECTION', 'IND-C3A');
   oneWinner(await race([{ cl: c.factory, action: 'select_bank', body: { bankOrgId: BANK_A } }, { cl: c.factory, action: 'select_bank', body: { bankOrgId: BANK_A } }], same, c.factory));
-  assert.equal(await count("SELECT COUNT(*) AS n FROM application_transitions WHERE applicationId = ? AND action = 'select_bank'", same), 1);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM shams_application_transitions WHERE applicationId = ? AND action = 'select_bank'", same), 1);
   assert.deepEqual(await dupRecipients(same, 'app.bank_selected'), []);
   assert.equal((await act(c.factory, same, 'withdraw', { reason: 'إنهاء' })).status, 200);
 
@@ -891,8 +891,8 @@ test('C3) the factory chooses the bank twice at once, and with two different ban
   oneWinner(rs);
   const winner = rs[0].status === 200 ? BANK_A : BANK_B;
   assert.equal((await appRow(diff)).bankOrgId, winner, 'application holds the winner\'s bank');
-  assert.equal((await q<any>('SELECT bankOrgId FROM bank_referrals WHERE applicationId = ?', diff))[0].bankOrgId, winner, 'selection record agrees');
-  const payload = JSON.parse((await q<any>("SELECT payload FROM application_transitions WHERE applicationId = ? AND action = 'select_bank'", diff))[0].payload);
+  assert.equal((await q<any>('SELECT bankOrgId FROM shams_bank_referrals WHERE applicationId = ?', diff))[0].bankOrgId, winner, 'selection record agrees');
+  const payload = JSON.parse((await q<any>("SELECT payload FROM shams_application_transitions WHERE applicationId = ? AND action = 'select_bank'", diff))[0].payload);
   assert.equal(payload.bankOrgId, winner, 'history holds the same bank');
 });
 
@@ -917,14 +917,14 @@ test('C5) the contract outcome, and a withdrawal, each recorded twice at once: o
   oneWinner(await race([{ cl: c.factory, action: 'record_contract', body }, { cl: c.factory, action: 'record_contract', body }], id, c.factory));
   assert.equal((await appRow(id)).state, 'CONTRACTED');
   assert.equal(await transitionsOf(id, 'CONTRACT_OUTCOME', 'CONTRACTED'), 1);
-  assert.equal(await count("SELECT COUNT(*) AS n FROM bank_referrals WHERE applicationId = ? AND contractStatus = 'contracted'", id), 1);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM shams_bank_referrals WHERE applicationId = ? AND contractStatus = 'contracted'", id), 1);
   // بعد الحالة النهائية: أي محاولة جديدة مرفوضة والنتيجة لا تتغير
   const again = await act(c.factory, id, 'record_no_contract', { reason: 'محاولة بعد الإغلاق' });
   assert.equal(again.status, 409);
 
   const w = await inFlight('IMC_REVIEW', 'IND-C5W');
   oneWinner(await race([{ cl: c.factory, action: 'withdraw', body: { reason: 'انسحاب' } }, { cl: c.factory, action: 'withdraw', body: { reason: 'انسحاب' } }], w, c.factory));
-  assert.equal(await count("SELECT COUNT(*) AS n FROM application_transitions WHERE applicationId = ? AND toState = 'WITHDRAWN'", w), 1);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM shams_application_transitions WHERE applicationId = ? AND toState = 'WITHDRAWN'", w), 1);
 });
 
 test('C6) a correction resubmitted twice at once: one return to IMC, the attempt advances by exactly one', async () => {
@@ -935,5 +935,5 @@ test('C6) a correction resubmitted twice at once: one return to IMC, the attempt
   oneWinner(await race([{ cl: c.factory, action: 'resubmit' }, { cl: c.factory, action: 'resubmit' }], id, c.factory));
   assert.equal(await transitionsOf(id, 'IMC_CORRECTION', 'IMC_REVIEW'), 1);
   assert.equal((await appRow(id)).attempt, before + 1);
-  assert.equal(await count('SELECT COUNT(*) AS n FROM deficiencies WHERE applicationId = ? AND resolvedAtTransitionId IS NULL', id), 0);
+  assert.equal(await count('SELECT COUNT(*) AS n FROM shams_deficiencies WHERE applicationId = ? AND resolvedAtTransitionId IS NULL', id), 0);
 });

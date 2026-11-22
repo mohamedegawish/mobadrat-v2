@@ -12,9 +12,9 @@ process.env.DB_TX_LOCK_TIMEOUT_SEC = '1';
 const env = isolateTestEnv('write-queue');
 const SKIP = !onMysql && 'MySQL only (npm run test:mysql)';
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-let db: typeof import('../src/db/index.js');
+let db: typeof import('../db/sqlite.js');
 
-before(async () => { if (SKIP) return; db = await import('../src/db/index.js'); await db.initDb(); });
+before(async () => { if (SKIP) return; db = await import('../db/sqlite.js'); await db.initDb(); });
 after(async () => { await env.cleanup(); });
 
 test('Q-1 a burst of writers does not take the pool from reads', { skip: SKIP }, async () => {
@@ -34,15 +34,15 @@ test('Q-1 a burst of writers does not take the pool from reads', { skip: SKIP },
 
 test('Q-2 write transactions still run one at a time (read-modify-write never loses an update)', { skip: SKIP }, async () => {
   const year = 2999;
-  await db.getDb().prepare('INSERT INTO application_counters (year, lastSeq) VALUES (?, 0)').run(year);
+  await db.getDb().prepare('INSERT INTO shams_application_counters (year, lastSeq) VALUES (?, 0)').run(year);
   await Promise.all(Array.from({ length: 25 }, () => db.tx(async () => {
-    const r = await db.getDb().prepare('SELECT lastSeq FROM application_counters WHERE year = ?').get(year) as { lastSeq: number };
+    const r = await db.getDb().prepare('SELECT lastSeq FROM shams_application_counters WHERE year = ?').get(year) as { lastSeq: number };
     await sleep(2); // yield between the read and the write, as real transaction bodies do
-    await db.getDb().prepare('UPDATE application_counters SET lastSeq = ? WHERE year = ?').run(Number(r.lastSeq) + 1, year);
+    await db.getDb().prepare('UPDATE shams_application_counters SET lastSeq = ? WHERE year = ?').run(Number(r.lastSeq) + 1, year);
   })));
-  const r = await db.getDb().prepare('SELECT lastSeq FROM application_counters WHERE year = ?').get(year) as { lastSeq: number };
+  const r = await db.getDb().prepare('SELECT lastSeq FROM shams_application_counters WHERE year = ?').get(year) as { lastSeq: number };
   assert.equal(Number(r.lastSeq), 25);
-  await db.getDb().prepare('DELETE FROM application_counters WHERE year = ?').run(year);
+  await db.getDb().prepare('DELETE FROM shams_application_counters WHERE year = ?').run(year);
 });
 
 test('Q-3 a writer that waits longer than DB_TX_LOCK_TIMEOUT_SEC fails with the retryable lock-timeout error', { skip: SKIP }, async () => {

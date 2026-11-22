@@ -27,7 +27,7 @@ test('15) concurrent decisions by two reviewers of the same org: exactly one win
   assert.deepEqual(statuses, [200, 409]);
   const loser = a.status === 409 ? a : b;
   assert.equal(loser.json.code, 'VERSION_CONFLICT');
-  const transitions = await q("SELECT 1 FROM application_transitions WHERE applicationId = ? AND fromState = 'IMC_REVIEW'", id);
+  const transitions = await q("SELECT 1 FROM shams_application_transitions WHERE applicationId = ? AND fromState = 'IMC_REVIEW'", id);
   assert.equal(transitions.length, 1);
   const notifs = await q<{ dedupeKey: string }>("SELECT dedupeKey FROM notification_outbox WHERE applicationId = ? AND templateKey IN ('app.review_assigned','app.correction_requested')", id);
   const afterSubmit = notifs.filter((n) => !n.dedupeKey.includes(':app.review_assigned:') || true);
@@ -61,7 +61,7 @@ test('16) a second open application for the same factory or the same registry nu
   assert.equal(ok.status, 200, JSON.stringify(ok.json));
   // فهرس فريد جزئي على مستوى القاعدة أيضًا (MySQL: the same two unique keys, on generated flag columns)
   const idx = onMysql
-    ? await q<{ name: string }>("SELECT DISTINCT INDEX_NAME AS name FROM information_schema.statistics WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'applications' AND NON_UNIQUE = 0 AND INDEX_NAME IN ('ux_apps_open_factory','ux_apps_open_registry')")
+    ? await q<{ name: string }>("SELECT DISTINCT INDEX_NAME AS name FROM information_schema.statistics WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'shams_applications' AND NON_UNIQUE = 0 AND INDEX_NAME IN ('ux_apps_open_factory','ux_apps_open_registry')")
     : await q<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('ux_apps_open_factory','ux_apps_open_registry')");
   assert.equal(idx.length, 2);
 });

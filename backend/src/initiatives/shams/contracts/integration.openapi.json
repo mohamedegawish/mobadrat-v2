@@ -1,0 +1,1866 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Shams El-Senaa — Integration API",
+    "version": "1.0.0",
+    "description": "API الربط بين موقع «شمس الصناعة» وأدمن المنصة الوطنية للمبادرات. قراءة الطلبات والملخصات وإدارة الجهات والحسابات ومقدمي الخدمة وقراءة سجل التدقيق. لا يوجد أي endpoint يتخذ قرارًا على الطلبات — القرار يبقى للجهة المسؤولة داخل الموقع. كل الردود الناجحة بالشكل { message, status: 'ok', data } وكل الأخطاء بالشكل { code, messageAr, messageEn, details? }. التواريخ ISO 8601 UTC والحقول camelCase."
+  },
+  "servers": [
+    {
+      "url": "/api/integration/v1/i/shams"
+    }
+  ],
+  "security": [
+    {
+      "bearerApiKey": []
+    },
+    {
+      "headerApiKey": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "read",
+      "description": "النطاق read"
+    },
+    {
+      "name": "read_documents",
+      "description": "النطاق read_documents"
+    },
+    {
+      "name": "manage_users",
+      "description": "النطاق manage_users"
+    },
+    {
+      "name": "manage_providers",
+      "description": "النطاق manage_providers"
+    },
+    {
+      "name": "read_audit",
+      "description": "النطاق read_audit"
+    }
+  ],
+  "paths": {
+    "/summary": {
+      "get": {
+        "tags": [
+          "read"
+        ],
+        "x-scope": "read",
+        "operationId": "getSummary",
+        "summary": "أعداد الطلبات لكل حالة، والمتأخرة، ومتوسط زمن كل مرحلة، والتعاقدات",
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SummaryEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/applications": {
+      "get": {
+        "tags": [
+          "read"
+        ],
+        "x-scope": "read",
+        "operationId": "listApplications",
+        "summary": "قائمة الطلبات بصفحات وفلاتر",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "description": "حالة أو أكثر مفصولة بفاصلة",
+            "schema": {
+              "type": "string",
+              "example": "IMC_REVIEW,ENCPC_REVIEW"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "description": "من تاريخ (ISO) — على تاريخ الإرسال",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "governorate",
+            "in": "query",
+            "description": "رمز المحافظة (من GET /api/v1/meta)",
+            "schema": {
+              "type": "string",
+              "example": "sharqia"
+            }
+          },
+          {
+            "name": "bankOrgId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "description": "بحث برقم الطلب فقط (لا يبحث في اسم الشركة ولا رقم السجل)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "includeDrafts",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationPageEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/applications/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "read"
+        ],
+        "x-scope": "read",
+        "operationId": "getApplication",
+        "summary": "بيانات الطلب الوصفية والسجل التاريخي الوصفي (قراءة فقط — بلا بيانات الفورم أو الأسباب أو المستندات)",
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationDetailEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/applications/{id}/documents/{docId}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "docId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "read_documents"
+        ],
+        "x-scope": "read_documents",
+        "operationId": "downloadDocument",
+        "summary": "تنزيل مستند (PDF) — المستندات المُرسلة فقط",
+        "responses": {
+          "200": {
+            "description": "PDF",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/organizations": {
+      "get": {
+        "tags": [
+          "manage_users"
+        ],
+        "x-scope": "manage_users",
+        "operationId": "listOrganizations",
+        "summary": "الجهات (المصانع مستبعدة إلا مع type=factory)",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/OrgType"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationListEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "manage_users"
+        ],
+        "x-scope": "manage_users",
+        "operationId": "createOrganization",
+        "summary": "إضافة جهة (البنوك فقط — الجهات الهيكلية ثابتة والمصانع تسجل بنفسها)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrganizationCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/organizations/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "put": {
+        "tags": [
+          "manage_users"
+        ],
+        "x-scope": "manage_users",
+        "operationId": "updateOrganization",
+        "summary": "تعديل جهة أو إيقافها (لا يمكن تعديل جهة إدارة النظام أو إيقاف الجهات الهيكلية)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrganizationUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/users": {
+      "get": {
+        "tags": [
+          "manage_users"
+        ],
+        "x-scope": "manage_users",
+        "operationId": "listUsers",
+        "summary": "حسابات الجهات (حسابات المصانع مستبعدة إلا مع role=factory_owner)",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "role",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/Role"
+            }
+          },
+          {
+            "name": "organizationId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPageEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "manage_users"
+        ],
+        "x-scope": "manage_users",
+        "operationId": "createUser",
+        "summary": "إنشاء حساب جهة بكلمة مرور مؤقتة (تُرجع مرة واحدة، ويجب تغييرها عند أول دخول). لا يمكن إنشاء system_admin عبر الربط",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserWithPasswordEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/users/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "put": {
+        "tags": [
+          "manage_users"
+        ],
+        "x-scope": "manage_users",
+        "operationId": "updateUser",
+        "summary": "تعديل حساب، إيقافه، أو إعادة تعيين كلمة المرور (لا يمكن تعديل حسابات إدارة النظام أو المصانع عبر الربط)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserWithPasswordEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/service-providers": {
+      "get": {
+        "tags": [
+          "manage_providers"
+        ],
+        "x-scope": "manage_providers",
+        "operationId": "listServiceProviders",
+        "summary": "مقدمو الخدمة",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/ProviderStatus"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderListEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "manage_providers"
+        ],
+        "x-scope": "manage_providers",
+        "operationId": "createServiceProvider",
+        "summary": "إضافة مقدم خدمة (بحالة pending)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/service-providers/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "put": {
+        "tags": [
+          "manage_providers"
+        ],
+        "x-scope": "manage_providers",
+        "operationId": "updateServiceProvider",
+        "summary": "تعديل مقدم خدمة واعتماده أو إيقافه (status)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ProviderInput"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "$ref": "#/components/schemas/ProviderStatus"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/audit-logs": {
+      "get": {
+        "tags": [
+          "read_audit"
+        ],
+        "x-scope": "read_audit",
+        "operationId": "listAuditLogs",
+        "summary": "سجل التدقيق (append-only)",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "application.accept"
+            }
+          },
+          {
+            "name": "applicationId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditPageEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    }
+  },
+  "webhooks": {
+    "application.state_changed": {
+      "post": {
+        "summary": "يُرسل لكل انتقال حالة إلى PLATFORM_WEBHOOK_URL عبر outbox مع إعادة محاولة (1، 5، 15، 60 دقيقة؛ 5 محاولات).",
+        "description": "التحقق: X-Shams-Signature = 'v1=' + hex(HMAC_SHA256(PLATFORM_WEBHOOK_SECRET, X-Shams-Timestamp + '.' + rawBody)). ارفض الطلبات الأقدم من 5 دقائق، وامنع التكرار بـ X-Shams-Event-Id (ثابت في كل إعادة محاولة). رد 2xx = تم التسليم.",
+        "parameters": [
+          {
+            "name": "X-Shams-Event-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-Shams-Event-Type",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "const": "application.state_changed"
+            }
+          },
+          {
+            "name": "X-Shams-Timestamp",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Unix seconds"
+            }
+          },
+          {
+            "name": "X-Shams-Signature",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "v1=5f2b…"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StateChangedEvent"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "delivered"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerApiKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Authorization: Bearer shk_<prefix>_<secret>"
+      },
+      "headerApiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key"
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "مفتاح غير صالح أو ملغى (INVALID_API_KEY)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiError"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "نطاق ناقص (INSUFFICIENT_SCOPE) أو عملية ممنوعة (FORBIDDEN)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiError"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "غير موجود",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiError"
+            }
+          }
+        }
+      },
+      "ValidationError": {
+        "description": "VALIDATION_ERROR مع details",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiError"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "تعارض (مثل EMAIL_TAKEN)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiError"
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "تجاوز حد المفتاح في الدقيقة (RATE_LIMITED)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiError"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ApiError": {
+        "type": "object",
+        "required": [
+          "code",
+          "messageAr",
+          "messageEn"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "messageAr": {
+            "type": "string"
+          },
+          "messageEn": {
+            "type": "string"
+          },
+          "details": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "field",
+                "issue"
+              ],
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "issue": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ApplicationState": {
+        "type": "string",
+        "enum": [
+          "DRAFT",
+          "IMC_REVIEW",
+          "IMC_CORRECTION",
+          "ENCPC_REVIEW",
+          "ENCPC_CORRECTION",
+          "PROVIDER_SELECTION",
+          "OFFER_UPLOAD",
+          "OFFER_REVIEW",
+          "OFFER_CORRECTION",
+          "ELECTRICITY_UPLOAD",
+          "ELECTRICITY_REVIEW",
+          "BANK_STUDY",
+          "CONTRACT_OUTCOME",
+          "DISTRIBUTION_UPLOAD",
+          "DISTRIBUTION_REVIEW",
+          "REJECTED",
+          "CONTRACTED",
+          "CLOSED_NOT_CONTRACTED",
+          "WITHDRAWN"
+        ]
+      },
+      "Role": {
+        "type": "string",
+        "enum": [
+          "factory_owner",
+          "imc_reviewer",
+          "encpc_reviewer",
+          "pmu_reviewer",
+          "bank_reviewer",
+          "system_admin"
+        ]
+      },
+      "OrgType": {
+        "type": "string",
+        "enum": [
+          "factory",
+          "imc",
+          "encpc",
+          "pmu",
+          "bank",
+          "admin"
+        ]
+      },
+      "ProviderStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "approved",
+          "suspended"
+        ]
+      },
+      "Responsible": {
+        "type": "object",
+        "description": "الجهة المسؤولة حاليًا — النوع فقط (بلا اسم الجهة ولا معرفها: اسم جهة المصنع هو اسم الشركة)",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "factory",
+              "imc",
+              "encpc",
+              "pmu",
+              "bank",
+              "none"
+            ]
+          },
+          "labelAr": {
+            "type": "string"
+          },
+          "labelEn": {
+            "type": "string"
+          }
+        }
+      },
+      "ApplicationListItem": {
+        "type": "object",
+        "description": "بيانات وصفية فقط (قرار المشروع 3). قائمة سماح صريحة في الخادم (integration/metadataView.ts). مستبعد عمدًا: اسم الشركة، رقم السجل الصناعي، بيانات الفورم والاتصال والضرائب، بيانات السجل، أسباب القرارات والنواقص، قيم التعاقد وملاحظات البنك، بيانات مقدم الخدمة، المستندات، أسماء المستخدمين.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "number": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "SHAMS-2026-00001"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ApplicationState"
+          },
+          "stateLabelAr": {
+            "type": "string"
+          },
+          "stateLabelEn": {
+            "type": "string"
+          },
+          "step": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9
+          },
+          "governorate": {
+            "type": "string"
+          },
+          "industrialZone": {
+            "type": "string"
+          },
+          "submittedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "stateEnteredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "closedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "responsible": {
+            "$ref": "#/components/schemas/Responsible"
+          },
+          "overdue": {
+            "type": "boolean"
+          },
+          "dueAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "daysInState": {
+            "type": "integer"
+          },
+          "bank": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "nameAr": {
+                "type": "string"
+              },
+              "nameEn": {
+                "type": "string"
+              }
+            }
+          },
+          "contractPath": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "bank",
+              "distribution",
+              null
+            ],
+            "description": "مسار التعاقد بعد قبول موافقة الكهرباء: بنك أو شركة توزيع الكهرباء؛ null = لم يُختر بعد."
+          }
+        }
+      },
+      "HistoryEntry": {
+        "type": "object",
+        "description": "سطر وصفي من السجل التاريخي — بلا سبب ولا اسم منفذ ولا معرف جهته",
+        "properties": {
+          "fromState": {
+            "$ref": "#/components/schemas/ApplicationState"
+          },
+          "toState": {
+            "$ref": "#/components/schemas/ApplicationState"
+          },
+          "action": {
+            "type": "string"
+          },
+          "actorRole": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ApplicationDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApplicationListItem"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "history": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/HistoryEntry"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "Summary": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer"
+          },
+          "drafts": {
+            "type": "integer"
+          },
+          "open": {
+            "type": "integer"
+          },
+          "overdue": {
+            "type": "integer"
+          },
+          "byState": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            }
+          },
+          "avgDaysPerState": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "avgDays": {
+                  "type": "number"
+                },
+                "samples": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "returnsByStage": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            }
+          },
+          "contracted": {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "integer"
+              },
+              "totalAmount": {
+                "type": "number"
+              }
+            }
+          },
+          "byGovernorate": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "governorate": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Organization": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/OrgType"
+          },
+          "nameAr": {
+            "type": "string"
+          },
+          "nameEn": {
+            "type": "string"
+          },
+          "contactEmail": {
+            "type": "string"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "isStructural": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        }
+      },
+      "OrganizationCreate": {
+        "type": "object",
+        "required": [
+          "type",
+          "nameAr",
+          "nameEn"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "bank"
+          },
+          "nameAr": {
+            "type": "string"
+          },
+          "nameEn": {
+            "type": "string"
+          },
+          "contactEmail": {
+            "type": "string",
+            "format": "email"
+          }
+        }
+      },
+      "OrganizationUpdate": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "nameAr": {
+            "type": "string"
+          },
+          "nameEn": {
+            "type": "string"
+          },
+          "contactEmail": {
+            "type": "string"
+          },
+          "isActive": {
+            "type": "boolean"
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "nameAr": {
+            "type": "string"
+          },
+          "nameEn": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "organizationId": {
+            "type": "string"
+          },
+          "organizationType": {
+            "$ref": "#/components/schemas/OrgType"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "mustChangePassword": {
+            "type": "boolean"
+          },
+          "emailVerified": {
+            "type": "boolean"
+          },
+          "lastLoginAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        }
+      },
+      "UserCreate": {
+        "type": "object",
+        "required": [
+          "email",
+          "nameAr",
+          "role",
+          "organizationId"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "nameAr": {
+            "type": "string"
+          },
+          "nameEn": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "imc_reviewer",
+              "encpc_reviewer",
+              "pmu_reviewer"
+            ]
+          },
+          "organizationId": {
+            "type": "string"
+          }
+        }
+      },
+      "UserUpdate": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "nameAr": {
+            "type": "string"
+          },
+          "nameEn": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "resetPassword": {
+            "type": "boolean",
+            "const": true
+          }
+        }
+      },
+      "ServiceProvider": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "nameAr": {
+            "type": "string"
+          },
+          "nameEn": {
+            "type": "string"
+          },
+          "contactName": {
+            "type": "string"
+          },
+          "contactPhone": {
+            "type": "string"
+          },
+          "contactEmail": {
+            "type": "string"
+          },
+          "website": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProviderStatus"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "approvedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "suspendedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ProviderInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "nameAr": {
+            "type": "string"
+          },
+          "nameEn": {
+            "type": "string"
+          },
+          "contactName": {
+            "type": "string"
+          },
+          "contactPhone": {
+            "type": "string"
+          },
+          "contactEmail": {
+            "type": "string"
+          },
+          "website": {
+            "type": "string",
+            "format": "uri"
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      },
+      "AuditLog": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actorType": {
+            "type": "string",
+            "enum": [
+              "user",
+              "integration_key",
+              "system",
+              "anonymous"
+            ]
+          },
+          "actorUserId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "actorName": {
+            "type": "string"
+          },
+          "actorRole": {
+            "type": "string"
+          },
+          "actorOrgId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "integrationKeyId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "action": {
+            "type": "string"
+          },
+          "entityType": {
+            "type": "string"
+          },
+          "entityId": {
+            "type": "string"
+          },
+          "applicationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "summaryAr": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object"
+          },
+          "ip": {
+            "type": "string"
+          }
+        }
+      },
+      "StateChangedEvent": {
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "occurredAt",
+          "data"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "type": "string",
+            "const": "application.state_changed"
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "applicationId": {
+                "type": "string"
+              },
+              "number": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "fromState": {
+                "$ref": "#/components/schemas/ApplicationState"
+              },
+              "toState": {
+                "$ref": "#/components/schemas/ApplicationState"
+              },
+              "action": {
+                "type": "string"
+              },
+              "actorRole": {
+                "type": "string"
+              },
+              "actorOrgId": {
+                "type": "string"
+              },
+              "attempt": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "Page": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "integer"
+          },
+          "pageSize": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          },
+          "totalPages": {
+            "type": "integer"
+          }
+        }
+      },
+      "Envelope": {
+        "type": "object",
+        "required": [
+          "message",
+          "status"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "const": "ok"
+          }
+        }
+      },
+      "SummaryEnvelope": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Envelope"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "$ref": "#/components/schemas/Summary"
+              }
+            }
+          }
+        ]
+      },
+      "ApplicationPageEnvelope": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Envelope"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/Page"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/components/schemas/ApplicationListItem"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "ApplicationDetailEnvelope": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Envelope"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "$ref": "#/components/schemas/ApplicationDetail"
+              }
+            }
+          }
+        ]
+      },
+      "OrganizationListEnvelope": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Envelope"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "type": "object",
+                "properties": {
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Organization"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "OrganizationEnvelope": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Envelope"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "$ref": "#/components/schemas/Organization"
+              }
+            }
+          }
+        ]
+      },
+      "UserPageEnvelope": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Envelope"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/Page"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/components/schemas/User"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "UserWithPasswordEnvelope": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Envelope"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "type": "object",
+                "properties": {
+                  "user": {
+                    "$ref": "#/components/schemas/User"
+                  },
+                  "temporaryPassword": {
+                    "type": "string",
+                    "description": "تظهر مرة واحدة فقط عند الإنشاء أو إعادة التعيين"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ProviderListEnvelope": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Envelope"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "type": "object",
+                "properties": {
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/ServiceProvider"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ProviderEnvelope": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Envelope"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "$ref": "#/components/schemas/ServiceProvider"
+              }
+            }
+          }
+        ]
+      },
+      "AuditPageEnvelope": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Envelope"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/Page"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/components/schemas/AuditLog"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

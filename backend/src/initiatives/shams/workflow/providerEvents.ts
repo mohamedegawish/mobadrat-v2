@@ -37,7 +37,7 @@ export async function applyProviderSuspension(provider: { id: string; nameAr: st
   const db = getDb();
   const result: ProviderSuspensionResult = { returned: [], notifiedBeforeOffer: [], alertedAfterAcceptance: [] };
   const watched: ApplicationState[] = ['OFFER_UPLOAD', ...RETURN_STATES, ...AFTER_OFFER_ACCEPTED];
-  const rows = await db.prepare(`SELECT id FROM applications WHERE providerId = ? AND state IN (${watched.map(() => '?').join(',')})`).all(provider.id, ...watched) as Array<{ id: string }>;
+  const rows = await db.prepare(`SELECT id FROM shams_applications WHERE providerId = ? AND state IN (${watched.map(() => '?').join(',')})`).all(provider.id, ...watched) as Array<{ id: string }>;
   const actor: AuditActor = { actorType: 'user', actorUserId: user.id, actorName: user.nameAr, actorRole: user.role, actorOrgId: user.organizationId, ip };
   const stamp = provider.suspendedAt ?? nowIso();
 
@@ -57,7 +57,7 @@ export async function applyProviderSuspension(provider: { id: string; nameAr: st
 
     if (RETURN_STATES.includes(cur.state)) {
       const now = nowIso();
-      const changed = await db.prepare(`UPDATE applications SET state = 'OFFER_UPLOAD', version = version + 1, stateEnteredAt = ?, updatedAt = ?
+      const changed = await db.prepare(`UPDATE shams_applications SET state = 'OFFER_UPLOAD', version = version + 1, stateEnteredAt = ?, updatedAt = ?
         WHERE id = ? AND version = ? AND state = ?`).run(now, now, cur.id, cur.version, cur.state);
       if (Number(changed.changes) !== 1) continue; // تغيّر الطلب في الأثناء — المعاملة نفسها تمنع هذا عمليًا
       const reason = `أُوقف مقدم الخدمة «${provider.nameAr}» أثناء ${cur.state === 'OFFER_REVIEW' ? 'مراجعة العرض الفني' : 'تصحيح العرض الفني'} — أُعيد الطلب آليًا لرفع عرض جديد من مقدم خدمة معتمد.`;

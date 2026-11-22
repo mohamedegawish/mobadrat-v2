@@ -20,7 +20,7 @@ function map(r: Record<string, unknown>): Organization {
 export function isStructuralOrg(id: string): boolean { return STRUCTURAL.has(id); }
 
 export async function getOrganization(id: string): Promise<Organization | null> {
-  const r = await getDb().prepare('SELECT * FROM organizations WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+  const r = await getDb().prepare('SELECT * FROM shams_organizations WHERE id = ?').get(id) as Record<string, unknown> | undefined;
   return r ? map(r) : null;
 }
 
@@ -34,7 +34,7 @@ export async function getOrganizationsByIds(ids: Iterable<string>): Promise<Map<
   const out = new Map<string, Organization>();
   for (let i = 0; i < uniq.length; i += 500) {
     const chunk = uniq.slice(i, i + 500);
-    const rows = await getDb().prepare(`SELECT * FROM organizations WHERE id IN (${chunk.map(() => '?').join(',')})`).all(...chunk) as Array<Record<string, unknown>>;
+    const rows = await getDb().prepare(`SELECT * FROM shams_organizations WHERE id IN (${chunk.map(() => '?').join(',')})`).all(...chunk) as Array<Record<string, unknown>>;
     for (const r of rows) out.set(String(r.id), map(r));
   }
   return out;
@@ -48,13 +48,13 @@ export async function listOrganizations(f: { type?: OrgType; q?: string; include
   if (f.activeOnly) where.push('isActive = 1');
   if (f.q) { where.push("(nameAr LIKE ? ESCAPE '\\' OR nameEn LIKE ? ESCAPE '\\')"); const p = likePattern(f.q); params.push(p, p); }
   const w = where.length ? `WHERE ${where.join(' AND ')}` : '';
-  return (await getDb().prepare(`SELECT * FROM organizations ${w} ORDER BY type, nameAr LIMIT 500`).all(...params) as Array<Record<string, unknown>>).map(map);
+  return (await getDb().prepare(`SELECT * FROM shams_organizations ${w} ORDER BY type, nameAr LIMIT 500`).all(...params) as Array<Record<string, unknown>>).map(map);
 }
 
 export async function createOrganization(input: { type: OrgType; nameAr: string; nameEn: string; contactEmail?: string; id?: string }): Promise<Organization> {
   const id = input.id ?? newId(input.type === 'bank' ? 'org-bank' : `org-${input.type}`);
   const now = nowIso();
-  await getDb().prepare('INSERT INTO organizations (id, type, nameAr, nameEn, contactEmail, isActive, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, 1, ?, ?)')
+  await getDb().prepare('INSERT INTO shams_organizations (id, type, nameAr, nameEn, contactEmail, isActive, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, 1, ?, ?)')
     .run(id, input.type, input.nameAr, input.nameEn, input.contactEmail ?? '', now, now);
   return (await getOrganization(id))!;
 }
@@ -62,7 +62,7 @@ export async function createOrganization(input: { type: OrgType; nameAr: string;
 export async function updateOrganization(id: string, patch: { nameAr?: string; nameEn?: string; contactEmail?: string; isActive?: boolean }): Promise<Organization | null> {
   const cur = await getOrganization(id);
   if (!cur) return null;
-  await getDb().prepare('UPDATE organizations SET nameAr = ?, nameEn = ?, contactEmail = ?, isActive = ?, updatedAt = ? WHERE id = ?').run(
+  await getDb().prepare('UPDATE shams_organizations SET nameAr = ?, nameEn = ?, contactEmail = ?, isActive = ?, updatedAt = ? WHERE id = ?').run(
     patch.nameAr ?? cur.nameAr, patch.nameEn ?? cur.nameEn, patch.contactEmail ?? cur.contactEmail,
     (patch.isActive ?? cur.isActive) ? 1 : 0, nowIso(), id,
   );
@@ -71,8 +71,10 @@ export async function updateOrganization(id: string, patch: { nameAr?: string; n
 
 /** عدد المستخدمين النشطين بالدور المطلوب لنوع الجهة (لا يُسلَّم طلب لجهة بلا من يعمل فيها). */
 export async function activeStaffCount(orgId: string): Promise<number> {
-  return (await getDb().prepare(`SELECT COUNT(*) AS n FROM users u JOIN organizations o ON o.id = u.organizationId
-    WHERE u.organizationId = ? AND u.isActive = 1 AND o.isActive = 1 AND u.role <> 'factory_owner'`).get(orgId) as { n: number }).n;
+  return Number((await getDb().prepare(`SELECT COUNT(*) AS n FROM users u
+    JOIN initiative_memberships m ON m.userId = u.id AND m.initiativeId = 'shams'
+    JOIN shams_organizations o ON o.id = m.organizationId
+    WHERE m.organizationId = ? AND u.isActive = 1 AND m.status = 'active' AND o.isActive = 1 AND m.role <> 'factory_owner'`).get(orgId) as { n: number }).n);
 }
 
 /** البنك متاح للاختيار والإحالة: نشط وله مستخدم نشط واحد على الأقل (B2). */

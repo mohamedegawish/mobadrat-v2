@@ -40,7 +40,7 @@ async function factoryUsers(factoryId: string): Promise<Recipient[]> {
 }
 
 async function conflictsOf(registryNumber: string): Promise<Array<{ id: string; attemptedFactoryId: string; attemptedApplicationId: string; holdingApplicationId: string; attempts: number; createdAt: string; lastAttemptAt: string }>> {
-  return await getDb().prepare('SELECT id, attemptedFactoryId, attemptedApplicationId, holdingApplicationId, attempts, createdAt, lastAttemptAt FROM registry_conflicts WHERE registryNumber = ? ORDER BY createdAt')
+  return await getDb().prepare('SELECT id, attemptedFactoryId, attemptedApplicationId, holdingApplicationId, attempts, createdAt, lastAttemptAt FROM shams_registry_conflicts WHERE registryNumber = ? ORDER BY createdAt')
     .all(registryNumber) as never;
 }
 
@@ -49,7 +49,7 @@ async function involvedFactoryIds(registryNumber: string): Promise<string[]> {
   const ids = new Set<string>();
   for (const c of await conflictsOf(registryNumber)) {
     ids.add(c.attemptedFactoryId);
-    const holder = await getDb().prepare('SELECT factoryId AS fid FROM applications WHERE id = ?').get(c.holdingApplicationId) as { fid: string } | undefined;
+    const holder = await getDb().prepare('SELECT factoryId AS fid FROM shams_applications WHERE id = ?').get(c.holdingApplicationId) as { fid: string } | undefined;
     if (holder) ids.add(holder.fid);
   }
   const holderNow = await findOpenSubmittedByRegistry(registryNumber, '');
@@ -209,9 +209,9 @@ export async function decideDispute(user: UserInternal, body: unknown, ip: strin
 export async function listDisputes() {
   const db = getDb();
   const numbers = new Set<string>();
-  for (const r of await db.prepare('SELECT DISTINCT registryNumber AS n FROM registry_conflicts').all() as Array<{ n: string }>) numbers.add(r.n);
-  for (const r of await db.prepare('SELECT DISTINCT registryNumber AS n FROM registry_blocks').all() as Array<{ n: string }>) numbers.add(r.n);
-  for (const r of await db.prepare('SELECT DISTINCT registryNumber AS n FROM registry_objections').all() as Array<{ n: string }>) numbers.add(r.n);
+  for (const r of await db.prepare('SELECT DISTINCT registryNumber AS n FROM shams_registry_conflicts').all() as Array<{ n: string }>) numbers.add(r.n);
+  for (const r of await db.prepare('SELECT DISTINCT registryNumber AS n FROM shams_registry_blocks').all() as Array<{ n: string }>) numbers.add(r.n);
+  for (const r of await db.prepare('SELECT DISTINCT registryNumber AS n FROM shams_registry_objections').all() as Array<{ n: string }>) numbers.add(r.n);
   const allBlocks = await listBlocks(false);
   const allObjections = await listObjections();
   const name = async (fid: string | null) => (fid ? (await getFactory(fid))?.companyName ?? fid : null);

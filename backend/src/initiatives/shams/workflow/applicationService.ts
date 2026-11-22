@@ -107,7 +107,7 @@ export async function createRegistrationDraft(factory: { id: string; companyName
   await writeSection(app.id, 'contact', 1, contact, user.id);
   if (sections.company) await writeSection(app.id, 'company', 1, sections.company, user.id);
   if (sections.engineering) await writeSection(app.id, 'engineering', 1, sections.engineering, user.id);
-  await getDb().prepare('UPDATE applications SET governorate = ?, updatedAt = ? WHERE id = ?').run(String(general.governorate ?? ''), nowIso(), app.id);
+  await getDb().prepare('UPDATE shams_applications SET governorate = ?, updatedAt = ? WHERE id = ?').run(String(general.governorate ?? ''), nowIso(), app.id);
   await addAuditLog({ actorType: 'user', actorUserId: user.id, actorName: user.nameAr, actorRole: user.role, actorOrgId: user.organizationId, ip,
     action: 'application.create', entityType: 'application', entityId: app.id, applicationId: app.id, summaryAr: 'إنشاء مسودة طلب من صفحة التسجيل',
     details: { sections: Object.keys(sections) } });
@@ -134,7 +134,7 @@ export async function saveSection(user: UserInternal, appId: string, sectionRaw:
     await writeSection(app.id, section, pending, next, user.id);
     if (app.state === 'DRAFT' && section === 'general') {
       // عرض المسودة في القوائم فقط؛ القيم المعتمدة تُثبت عند الإرسال.
-      await getDb().prepare('UPDATE applications SET companyName = ?, governorate = ?, updatedAt = ? WHERE id = ?')
+      await getDb().prepare('UPDATE shams_applications SET companyName = ?, governorate = ?, updatedAt = ? WHERE id = ?')
         .run(String(next.companyName ?? ''), String(next.governorate ?? ''), nowIso(), app.id);
     }
     if (allowed) {

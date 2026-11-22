@@ -345,7 +345,7 @@ export async function performAction(user: UserInternal, appId: string, actionRaw
         applicationId: cur.id, fromState: cur.state, toState: cur.state, action, ...actor, reason: '', attempt: cur.attempt,
         payload: { registryResult: registry.result.result, registryNumber: registry.number },
       });
-      await db.prepare('UPDATE applications SET updatedAt = ? WHERE id = ?').run(now, cur.id);
+      await db.prepare('UPDATE shams_applications SET updatedAt = ? WHERE id = ?').run(now, cur.id);
       await addAuditLog({ actorType: 'user', ...actor, ip: ctx.ip, action: 'application.registry_check', entityType: 'application', entityId: cur.id,
         applicationId: cur.id, summaryAr: `تعذر التحقق من السجل الصناعي (${registry.result.result})`, details: { verificationId: ver.id, result: registry.result.result } });
       await notifyTransition({ app: cur, def, transition: t, registryResult: registry.result.result as 'invalid' | 'unavailable' });
@@ -391,7 +391,7 @@ export async function performAction(user: UserInternal, appId: string, actionRaw
     const distributionDecision = cur.state === 'DISTRIBUTION_REVIEW' && (action === 'accept' || action === 'reject_distribution');
 
     try {
-      const r = await db.prepare(`UPDATE applications SET ${sets.join(', ')} WHERE id = ? AND version = ?`).run(...vals, cur.id, p.expectedVersion);
+      const r = await db.prepare(`UPDATE shams_applications SET ${sets.join(', ')} WHERE id = ? AND version = ?`).run(...vals, cur.id, p.expectedVersion);
       if (Number(r.changes) !== 1) throw versionConflict();
     } catch (e) {
       if (e instanceof AppError) throw e;
@@ -428,7 +428,7 @@ export async function performAction(user: UserInternal, appId: string, actionRaw
     if (action === 'submit_electricity') await writeSection(cur.id, 'electricity', nextAttempt, { distributionCompany: p.distributionCompany }, user.id);
     if (action === 'select_bank') {
       // سجل البنك المختار ونتيجة التعاقد (جدول bank_referrals يحفظ اختيار المصنع؛ لا إحالة ولا دراسة داخل المنصة — G-02).
-      await db.prepare(`INSERT INTO bank_referrals (id, applicationId, bankOrgId, referredAt, referredBy) VALUES (?, ?, ?, ?, ?)
+      await db.prepare(`INSERT INTO shams_bank_referrals (id, applicationId, bankOrgId, referredAt, referredBy) VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(applicationId) DO UPDATE SET bankOrgId = excluded.bankOrgId, referredAt = excluded.referredAt, referredBy = excluded.referredBy`)
         .run(`ref-${randomUUID()}`, cur.id, p.bankOrgId!, now, user.id);
       await writeSection(cur.id, 'bank_result', nextAttempt, { bankOrgId: p.bankOrgId }, user.id);
@@ -442,28 +442,28 @@ export async function performAction(user: UserInternal, appId: string, actionRaw
       }
     }
     if (action === 'record_contract') {
-      await db.prepare(`UPDATE bank_referrals SET contractStatus = 'contracted', contractDate = ?, contractAmount = ?, contractNotes = ?, outcomeRecordedBy = ?, outcomeRecordedAt = ? WHERE applicationId = ?`)
+      await db.prepare(`UPDATE shams_bank_referrals SET contractStatus = 'contracted', contractDate = ?, contractAmount = ?, contractNotes = ?, outcomeRecordedBy = ?, outcomeRecordedAt = ? WHERE applicationId = ?`)
         .run(p.contractDate!, p.contractAmount!, p.contractNotes ?? '', user.id, now, cur.id);
       await writeSection(cur.id, 'contract', nextAttempt, { contractStatus: 'contracted', contractDate: p.contractDate, contractAmount: p.contractAmount, contractNotes: p.contractNotes ?? '' }, user.id);
     }
     if (action === 'record_no_contract') {
-      await db.prepare(`UPDATE bank_referrals SET contractStatus = 'not_contracted', notContractedReason = ?, contractNotes = ?, outcomeRecordedBy = ?, outcomeRecordedAt = ? WHERE applicationId = ?`)
+      await db.prepare(`UPDATE shams_bank_referrals SET contractStatus = 'not_contracted', notContractedReason = ?, contractNotes = ?, outcomeRecordedBy = ?, outcomeRecordedAt = ? WHERE applicationId = ?`)
         .run(p.reason!, p.contractNotes ?? '', user.id, now, cur.id);
       await writeSection(cur.id, 'contract', nextAttempt, { contractStatus: 'not_contracted', notContractedReason: p.reason, contractNotes: p.contractNotes ?? '' }, user.id);
     }
     // ── مسار شركة توزيع الكهرباء: صف النتيجة (مقابل bank_referrals) ──
     if (action === 'select_distribution_path') {
-      await db.prepare('INSERT INTO distribution_contracts (id, applicationId, selectedAt, selectedBy) VALUES (?, ?, ?, ?)')
+      await db.prepare('INSERT INTO shams_distribution_contracts (id, applicationId, selectedAt, selectedBy) VALUES (?, ?, ?, ?)')
         .run(`dc-${randomUUID()}`, cur.id, now, user.id);
     }
     if (distributionDoc) {
-      await db.prepare(`UPDATE distribution_contracts SET submittedAt = ?, submittedBy = ?, submissionCount = submissionCount + 1, approvalDocumentId = ?, reviewStatus = 'pending'
+      await db.prepare(`UPDATE shams_distribution_contracts SET submittedAt = ?, submittedBy = ?, submissionCount = submissionCount + 1, approvalDocumentId = ?, reviewStatus = 'pending'
         WHERE applicationId = ?`).run(now, user.id, distributionDoc.id, cur.id);
     }
     if (distributionDecision) {
       const status = action === 'accept' ? 'approved' : 'rejected';
       const notes = (action === 'accept' ? p.note : p.reason) ?? '';
-      const r = await db.prepare(`UPDATE distribution_contracts SET reviewStatus = ?, decidedBy = ?, decidedAt = ?, decisionNotes = ? WHERE applicationId = ? AND reviewStatus = 'pending'`)
+      const r = await db.prepare(`UPDATE shams_distribution_contracts SET reviewStatus = ?, decidedBy = ?, decidedAt = ?, decisionNotes = ? WHERE applicationId = ? AND reviewStatus = 'pending'`)
         .run(status, user.id, now, notes, cur.id);
       if (Number(r.changes) !== 1) throw versionConflict();
       await writeSection(cur.id, 'contract', nextAttempt, { contractPath: 'distribution', contractStatus: action === 'accept' ? 'contracted' : 'not_contracted', decisionNotes: notes }, user.id);
@@ -538,5 +538,5 @@ async function recordRegistryConflict(user: UserInternal, app: AppRow, holder: A
 }
 
 async function hasPriorReview(appId: string): Promise<boolean> {
-  return Boolean(await getDb().prepare("SELECT 1 FROM application_transitions WHERE applicationId = ? AND fromState = 'ELECTRICITY_REVIEW' LIMIT 1").get(appId));
+  return Boolean(await getDb().prepare("SELECT 1 FROM shams_application_transitions WHERE applicationId = ? AND fromState = 'ELECTRICITY_REVIEW' LIMIT 1").get(appId));
 }

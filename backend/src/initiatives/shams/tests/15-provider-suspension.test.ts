@@ -51,7 +51,7 @@ test('during offer review: suspension returns the application to OFFER_UPLOAD wi
     assert.equal(stale.status, 409, 'a decision based on the old version is refused');
     // أثر جانبي: تدقيق + webhook + إشعارات
     assert.equal((await q("SELECT 1 FROM audit_logs WHERE action = 'application.provider_suspended_return' AND applicationId = ?", id)).length, 1);
-    assert.ok((await q("SELECT 1 FROM webhook_outbox WHERE payload LIKE '%provider_suspended_return%'")).length >= 1);
+    assert.ok((await q("SELECT 1 FROM shams_webhook_outbox WHERE payload LIKE '%provider_suspended_return%'")).length >= 1);
     const mails = (await outbox(id, 'app.provider_suspended')).map((r) => r.recipientAddress);
     assert.ok(mails.includes('factory@shams.local') && mails.includes('pmu@shams.local'), `recipients: ${mails}`);
     // مسار الاستكمال: بديل معتمد + عرض جديد → يعود إلى OFFER_REVIEW

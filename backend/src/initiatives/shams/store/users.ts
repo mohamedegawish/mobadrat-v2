@@ -1,45 +1,62 @@
+/**
+ * Shams users = platform accounts (core `users`) + their Shams membership (role + Shams organization).
+ * The exported functions keep the original application's signatures, so the workflow, visibility rules and services work
+ * unchanged on the "actor" (UserInternal) built here.
+ *
+ *  - One account per person: an e-mail that already has a platform account gets a Shams membership instead of a new account.
+ *  - isActive = account active AND membership active (suspending a Shams membership does not touch other initiatives).
+ *  - A platform super_admin without a membership acts as the Shams system administrator.
+ */
 import { getDb, nowIso } from '../db/sqlite.js';
-import { newId, likePattern, type SqlParam } from '../http/helpers.js';
-import type { OrgType, Role } from '../domain.js';
+import { likePattern, type SqlParam } from '../http/helpers.js';
+import { AppError } from '../http/errors.js';
+import { ORG_IDS, type OrgType, type Role } from '../domain.js';
 import type { FactoryAccountStatus } from './factories.js';
+import * as coreUsers from '../../../core/store/users.js';
+import { createMembership, getMembership, listMembershipsOfUser, setMembershipStatus } from '../../../core/store/memberships.js';
+import { MODULE_ID } from '../config.js';
 
 export interface UserInternal {
   id: string; organizationId: string; role: Role; email: string; nameAr: string; nameEn: string; phone: string;
   passwordHash: string; isActive: boolean; mustChangePassword: boolean; emailVerifiedAt: string | null;
   failedLoginCount: number; lastLoginAt: string | null; createdAt: string; updatedAt: string;
-  /** M1: يزيد عند الاستعادة/التغيير/إعادة التعيين/الاسترداد — كل access token أقدم يُرفض. */
   tokenVersion: number;
   organizationType: OrgType; organizationNameAr: string; organizationNameEn: string; organizationActive: boolean;
-  /** حالة قبول حساب المصنع (factories.accountStatus) — null لغير المصانع. */
   factoryAccountStatus: FactoryAccountStatus | null;
+  /** Platform role of the account (null for ordinary users). */
+  platformRole?: string | null;
+  /** True when the actor is a platform super admin acting as the Shams administrator (no membership). */
+  viaPlatformAdmin?: boolean;
 }
 
 export interface PublicUser {
   id: string; email: string; nameAr: string; nameEn: string; phone: string; role: Role; organizationId: string;
   organizationType: OrgType; organizationNameAr: string; organizationNameEn: string; isActive: boolean;
   mustChangePassword: boolean; emailVerified: boolean; lastLoginAt: string | null; createdAt: string;
-  /** H2: false = لم يُعيِّن صاحب الحساب كلمة مروره بعد (رابط التعيين على بريده). */
   passwordSet: boolean;
-  /** حساب المصنع: approved = دخول كامل؛ pending/correction = دخول مقيّد بتعديل الطلب؛ null لغير المصانع. */
   accountStatus: FactoryAccountStatus | null;
 }
 
-const SELECT = `SELECT u.*, o.type AS organizationType, o.nameAr AS organizationNameAr, o.nameEn AS organizationNameEn,
-  o.isActive AS organizationActive,
-  (SELECT f.accountStatus FROM factories f WHERE f.organizationId = u.organizationId) AS factoryAccountStatus
-  FROM users u JOIN organizations o ON o.id = u.organizationId`;
+const SELECT = `SELECT u.id, u.email, u.nameAr, u.nameEn, u.phone, u.passwordHash, u.isActive AS userActive, u.mustChangePassword,
+  u.emailVerifiedAt, u.failedLoginCount, u.lastLoginAt, u.tokenVersion, u.platformRole, u.createdAt, u.updatedAt,
+  m.role AS role, m.organizationId AS organizationId, m.status AS membershipStatus,
+  o.type AS organizationType, o.nameAr AS organizationNameAr, o.nameEn AS organizationNameEn, o.isActive AS organizationActive,
+  (SELECT f.accountStatus FROM shams_factories f WHERE f.organizationId = m.organizationId) AS factoryAccountStatus
+  FROM users u JOIN initiative_memberships m ON m.userId = u.id AND m.initiativeId = 'shams'
+  JOIN shams_organizations o ON o.id = m.organizationId`;
 
 function map(r: Record<string, unknown>): UserInternal {
   return {
     id: String(r.id), organizationId: String(r.organizationId), role: r.role as Role, email: String(r.email),
-    nameAr: String(r.nameAr), nameEn: String(r.nameEn ?? ''), phone: String(r.phone ?? ''), passwordHash: String(r.passwordHash),
-    isActive: r.isActive === 1, mustChangePassword: r.mustChangePassword === 1,
+    nameAr: String(r.nameAr), nameEn: String(r.nameEn ?? ''), phone: String(r.phone ?? ''), passwordHash: String(r.passwordHash ?? ''),
+    isActive: Number(r.userActive) === 1 && r.membershipStatus === 'active', mustChangePassword: Number(r.mustChangePassword) === 1,
     emailVerifiedAt: (r.emailVerifiedAt as string | null) ?? null, failedLoginCount: Number(r.failedLoginCount ?? 0),
     lastLoginAt: (r.lastLoginAt as string | null) ?? null, tokenVersion: Number(r.tokenVersion ?? 0),
     createdAt: String(r.createdAt), updatedAt: String(r.updatedAt),
     organizationType: r.organizationType as OrgType, organizationNameAr: String(r.organizationNameAr),
-    organizationNameEn: String(r.organizationNameEn), organizationActive: r.organizationActive === 1,
+    organizationNameEn: String(r.organizationNameEn), organizationActive: Number(r.organizationActive) === 1,
     factoryAccountStatus: (r.factoryAccountStatus as FactoryAccountStatus | null) ?? null,
+    platformRole: (r.platformRole as string | null) ?? null,
   };
 }
 
@@ -53,20 +70,29 @@ export function toPublicUser(u: UserInternal): PublicUser {
   };
 }
 
+/** The platform super admin as the Shams system administrator (organization org-admin). */
+export async function platformAdminActor(core: coreUsers.CoreUser): Promise<UserInternal> {
+  const o = await getDb().prepare('SELECT * FROM shams_organizations WHERE id = ?').get(ORG_IDS.admin);
+  return {
+    id: core.id, organizationId: ORG_IDS.admin, role: 'system_admin', email: core.email, nameAr: core.nameAr, nameEn: core.nameEn, phone: core.phone,
+    passwordHash: core.passwordHash, isActive: core.isActive, mustChangePassword: core.mustChangePassword, emailVerifiedAt: core.emailVerifiedAt,
+    failedLoginCount: core.failedLoginCount, lastLoginAt: core.lastLoginAt, createdAt: core.createdAt, updatedAt: core.updatedAt, tokenVersion: core.tokenVersion,
+    organizationType: 'admin', organizationNameAr: String(o?.nameAr ?? 'إدارة النظام'), organizationNameEn: String(o?.nameEn ?? 'System Administration'),
+    organizationActive: true, factoryAccountStatus: null, platformRole: core.platformRole, viaPlatformAdmin: true,
+  };
+}
+
 export async function getUserById(id: string): Promise<UserInternal | null> {
-  const r = await getDb().prepare(`${SELECT} WHERE u.id = ?`).get(id) as Record<string, unknown> | undefined;
-  return r ? map(r) : null;
+  const r = await getDb().prepare(`${SELECT} WHERE u.id = ?`).get(id);
+  if (r) return map(r);
+  const core = await coreUsers.getUserById(id);
+  return core && core.platformRole === 'super_admin' ? platformAdminActor(core) : null;
 }
 
+/** The Shams user with this e-mail (an account WITHOUT a Shams membership is not a Shams user). */
 export async function getUserByEmail(email: string): Promise<UserInternal | null> {
-  const r = await getDb().prepare(`${SELECT} WHERE u.email = ? COLLATE NOCASE`).get(email.trim()) as Record<string, unknown> | undefined;
+  const r = await getDb().prepare(`${SELECT} WHERE u.email = ? COLLATE NOCASE`).get(email.trim());
   return r ? map(r) : null;
-}
-
-export async function getUserByTokenHash(column: 'emailVerifyTokenHash' | 'passwordResetTokenHash', hash: string): Promise<(UserInternal & { tokenExpiresAt: string | null }) | null> {
-  const exp = column === 'emailVerifyTokenHash' ? 'emailVerifyExpiresAt' : 'passwordResetExpiresAt';
-  const r = await getDb().prepare(`${SELECT} WHERE u.${column} = ?`).get(hash) as Record<string, unknown> | undefined;
-  return r ? { ...map(r), tokenExpiresAt: (r[exp] as string | null) ?? null } : null;
 }
 
 export interface CreateUserInput {
@@ -74,107 +100,102 @@ export interface CreateUserInput {
   mustChangePassword?: boolean; emailVerified?: boolean; createdBy?: string | null; id?: string;
 }
 
-export async function createUser(input: CreateUserInput): Promise<UserInternal> {
-  const id = input.id ?? newId('usr');
-  const now = nowIso();
-  await getDb().prepare(`INSERT INTO users (id, organizationId, role, email, nameAr, nameEn, phone, passwordHash, isActive,
-      mustChangePassword, emailVerifiedAt, createdBy, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`).run(
-    id, input.organizationId, input.role, input.email.trim(), input.nameAr, input.nameEn ?? '', input.phone ?? '', input.passwordHash,
-    input.mustChangePassword ? 1 : 0, input.emailVerified ? now : null, input.createdBy ?? null, now, now,
-  );
-  return (await getUserById(id))!;
+/**
+ * Gives a person a Shams role: reuses the platform account of the e-mail when it exists (adds the membership), otherwise
+ * creates the account. Fails when the account already has a Shams membership.
+ */
+export async function createUser(input: CreateUserInput): Promise<UserInternal & { existingAccount: boolean }> {
+  let core = await coreUsers.getUserByEmail(input.email);
+  const existingAccount = Boolean(core);
+  if (core && await getMembership(core.id, MODULE_ID)) {
+    throw new AppError(409, 'EMAIL_TAKEN', 'لهذا البريد صلاحية في المبادرة بالفعل.', 'This email already has a role in this initiative.');
+  }
+  if (!core) {
+    core = await coreUsers.createCoreUser({
+      id: input.id, email: input.email.trim().toLowerCase(), nameAr: input.nameAr, nameEn: input.nameEn, phone: input.phone,
+      passwordHash: input.passwordHash, mustChangePassword: input.mustChangePassword, emailVerified: input.emailVerified, createdBy: input.createdBy ?? null,
+    });
+  }
+  await createMembership({ userId: core.id, initiativeId: MODULE_ID, role: input.role, organizationId: input.organizationId, createdBy: input.createdBy ?? null });
+  return { ...(await getUserById(core.id))!, existingAccount };
 }
 
+/** Name/phone are the person's platform account data; isActive is the Shams membership only. */
 export async function updateUserProfile(id: string, patch: { nameAr?: string; nameEn?: string; phone?: string; isActive?: boolean }): Promise<UserInternal | null> {
   const cur = await getUserById(id);
-  if (!cur) return null;
-  await getDb().prepare('UPDATE users SET nameAr = ?, nameEn = ?, phone = ?, isActive = ?, updatedAt = ? WHERE id = ?').run(
-    patch.nameAr ?? cur.nameAr, patch.nameEn ?? cur.nameEn, patch.phone ?? cur.phone, (patch.isActive ?? cur.isActive) ? 1 : 0, nowIso(), id,
-  );
+  if (!cur || cur.viaPlatformAdmin) return cur;
+  await coreUsers.updateCoreUser(id, { nameAr: patch.nameAr, nameEn: patch.nameEn, phone: patch.phone });
+  if (patch.isActive !== undefined) {
+    const m = await getMembership(id, MODULE_ID);
+    if (m) await setMembershipStatus(m.id, patch.isActive ? 'active' : 'suspended');
+  }
   return await getUserById(id);
 }
 
-export async function setPassword(id: string, passwordHash: string, mustChange: boolean): Promise<void> {
-  await getDb().prepare(`UPDATE users SET passwordHash = ?, mustChangePassword = ?, passwordResetTokenHash = NULL,
-    passwordResetExpiresAt = NULL, failedLoginCount = 0, lockedUntil = NULL, updatedAt = ? WHERE id = ?`).run(passwordHash, mustChange ? 1 : 0, nowIso(), id);
-}
-
-/** M1: يُبطل كل access token صادر للمستخدم حتى الآن (يُرفض في middleware/auth من الطلب التالي). */
-export async function bumpTokenVersion(id: string): Promise<void> {
-  await getDb().prepare('UPDATE users SET tokenVersion = tokenVersion + 1, updatedAt = ? WHERE id = ?').run(nowIso(), id);
-}
-
-/** H2: كلمة مرور غير قابلة للاستخدام حتى يعيّنها صاحب البريد بالرابط (لا كلمة مؤقتة يعرفها أحد). */
-export async function clearPassword(id: string): Promise<void> {
-  await getDb().prepare(`UPDATE users SET passwordHash = '', mustChangePassword = 0, failedLoginCount = 0, updatedAt = ? WHERE id = ?`).run(nowIso(), id);
-}
-
-/** تغيير بريد الحساب (استرداد إداري) — يُلغى التفعيل حتى يُفتح رابط البريد الجديد، وتُمسح روابط الاستعادة. */
-export async function changeEmail(id: string, email: string): Promise<void> {
-  await getDb().prepare(`UPDATE users SET email = ?, emailVerifiedAt = NULL, passwordResetTokenHash = NULL, passwordResetExpiresAt = NULL, updatedAt = ? WHERE id = ?`)
-    .run(email, nowIso(), id);
-}
-
-export async function setVerifyToken(id: string, hash: string, expiresAt: string): Promise<void> {
-  await getDb().prepare('UPDATE users SET emailVerifyTokenHash = ?, emailVerifyExpiresAt = ?, updatedAt = ? WHERE id = ?').run(hash, expiresAt, nowIso(), id);
-}
-
-export async function markEmailVerified(id: string): Promise<void> {
-  const now = nowIso();
-  await getDb().prepare('UPDATE users SET emailVerifiedAt = ?, emailVerifyTokenHash = NULL, emailVerifyExpiresAt = NULL, updatedAt = ? WHERE id = ?').run(now, now, id);
-}
-
-export async function setResetToken(id: string, hash: string, expiresAt: string): Promise<void> {
-  await getDb().prepare('UPDATE users SET passwordResetTokenHash = ?, passwordResetExpiresAt = ?, updatedAt = ? WHERE id = ?').run(hash, expiresAt, nowIso(), id);
-}
-
 /**
- * M3: لا قفل للحساب. failedLoginCount = محاولات فاشلة متتالية على الحساب من كل العناوين — يُستخدم لإبلاغ صاحبه فقط.
- * التأخير نفسه لكل (بريد، IP) في store/loginThrottle.ts.
+ * Identity operations change the person's platform account (all initiatives). They are allowed from Shams only for accounts
+ * that exist for Shams alone; others are handled by the platform administration.
  */
-export async function recordFailedLogin(id: string): Promise<number> {
-  await getDb().prepare('UPDATE users SET failedLoginCount = failedLoginCount + 1, updatedAt = ? WHERE id = ?').run(nowIso(), id);
-  return (await getDb().prepare('SELECT failedLoginCount AS n FROM users WHERE id = ?').get(id) as { n: number } | undefined)?.n ?? 0;
+async function assertShamsOnlyAccount(id: string): Promise<void> {
+  const core = await coreUsers.getUserById(id);
+  const others = (await listMembershipsOfUser(id)).filter((m) => m.initiativeId !== MODULE_ID);
+  if (core?.platformRole || others.length) {
+    throw new AppError(409, 'MANAGED_BY_PLATFORM', 'هذا الحساب مستخدم في مبادرات أخرى على المنصة — تتولى إدارة المنصة تغيير بياناته الأساسية.',
+      'This account is used by other initiatives on the platform — its identity data is managed by the platform administration.');
+  }
 }
 
-export async function recordSuccessfulLogin(id: string): Promise<void> {
-  const now = nowIso();
-  await getDb().prepare('UPDATE users SET failedLoginCount = 0, lockedUntil = NULL, lastLoginAt = ?, updatedAt = ? WHERE id = ?').run(now, now, id);
+export async function setPassword(id: string, passwordHash: string, mustChange: boolean): Promise<void> {
+  await coreUsers.setPassword(id, passwordHash, mustChange);
 }
+
+export async function bumpTokenVersion(id: string): Promise<void> {
+  await coreUsers.bumpTokenVersion(id);
+}
+
+export async function clearPassword(id: string): Promise<void> {
+  await assertShamsOnlyAccount(id);
+  await coreUsers.clearPassword(id);
+}
+
+export async function changeEmail(id: string, email: string): Promise<void> {
+  await assertShamsOnlyAccount(id);
+  await coreUsers.changeEmail(id, email);
+}
+
+export const setVerifyToken = coreUsers.setVerifyToken;
+export const markEmailVerified = coreUsers.markEmailVerified;
+export const setResetToken = coreUsers.setResetToken;
+export const recordFailedLogin = coreUsers.recordFailedLogin;
+export const recordSuccessfulLogin = coreUsers.recordSuccessfulLogin;
+export const getUserNamesByIds = coreUsers.getUserNamesByIds;
 
 export async function listUsers(f: { q?: string; role?: Role; organizationId?: string; excludeFactories?: boolean }, page: number, pageSize: number) {
   const where: string[] = [];
   const params: SqlParam[] = [];
-  if (f.role) { where.push('u.role = ?'); params.push(f.role); }
-  if (f.organizationId) { where.push('u.organizationId = ?'); params.push(f.organizationId); }
-  if (f.excludeFactories) where.push("u.role <> 'factory_owner'");
+  if (f.role) { where.push('m.role = ?'); params.push(f.role); }
+  if (f.organizationId) { where.push('m.organizationId = ?'); params.push(f.organizationId); }
+  if (f.excludeFactories) where.push("m.role <> 'factory_owner'");
   if (f.q) {
     where.push("(u.nameAr LIKE ? ESCAPE '\\' OR u.nameEn LIKE ? ESCAPE '\\' OR u.email LIKE ? ESCAPE '\\')");
     const p = likePattern(f.q); params.push(p, p, p);
   }
   const w = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const db = getDb();
-  const total = (await db.prepare(`SELECT COUNT(*) AS n FROM users u ${w}`).get(...params) as { n: number }).n;
-  const rows = (await db.prepare(`${SELECT} ${w} ORDER BY u.createdAt DESC LIMIT ? OFFSET ?`).all(...params, pageSize, (page - 1) * pageSize) as Array<Record<string, unknown>>).map(map);
+  const total = Number((await db.prepare(`SELECT COUNT(*) AS n FROM users u JOIN initiative_memberships m ON m.userId = u.id AND m.initiativeId = 'shams' ${w}`).get(...params) as { n: number }).n);
+  const rows = (await db.prepare(`${SELECT} ${w} ORDER BY u.createdAt DESC LIMIT ? OFFSET ?`).all(...params, pageSize, (page - 1) * pageSize)).map(map);
   return { total, rows };
 }
 
-/** المستخدمون النشطون لجهة (اختياريًا بدور معين) — مستلمو الإشعارات. */
+/** Active users of an organization (optionally with a role) — notification recipients. */
 export async function activeUsersOf(organizationId: string, role?: Role): Promise<UserInternal[]> {
   const params: SqlParam[] = [organizationId];
-  let sql = `${SELECT} WHERE u.organizationId = ? AND u.isActive = 1`;
-  if (role) { sql += ' AND u.role = ?'; params.push(role); }
-  return (await getDb().prepare(sql).all(...params) as Array<Record<string, unknown>>).map(map);
+  let sql = `${SELECT} WHERE m.organizationId = ? AND u.isActive = 1 AND m.status = 'active'`;
+  if (role) { sql += ' AND m.role = ?'; params.push(role); }
+  return (await getDb().prepare(sql).all(...params)).map(map);
 }
 
-/** أسماء المستخدمين (nameAr) لعدة معرّفات في استعلام واحد — لعرض «رفعه/قرره» في تفاصيل الطلب وسجلّه. */
-export async function getUserNamesByIds(ids: Set<string>): Promise<Map<string, string>> {
-  const list = [...ids].filter(Boolean);
-  const out = new Map<string, string>();
-  for (let i = 0; i < list.length; i += 500) {
-    const chunk = list.slice(i, i + 500);
-    const rows = await getDb().prepare(`SELECT id, nameAr FROM users WHERE id IN (${chunk.map(() => '?').join(',')})`).all(...chunk) as Array<{ id: string; nameAr: string }>;
-    for (const r of rows) out.set(r.id, r.nameAr);
-  }
-  return out;
+/** Touches the account's updatedAt (kept for parity with the original store API). */
+export async function touchUser(id: string): Promise<void> {
+  await getDb().prepare('UPDATE users SET updatedAt = ? WHERE id = ?').run(nowIso(), id);
 }

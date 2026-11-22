@@ -8,7 +8,7 @@ import { isolateTestEnv } from './helpers.js';
 
 const env = isolateTestEnv('contracts');
 after(async () => { await env.cleanup(); });
-const contractsDir = path.resolve(import.meta.dirname, '..', '..', 'contracts');
+const contractsDir = path.resolve(import.meta.dirname, '..', 'contracts');
 
 function routesOf(router: Router): string[] {
   const out: string[] = [];
@@ -29,23 +29,25 @@ function specOps(file: string): string[] {
 }
 
 test('site API: Express routes ⇔ contracts/openapi.json ⇔ ROUTES', async () => {
+  // The module's API (mounted at /api/v1/i/shams): its private router and its public router under /public.
   const mods = await Promise.all([
-    import('../src/routes/health.js'), import('../src/routes/auth.js'), import('../src/routes/meta.js'), import('../src/routes/factory.js'),
-    import('../src/routes/applications.js'), import('../src/routes/providers.js'), import('../src/routes/reports.js'), import('../src/routes/admin.js'),
-    import('../src/routes/registry.js'), import('../src/routes/approvals.js'), import('../src/routes/notifications.js'),
+    import('../routes/auth.js'), import('../routes/meta.js'), import('../routes/factory.js'),
+    import('../routes/applications.js'), import('../routes/providers.js'), import('../routes/reports.js'), import('../routes/admin.js'),
+    import('../routes/registry.js'), import('../routes/approvals.js'), import('../routes/notifications.js'),
   ]);
-  const routers = [mods[0].healthRouter, mods[1].authRouter, mods[2].metaRouter, mods[3].factoryRouter, mods[4].applicationsRouter, mods[5].providersRouter, mods[6].reportsRouter, mods[7].adminRouter, mods[8].registryRouter, mods[9].approvalsRouter, mods[10].notificationsRouter];
-  const express = [...new Set([...routers.flatMap(routesOf), 'GET /openapi.json'])].sort();
+  const routers = [mods[0].meRouter, mods[1].metaRouter, mods[2].factoryRouter, mods[3].applicationsRouter, mods[4].providersRouter, mods[5].reportsRouter, mods[6].adminRouter, mods[7].registryRouter, mods[8].approvalsRouter, mods[9].notificationsRouter];
+  const publicRoutes = [mods[0].publicAuthRouter, mods[1].metaRouter].flatMap(routesOf).map((r) => r.replace(' /', ' /public/'));
+  const express = [...new Set([...routers.flatMap(routesOf), ...publicRoutes])].sort();
   const documented = specOps('openapi.json');
   assert.deepEqual(express.filter((r) => !documented.includes(r)), [], 'undocumented routes');
   assert.deepEqual(documented.filter((r) => !express.includes(r)), [], 'documented but missing routes');
-  const { ROUTES } = await import('../../contracts/api.contracts.js');
-  const fromContract = Object.values(ROUTES).map((r) => r.replace('/api/v1', '').replace(/:(\w+)/g, '{$1}')).sort();
+  const { ROUTES } = await import('../contracts/api.contracts.js');
+  const fromContract = Object.values(ROUTES).map((r) => r.replace('/api/v1/i/shams', '').replace(/:(\w+)/g, '{$1}')).sort();
   assert.deepEqual(fromContract, express, 'ROUTES constant matches the server');
 });
 
 test('integration API: Express routes ⇔ contracts/integration.openapi.json, read-only on applications', async () => {
-  const { integrationRouter } = await import('../src/integration/router.js');
+  const { integrationRouter } = await import('../integration/router.js');
   const express = routesOf(integrationRouter).sort();
   const documented = specOps('integration.openapi.json');
   assert.deepEqual(express, documented);
@@ -53,8 +55,8 @@ test('integration API: Express routes ⇔ contracts/integration.openapi.json, re
 });
 
 test('states and actions in the contract match the workflow source of truth', async () => {
-  const contract = await import('../../contracts/api.contracts.js');
-  const wf = await import('../src/workflow/shamsWorkflow.js');
+  const contract = await import('../contracts/api.contracts.js');
+  const wf = await import('../workflow/shamsWorkflow.js');
   assert.deepEqual([...contract.APPLICATION_STATES], [...wf.APPLICATION_STATES]);
   assert.deepEqual([...contract.ACTIONS], [...wf.ACTIONS]);
   assert.deepEqual([...contract.TERMINAL_STATES], [...wf.TERMINAL_STATES]);
@@ -63,7 +65,7 @@ test('states and actions in the contract match the workflow source of truth', as
 });
 
 test('transition table: every non-terminal state has a way forward and only listed roles act', async () => {
-  const wf = await import('../src/workflow/shamsWorkflow.js');
+  const wf = await import('../workflow/shamsWorkflow.js');
   for (const s of wf.APPLICATION_STATES) {
     if (wf.isTerminal(s)) { assert.equal(wf.transitionsFrom(s).length, 0, `${s} is terminal`); continue; }
     // G-02: a retired state is entered by no transition and leads nowhere except withdrawal (the migration moved every application out of it).
@@ -75,6 +77,6 @@ test('transition table: every non-terminal state has a way forward and only list
   }
   assert.ok(!wf.TRANSITIONS.some((t) => t.actorRole === 'system_admin'), 'admin has no decision');
   assert.ok(!wf.TRANSITIONS.some((t) => t.action === 'reject' && t.actorRole !== 'imc_reviewer'), 'only IMC can reject');
-  const policy = (await import('../src/config/shamsPolicy.js')).shamsPolicy;
+  const policy = (await import('../config/shamsPolicy.js')).shamsPolicy;
   for (const k of ['companyName', 'industrialRegistryNumber', 'electricityBills', 'ownershipProofFile'] as const) assert.equal(typeof policy.requiredFields[k], 'boolean');
 });

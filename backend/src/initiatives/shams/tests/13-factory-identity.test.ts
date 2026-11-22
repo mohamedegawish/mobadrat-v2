@@ -33,7 +33,7 @@ test('I3: duplicate registry number → conflict recorded, IMC and PMU notified 
   assert.match(r.json.messageAr, /أُبلغت IMC ووحدة إدارة المبادرة/);
   assert.match(r.json.messageAr, /فاعترض/);
   assert.equal((await act(c.factory2, draft, 'submit')).status, 409);
-  const rows = await q<{ attempts: number }>('SELECT attempts FROM registry_conflicts WHERE attemptedApplicationId = ? AND holdingApplicationId = ?', draft, holder);
+  const rows = await q<{ attempts: number }>('SELECT attempts FROM shams_registry_conflicts WHERE attemptedApplicationId = ? AND holdingApplicationId = ?', draft, holder);
   assert.equal(rows.length, 1);
   assert.equal(rows[0].attempts, 2);
   const mails = await q<{ recipientAddress: string; body: string }>("SELECT recipientAddress, body FROM notification_outbox WHERE templateKey = 'ops.registry_conflict' AND applicationId = ?", holder);
@@ -79,7 +79,7 @@ test('H3: IMC rejection for registry_ownership_mismatch blocks the NUMBER for ev
   assert.equal((await c.admin.get('/registry-blocks')).status, 403);
   assert.equal((await c.imc.post(`/registry-blocks/${block.id}/release`, { reason: 'محاولة من IMC للرفع', reference: 'REF-1', allowedFactoryId: 'x' })).status, 403);
   assert.equal((await c.pmu.post(`/registry-blocks/${block.id}/release`, { reason: 'قصير' })).status, 400, 'reason, reference and the allowed factory are required');
-  const ownerFactory = (await q<{ id: string }>('SELECT id FROM factories WHERE organizationId = ?', c.factory2.user.organizationId))[0].id;
+  const ownerFactory = (await q<{ id: string }>('SELECT id FROM shams_factories WHERE organizationId = ?', c.factory2.user.organizationId))[0].id;
   const body = { reason: 'ثبت التفويض بخطاب رسمي من المنشأة', reference: 'PMU-2026-17' };
   assert.equal((await c.pmu.post(`/registry-blocks/${block.id}/release`, { ...body, allowedFactoryId: 'fac-unknown' })).status, 400);
   const rel = await c.pmu.post(`/registry-blocks/${block.id}/release`, { ...body, allowedFactoryId: ownerFactory });
@@ -93,7 +93,7 @@ test('H3: IMC rejection for registry_ownership_mismatch blocks the NUMBER for ev
 });
 
 async function flushMail() {
-  const { processNotifications } = await import('../src/jobs/notificationWorker.js');
+  const { processNotifications } = await import('../jobs/notificationWorker.js');
   await processNotifications(200);
 }
 
@@ -115,10 +115,10 @@ test('H4: email recovery = admin request with official PDF → PMU approval → 
   assert.equal((await q<{ email: string }>('SELECT email FROM users WHERE id = ?', uid))[0].email, DEV.factory2, 'nothing changes at request time');
   assert.equal((await c.admin.upload('/recovery-requests', fields, PDF)).status, 409, 'one open request per account');
   await flushMail();
-  const cancelMail = sentMails.find((m) => m.to.includes(DEV.factory2) && /#cancel-recovery\/[a-f0-9]{64}/.test(m.html));
+  const cancelMail = sentMails.find((m) => m.to.includes(DEV.factory2) && /cancel-recovery\/[a-f0-9]{64}/.test(m.html));
   assert.ok(cancelMail, 'owner told on the CURRENT address with a one-time cancel link');
   assert.ok((await q("SELECT 1 FROM notification_outbox WHERE templateKey = 'ops.recovery_pending' AND recipientAddress = 'pmu@shams.local'")).length >= 1, 'PMU notified');
-  const cancelToken = cancelMail!.html.match(/#cancel-recovery\/([a-f0-9]{64})/)![1];
+  const cancelToken = cancelMail!.html.match(/cancel-recovery\/([a-f0-9]{64})/)![1];
   assert.equal((await new Client(srv.base).post('/auth/recovery/cancel', { token: cancelToken })).status, 200);
   assert.equal((await new Client(srv.base).post('/auth/recovery/cancel', { token: cancelToken })).status, 400, 'single use');
   assert.equal((await c.pmu.post(`/recovery-requests/${r1.json.data.id}/approve`, {})).status, 409, 'closed request cannot be approved');
@@ -136,7 +136,7 @@ test('H4: email recovery = admin request with official PDF → PMU approval → 
   assert.equal(approved.json.data.status, 'cooling');
   const hours = (Date.parse(approved.json.data.coolingEndsAt) - Date.now()) / 3_600_000;
   assert.ok(hours > 47.5 && hours <= 48.01, `cooling window ≈ 48h, got ${hours}`);
-  const { executeDueRecoveries } = await import('../src/services/accountRecovery.js');
+  const { executeDueRecoveries } = await import('../services/accountRecovery.js');
   assert.equal(await executeDueRecoveries(Date.now() + 3_600_000), 0, 'nothing executes during the cooling window');
   assert.equal((await q<{ email: string }>('SELECT email FROM users WHERE id = ?', uid))[0].email, DEV.factory2);
   assert.equal((await owner.get('/auth/me')).status, 200, 'owner session still alive during cooling');
@@ -176,7 +176,7 @@ test('M11 + I9: factory notifications go to the verified account only; receipt o
 });
 
 test('I9 + M7: support contact shown only when configured; no "use the website" line; English summary has no Arabic free text', async () => {
-  const { renderTemplate } = await import('../src/notifications/templates.js');
+  const { renderTemplate } = await import('../notifications/templates.js');
   const base = { appId: 'app-1', number: 'SHAMS-2026-00001', companyName: 'مصنع', reason: 'سبب عربي للرفض' };
   const none = renderTemplate('app.rejected', base).html;
   assert.ok(!none.includes('للاستفسار استخدم الموقع'));
@@ -227,7 +227,7 @@ test('M8: resubmitting a correction with untouched items is flagged (warning onl
 });
 
 test('B3: the public journey no longer names the proposed electricity reviewer', () => {
-  const content = fs.readFileSync(path.resolve(import.meta.dirname, '..', '..', 'frontend', 'src', 'content', 'shams.ts'), 'utf8');
+  const content = fs.readFileSync(path.resolve(import.meta.dirname, '..', '..', '..', '..', '..', 'frontend', 'src', 'initiatives', 'shams', 'content', 'shams.ts'), 'utf8');
   assert.ok(!content.includes('وتراجعها وحدة إدارة المبادرة'));
   assert.ok(!content.includes('reviewed by the PMU'));
 });

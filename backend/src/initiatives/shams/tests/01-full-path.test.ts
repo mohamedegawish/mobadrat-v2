@@ -19,7 +19,7 @@ async function expectStep(viewer: Client, id: string, state: string, responsible
   assert.equal(app.state, state, `state should be ${state}`);
   assert.equal(app.responsible.type, responsibleType, `responsible should be ${responsibleType}`);
   const rows = await q<{ toState: string; action: string; actorRole: string; attempt: number }>(
-    'SELECT toState, action, actorRole, attempt FROM application_transitions WHERE applicationId = ? ORDER BY createdAt DESC, rowid DESC LIMIT 1', id);
+    'SELECT toState, action, actorRole, attempt FROM shams_application_transitions WHERE applicationId = ? ORDER BY createdAt DESC, rowid DESC LIMIT 1', id);
   assert.equal(rows[0].toState, state);
   assert.equal(rows[0].action, lastAction);
   const audit = await q('SELECT 1 FROM audit_logs WHERE applicationId = ? AND action = ?', id, `application.${lastAction}`);
@@ -115,17 +115,17 @@ test('full path DRAFT → CONTRACTED', async () => {
   assert.ok(closed.some((n) => n.recipientAddress === 'pmu@shams.local'));
 
   // السجل التاريخي كامل ومرتب
-  const history = await q<{ fromState: string; toState: string }>('SELECT fromState, toState FROM application_transitions WHERE applicationId = ? ORDER BY createdAt, rowid', id);
+  const history = await q<{ fromState: string; toState: string }>('SELECT fromState, toState FROM shams_application_transitions WHERE applicationId = ? ORDER BY createdAt, rowid', id);
   assert.deepEqual(history.map((h) => h.toState), [
     'IMC_REVIEW', 'ENCPC_REVIEW', 'PROVIDER_SELECTION', 'OFFER_UPLOAD', 'OFFER_REVIEW', 'ELECTRICITY_UPLOAD', 'ELECTRICITY_REVIEW', 'CONTRACT_OUTCOME', 'CONTRACT_OUTCOME', 'CONTRACTED',
   ]);
   // webhook واحد لكل انتقال (skipped لأن الربط غير مضبوط — الموقع يعمل بدونه)
-  const hooks = await q<{ status: string }>("SELECT w.status FROM webhook_outbox w JOIN application_transitions t ON t.id = w.transitionId WHERE t.applicationId = ?", id);
+  const hooks = await q<{ status: string }>("SELECT w.status FROM shams_webhook_outbox w JOIN shams_application_transitions t ON t.id = w.transitionId WHERE t.applicationId = ?", id);
   assert.equal(hooks.length, 10);
   assert.ok(hooks.every((h) => h.status === 'skipped'));
 
   // الإرسال الفعلي عبر العامل (القرار لم ينتظره)
-  const { processNotifications } = await import('../src/jobs/notificationWorker.js');
+  const { processNotifications } = await import('../jobs/notificationWorker.js');
   const result = await processNotifications(500);
   assert.ok(result.sent > 0);
   const pending = await q("SELECT 1 FROM notification_outbox WHERE status = 'pending'");

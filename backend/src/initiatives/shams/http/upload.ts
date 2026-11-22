@@ -11,8 +11,11 @@ import { config, maxFileSizeBytes } from '../config.js';
 import { shamsPolicy } from '../config/shamsPolicy.js';
 import { AppError, apiError } from './errors.js';
 
+/** This module's files live under <UPLOAD_DIR>/shams/; the temp folder is the platform's. */
+const MODULE_DIR = 'shams';
+
 export function uploadRoot(): string {
-  const dir = path.join(config.uploadDir, 'documents');
+  const dir = path.join(config.uploadDir, MODULE_DIR, 'documents');
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -176,7 +179,7 @@ export function sendStoredPdf(res: Response, storedName: string, originalName: s
 // ── شعارات مقدمي الخدمة: صور فقط ─────────────────────────────────────────────
 
 export function logoRoot(): string {
-  const dir = path.join(config.uploadDir, 'providers');
+  const dir = path.join(config.uploadDir, MODULE_DIR, 'providers');
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }

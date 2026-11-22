@@ -52,9 +52,9 @@ test('?mine=1 pages are exactly the "awaiting me" rows of the full list, in the 
 });
 
 test('list items, details and the factory profile carry the same organizations as an unbatched lookup', async () => {
-  const { buildListItem } = await import('../src/workflow/applicationView.js');
-  const { getApplication } = await import('../src/store/applications.js');
-  const { getUserById } = await import('../src/store/users.js');
+  const { buildListItem } = await import('../workflow/applicationView.js');
+  const { getApplication } = await import('../store/applications.js');
+  const { getUserById } = await import('../store/users.js');
   for (const client of [c.imc, c.pmu, c.admin, c.factory]) {
     const user = (await getUserById(client.user.id))!;
     const items = client === c.factory ? (await client.get('/factory/profile')).json.data.applications : (await list(client, 'pageSize=100')).items;
@@ -67,11 +67,11 @@ test('list items, details and the factory profile carry the same organizations a
 });
 
 test('the export rows equal the former per-row computation (referral, returns, provider, bank, responsible)', async () => {
-  const { reportRows } = await import('../src/services/reports.js');
-  const { listApplications, getBankReferral, listTransitions } = await import('../src/store/applications.js');
-  const { getProvider } = await import('../src/store/providers.js');
-  const { getOrganization } = await import('../src/store/organizations.js');
-  const { responsibleInfo, returnCounts } = await import('../src/workflow/applicationView.js');
+  const { reportRows } = await import('../services/reports.js');
+  const { listApplications, getBankReferral, listTransitions } = await import('../store/applications.js');
+  const { getProvider } = await import('../store/providers.js');
+  const { getOrganization } = await import('../store/organizations.js');
+  const { responsibleInfo, returnCounts } = await import('../workflow/applicationView.js');
   const apps = (await listApplications({ scopeSql: '1 = 1', scopeParams: [], includeDrafts: true }, 1, 1, true)).rows;
   assert.ok(apps.length >= 4);
   const rows = await reportRows(apps, true);

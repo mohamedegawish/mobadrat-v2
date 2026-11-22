@@ -22,9 +22,9 @@ export function listScope(user: UserInternal): { sql: string; params: SqlParam[]
     // SQLite planned the EXISTS through idx_transitions_to and rescanned every IMC_REVIEW transition for each application:
     // quadratic (100 ms per list at 1,000 applications, more for the dashboard), all on the single event loop.
     case 'imc_reviewer':
-      return { sql: "a.id IN (SELECT t.applicationId FROM application_transitions t WHERE t.toState = 'IMC_REVIEW' AND t.fromState <> t.toState)", params: [], includeDrafts: false };
+      return { sql: "a.id IN (SELECT t.applicationId FROM shams_application_transitions t WHERE t.toState = 'IMC_REVIEW' AND t.fromState <> t.toState)", params: [], includeDrafts: false };
     case 'encpc_reviewer':
-      return { sql: "a.id IN (SELECT t.applicationId FROM application_transitions t WHERE t.toState = 'ENCPC_REVIEW' AND t.fromState <> t.toState)", params: [], includeDrafts: false };
+      return { sql: "a.id IN (SELECT t.applicationId FROM shams_application_transitions t WHERE t.toState = 'ENCPC_REVIEW' AND t.fromState <> t.toState)", params: [], includeDrafts: false };
     // bank_reviewer: دور ملغى (G-02) — لا يرى شيئًا (يقع في default).
     case 'pmu_reviewer':
     case 'system_admin':

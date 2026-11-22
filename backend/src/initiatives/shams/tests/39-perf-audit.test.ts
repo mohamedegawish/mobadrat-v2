@@ -29,7 +29,7 @@ after(async () => { await srv.close(); await env.cleanup(); });
 
 /** Counts statements and returned rows while `fn` runs (the server runs in this process). */
 async function measure<T>(fn: () => Promise<T>): Promise<{ out: T; queries: number; rows: number }> {
-  const { getDb } = await import('../src/db/sqlite.js');
+  const { getDb } = await import('../db/sqlite.js');
   const db = getDb() as unknown as Record<string, unknown> & { prepare: (sql: string) => Record<string, unknown> };
   const own = Object.prototype.hasOwnProperty.call(db, 'prepare');
   const real = db.prepare;
@@ -57,14 +57,14 @@ async function measure<T>(fn: () => Promise<T>): Promise<{ out: T; queries: numb
 
 /** N terminal (rejected) applications that the IMC, PMU and admin scopes all contain — history, as in production data. */
 async function addTerminalHistory(n: number) {
-  const [{ fid }] = await q<{ fid: string }>('SELECT f.id AS fid FROM factories f JOIN users u ON u.organizationId = f.organizationId WHERE u.email = ?', DEV.factory);
+  const [{ fid }] = await q<{ fid: string }>(`SELECT f.id AS fid FROM shams_factories f JOIN initiative_memberships m ON m.organizationId = f.organizationId AND m.initiativeId = 'shams' JOIN users u ON u.id = m.userId WHERE u.email = ?`, DEV.factory);
   const t = '2025-01-01T00:00:00.000Z';
   for (let i = 0; i < n; i++) {
     const id = `app-hist-${seq}-${i}`;
-    await q(`INSERT INTO applications (id, number, factoryId, state, version, attempt, companyName, governorate, industrialZone, submittedAt, stateEnteredAt, closedAt, createdAt, updatedAt)
+    await q(`INSERT INTO shams_applications (id, number, factoryId, state, version, attempt, companyName, governorate, industrialZone, submittedAt, stateEnteredAt, closedAt, createdAt, updatedAt)
       VALUES (?, ?, ?, 'REJECTED', 3, 1, ?, 'cairo', 'z', ?, ?, ?, ?, ?)`, id, `SHAMS-H-${seq}-${i}`, fid, `مصنع تاريخي ${i}`, t, t, t, t, t);
-    await q(`INSERT INTO application_transitions (id, applicationId, fromState, toState, action, actorRole, attempt, createdAt) VALUES (?, ?, 'DRAFT', 'IMC_REVIEW', 'submit', 'factory_owner', 0, ?)`, `tr-h1-${seq}-${i}`, id, t);
-    await q(`INSERT INTO application_transitions (id, applicationId, fromState, toState, action, actorRole, attempt, createdAt) VALUES (?, ?, 'IMC_REVIEW', 'REJECTED', 'reject', 'imc_reviewer', 1, ?)`, `tr-h2-${seq}-${i}`, id, t);
+    await q(`INSERT INTO shams_application_transitions (id, applicationId, fromState, toState, action, actorRole, attempt, createdAt) VALUES (?, ?, 'DRAFT', 'IMC_REVIEW', 'submit', 'factory_owner', 0, ?)`, `tr-h1-${seq}-${i}`, id, t);
+    await q(`INSERT INTO shams_application_transitions (id, applicationId, fromState, toState, action, actorRole, attempt, createdAt) VALUES (?, ?, 'IMC_REVIEW', 'REJECTED', 'reject', 'imc_reviewer', 1, ?)`, `tr-h2-${seq}-${i}`, id, t);
   }
   seq++;
 }
@@ -112,11 +112,11 @@ test('PA-04: terminal history no longer feeds the aggregate pages (rows loaded s
 });
 
 test('PA-04: dashboard, mine / overdue lists, summary and stuck check equal the full-list computation (with SLA on)', async () => {
-  const { shamsPolicy } = await import('../src/config/shamsPolicy.js');
+  const { shamsPolicy } = await import('../config/shamsPolicy.js');
   const saved = { ...shamsPolicy.slaDays };
   shamsPolicy.slaDays.IMC_REVIEW = 1; // make "overdue" non-trivial: one IMC_REVIEW application entered 10 days ago
-  const [open] = await q<{ id: string }>("SELECT id FROM applications WHERE state = 'IMC_REVIEW' ORDER BY id LIMIT 1");
-  await q('UPDATE applications SET stateEnteredAt = ? WHERE id = ?', new Date(Date.now() - 10 * 86_400_000).toISOString(), open.id);
+  const [open] = await q<{ id: string }>("SELECT id FROM shams_applications WHERE state = 'IMC_REVIEW' ORDER BY id LIMIT 1");
+  await q('UPDATE shams_applications SET stateEnteredAt = ? WHERE id = ?', new Date(Date.now() - 10 * 86_400_000).toISOString(), open.id);
   try {
     for (const [role, cl] of [['imc', c.imc], ['encpc', c.encpc], ['pmu', c.pmu]] as const) {
       const all = await fullList(cl);
@@ -148,9 +148,9 @@ test('PA-04: dashboard, mine / overdue lists, summary and stuck check equal the 
       assert.deepEqual(od.items, all.filter((i) => i.overdue), `${role}: overdue=1`);
     }
     // summary open / overdue against every row of the PMU scope
-    const { listApplications } = await import('../src/store/applications.js');
-    const { slaInfo } = await import('../src/workflow/applicationView.js');
-    const { isTerminal, NON_TERMINAL_STATES } = await import('../src/workflow/shamsWorkflow.js');
+    const { listApplications } = await import('../store/applications.js');
+    const { slaInfo } = await import('../workflow/applicationView.js');
+    const { isTerminal, NON_TERMINAL_STATES } = await import('../workflow/shamsWorkflow.js');
     const rows = (await listApplications({ scopeSql: '1 = 1', scopeParams: [], includeDrafts: true }, 1, 1, true)).rows;
     const sum = await data(c.pmu, '/reports/summary');
     assert.equal(sum.open, rows.filter((a) => !isTerminal(a.state) && a.state !== 'DRAFT').length);
@@ -166,7 +166,7 @@ test('PA-04: dashboard, mine / overdue lists, summary and stuck check equal the 
 });
 
 test('PA-02: a burst of wrong passwords for one (email, IP) gets at most freeFailures answers; concurrent correct logins are not penalised', async () => {
-  const { shamsPolicy } = await import('../src/config/shamsPolicy.js');
+  const { shamsPolicy } = await import('../config/shamsPolicy.js');
   const free = shamsPolicy.loginThrottle.freeFailures;
   const N = 10;
   const rs = await Promise.all(Array.from({ length: N }, () => new Client(srv.base).post('/auth/login', { email: DEV.imc2, password: 'Wrong-password-9' })));
@@ -215,7 +215,7 @@ test('PA-03: a burst of registrations hashes passwords off the event loop; reset
   }
 
   // reset-password with a valid link → the new password logs in; a malformed link is refused as before
-  const { sha256 } = await import('../src/auth/jwt.js');
+  const { sha256 } = await import('../auth/jwt.js');
   const token = 'b2'.repeat(32);
   await q('UPDATE users SET passwordResetTokenHash = ?, passwordResetExpiresAt = ?, emailVerifiedAt = ? WHERE email = ?',
     sha256(token), new Date(Date.now() + 3_600_000).toISOString(), new Date().toISOString(), 'burst0@pa.test');
@@ -230,8 +230,8 @@ test('PA-03: a burst of registrations hashes passwords off the event loop; reset
 });
 
 test('PA-05: outbox retention is off by default and deletes only finished messages older than the cutoff, in batches', async () => {
-  const { config } = await import('../src/config.js');
-  const { purgeOutbox } = await import('../src/jobs/outboxRetention.js');
+  const { config } = await import('../config.js');
+  const { purgeOutbox } = await import('../../../core/jobs/outboxRetention.js');
   delete process.env.NOTIFICATION_OUTBOX_RETENTION_DAYS;
   assert.equal(config.outboxRetentionDays, 0, 'disabled unless configured');
   assert.equal(await purgeOutbox(config.outboxRetentionDays), 0);
@@ -259,17 +259,17 @@ test('PA-05: outbox retention is off by default and deletes only finished messag
 });
 
 test('PA-14: the stuck check loads the chosen providers in one query and still flags an OFFER_UPLOAD whose provider is no longer approved', async () => {
-  const { stuckApplications } = await import('../src/services/readiness.js');
-  const { listApplications } = await import('../src/store/applications.js');
-  const { getProvider, isSelectable } = await import('../src/store/providers.js');
-  const { NON_TERMINAL_STATES } = await import('../src/workflow/shamsWorkflow.js');
+  const { stuckApplications } = await import('../services/readiness.js');
+  const { listApplications } = await import('../store/applications.js');
+  const { getProvider, isSelectable } = await import('../store/providers.js');
+  const { NON_TERMINAL_STATES } = await import('../workflow/shamsWorkflow.js');
   // the factory's open application → withdrawn; a new one up to OFFER_UPLOAD with provider sp-demo-2
-  const [open] = await q<{ id: string }>(`SELECT a.id FROM applications a JOIN factories f ON f.id = a.factoryId JOIN users u ON u.organizationId = f.organizationId
+  const [open] = await q<{ id: string }>(`SELECT a.id FROM shams_applications a JOIN shams_factories f ON f.id = a.factoryId JOIN initiative_memberships m ON m.organizationId = f.organizationId AND m.initiativeId = 'shams' JOIN users u ON u.id = m.userId
     WHERE u.email = ? AND a.state NOT IN ('REJECTED','CONTRACTED','CLOSED_NOT_CONTRACTED','WITHDRAWN')`, DEV.factory);
   if (open) assert.equal((await act(c.factory, open.id, 'withdraw', { reason: 'إعادة تهيئة' })).status, 200);
   const id = await advanceTo('PROVIDER_SELECTION', { factory: c.factory, imc: c.imc, encpc: c.encpc, pmu: c.pmu }, reg());
   assert.equal((await act(c.factory, id, 'select_provider', { providerId: 'sp-demo-2' })).status, 200);
-  await q("UPDATE service_providers SET isActive = 0 WHERE id = 'sp-demo-2'");
+  await q("UPDATE shams_service_providers SET isActive = 0 WHERE id = 'sp-demo-2'");
   try {
     const m = await measure(() => stuckApplications());
     const stuck = m.out;
@@ -284,7 +284,7 @@ test('PA-14: the stuck check loads the chosen providers in one query and still f
     const providerQueries = m.queries; // one batched provider query regardless of the number of OFFER_UPLOAD rows
     assert.ok(providerQueries < 20, `stuck check statements: ${providerQueries}`);
   } finally {
-    await q("UPDATE service_providers SET isActive = 1 WHERE id = 'sp-demo-2'");
+    await q("UPDATE shams_service_providers SET isActive = 1 WHERE id = 'sp-demo-2'");
   }
   assert.ok(!(await stuckApplications()).some((s) => s.id === id), 'not stuck once the provider is active again');
 });

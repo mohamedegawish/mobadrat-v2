@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { isolateTestEnv, startServer, clients, act, getApp, advanceTo, q, pdfVariant, Client, BANK_A, BANK_B, PROVIDER_PENDING, PROVIDER_SUSPENDED, PROVIDER_OK, type Started } from './helpers.js';
 
 async function dbRun(sql: string, ...params: string[]) {
-  const { getDb } = await import('../src/db/sqlite.js');
+  const { getDb } = await import('../db/sqlite.js');
   await getDb().prepare(sql).run(...params);
 }
 
@@ -52,7 +52,7 @@ test('10) G-02: the factory records the outcome directly — no bank approval, n
   assert.equal(app.state, 'CONTRACT_OUTCOME');
   assert.equal(app.responsible.type, 'factory', 'nobody but the factory acts at this stage');
   assert.deepEqual(app.allowedActions.map((a: any) => a.action).sort(), ['record_contract', 'record_no_contract', 'withdraw']);
-  assert.equal((await q("SELECT COUNT(*) AS n FROM users WHERE role = 'bank_reviewer' AND isActive = 1"))[0].n, 0, 'no active bank account exists');
+  assert.equal((await q("SELECT COUNT(*) AS n FROM users u JOIN initiative_memberships m ON m.userId = u.id AND m.initiativeId = 'shams' WHERE m.role = 'bank_reviewer' AND u.isActive = 1 AND m.status = 'active'"))[0].n, 0, 'no active bank account exists');
   const bankLogin = await new Client(srv.base).post('/auth/login', { email: 'bank.a@shams.local', password: 'Shams@2026' });
   assert.equal(bankLogin.status, 401, 'there is no bank account to log in with');
 
@@ -88,9 +88,9 @@ test('10b) G-01: the bank is chosen only after PMU accepts the electricity appro
   assert.equal((await act(c.factory, id, 'record_no_contract', { reason: 'قبل البنك' })).json.code, 'BANK_NOT_SELECTED');
   assert.equal((await act(c.factory, id, 'select_bank', {})).status, 400, 'bank required');
   for (const bankOrgId of ['org-nope', 'org-pmu']) assert.equal((await act(c.factory, id, 'select_bank', { bankOrgId })).status, 422, bankOrgId);
-  await dbRun('UPDATE organizations SET isActive = 0 WHERE id = ?', BANK_B);
+  await dbRun('UPDATE shams_organizations SET isActive = 0 WHERE id = ?', BANK_B);
   try { assert.equal((await act(c.factory, id, 'select_bank', { bankOrgId: BANK_B })).status, 422, 'inactive bank'); }
-  finally { await dbRun('UPDATE organizations SET isActive = 1 WHERE id = ?', BANK_B); }
+  finally { await dbRun('UPDATE shams_organizations SET isActive = 1 WHERE id = ?', BANK_B); }
   assert.ok([403, 404].includes((await act(c.pmu, id, 'select_bank', { bankOrgId: BANK_A })).status), 'only the factory chooses');
   assert.equal((await c.factory2.post(`/applications/${id}/actions/select_bank`, { expectedVersion: 1, bankOrgId: BANK_A })).status, 404, 'another factory');
   assert.equal((await act(c.factory, id, 'select_bank', { bankOrgId: BANK_A })).status, 200);
@@ -98,7 +98,7 @@ test('10b) G-01: the bank is chosen only after PMU accepts the electricity appro
   assert.equal(again.status, 409); assert.equal(again.json.code, 'BANK_ALREADY_SELECTED');
   const app = await getApp(c.factory, id);
   assert.equal(app.bank.id, BANK_A, 'one bank per application');
-  const tr = (await q<any>("SELECT payload FROM application_transitions WHERE applicationId = ? AND action = 'select_bank'", id));
+  const tr = (await q<any>("SELECT payload FROM shams_application_transitions WHERE applicationId = ? AND action = 'select_bank'", id));
   assert.equal(tr.length, 1); assert.equal(JSON.parse(tr[0].payload).bankOrgId, BANK_A, 'selection in history');
   assert.equal((await q("SELECT 1 FROM audit_logs WHERE applicationId = ? AND action = 'application.select_bank'", id)).length, 1, 'selection audited');
 });

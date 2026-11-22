@@ -66,7 +66,7 @@ export async function serverInfo(conn: PoolConnection): Promise<ServerInfo> {
 export function assertSupportedServer(info: ServerInfo): void {
   if (info.isMariaDb) {
     if (process.env.MYSQL_ALLOW_MARIADB === '1') return;
-    throw new Error(`[mysql] MariaDB (${info.version}) is not a supported server; use MySQL 8.4. `
+    throw new Error(`[mysql] MariaDB (${info.version}) is not a supported production server; use MySQL 8.4. `
       + 'Set MYSQL_ALLOW_MARIADB=1 only for local development tests.');
   }
   const m = /^(\d+)\.(\d+)\.(\d+)/.exec(info.version);

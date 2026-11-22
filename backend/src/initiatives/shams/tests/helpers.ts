@@ -1,6 +1,8 @@
 /**
- * أدوات الاختبار: قاعدة مؤقتة لكل ملف، سيرفر حقيقي على منفذ عشوائي، عميل HTTP بكوكيز.
- * يجب استدعاء isolateTestEnv قبل أول استخدام لقاعدة البيانات (الإعدادات lazy).
+ * Test tools (Shams module on the platform): a throw-away MySQL database per test file, the real platform server on a
+ * random port, and an HTTP client with cookies. The client keeps the original application's paths: platform account routes
+ * (/auth/login, /auth/refresh, …) go to the core, the rest to /api/v1/i/shams (registration to its public router).
+ * isolateTestEnv must run before the first database use (settings are lazy).
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -11,19 +13,36 @@ import type { AddressInfo } from 'node:net';
 
 export interface TestEnv { dir: string; cleanup: () => Promise<void> }
 
-/** True when the suite runs against MySQL (npm run test:mysql): DB_CLIENT=mysql + MYSQL_TEST_URL (an account that may create databases). */
-export const onMysql = (process.env.DB_CLIENT ?? '').toLowerCase() === 'mysql';
+/** The platform runs on MySQL only. */
+export const onMysql = true;
+
+export const TEST_PASSWORD = 'Shams@2026';
+const MODULE_BASE = '/i/shams';
+
+/** Original path → platform path (see the file header). */
+export function platformPath(p: string): string {
+  if (p.startsWith('/i/') || p === '/me' || p.startsWith('/me/') || p === '/health' || p.startsWith('/initiatives')) return p;
+  if (p === '/auth/me') return `${MODULE_BASE}/auth/me`;
+  if (p === '/auth/register') return `${MODULE_BASE}/public/register`;
+  if (p.startsWith('/auth/recovery/')) return `${MODULE_BASE}/public${p.slice('/auth'.length)}`;
+  if (p.startsWith('/auth/')) return p;
+  if (p === '/meta' || p.startsWith('/meta?')) return `${MODULE_BASE}/public${p}`;
+  return `${MODULE_BASE}${p}`;
+}
+
+function mysqlAdminUrl(): string {
+  return process.env.MYSQL_TEST_URL || 'mysql://root:root@127.0.0.1:3308';
+}
 
 /**
- * MySQL: a fresh database per test file (`shams_t_<tag>_<random>`), created synchronously here because isolateTestEnv runs
- * at module load, and dropped in cleanup. Only names with the shams_t_ prefix are ever created or dropped.
+ * A fresh database per test file (`mbt_<tag>_<random>`), created synchronously here because isolateTestEnv runs at module
+ * load, and dropped in cleanup. Only names with the mbt_ prefix are ever created or dropped.
  */
 function createMysqlTestDatabase(tag: string): string {
-  const admin = process.env.MYSQL_TEST_URL;
-  if (!admin) throw new Error('DB_CLIENT=mysql tests need MYSQL_TEST_URL, e.g. mysql://root:secret@127.0.0.1:3306');
-  const name = `shams_t_${tag.replace(/\W/g, '_').slice(0, 24)}_${Math.random().toString(36).slice(2, 8)}`;
-  const script = `const m=require('mysql2/promise');(async()=>{const u=new URL(process.argv[1]);const c=await m.createConnection({host:u.hostname,port:Number(u.port||3306),user:decodeURIComponent(u.username),password:decodeURIComponent(u.password)});await c.query('CREATE DATABASE \`'+process.argv[2]+'\` CHARACTER SET utf8mb4');await c.end();})().catch(e=>{console.error(e.message);process.exit(1)})`;
-  const r = spawnSync(process.execPath, ['-e', script, admin, name], { cwd: path.resolve(import.meta.dirname, '..'), encoding: 'utf8' });
+  const admin = mysqlAdminUrl();
+  const name = `mbt_${tag.replace(/\W/g, '_').slice(0, 24)}_${Math.random().toString(36).slice(2, 8)}`;
+  const script = `const m=require('mysql2/promise');(async()=>{const u=new URL(process.argv[1]);const c=await m.createConnection({host:u.hostname,port:Number(u.port||3306),user:decodeURIComponent(u.username),password:decodeURIComponent(u.password)});await c.query('CREATE DATABASE \`'+process.argv[2]+'\` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin');await c.end();})().catch(e=>{console.error(e.message);process.exit(1)})`;
+  const r = spawnSync(process.execPath, ['-e', script, admin, name], { cwd: path.resolve(import.meta.dirname, '..', '..', '..', '..'), encoding: 'utf8' });
   if (r.status !== 0) throw new Error(`could not create MySQL test database ${name}: ${r.stderr}`);
   const u = new URL(admin);
   u.pathname = `/${name}`;
@@ -32,9 +51,9 @@ function createMysqlTestDatabase(tag: string): string {
 }
 
 async function dropMysqlTestDatabase(name: string): Promise<void> {
-  if (!/^shams_t_\w+$/.test(name)) return;
+  if (!/^mbt_\w+$/.test(name)) return;
   const mysql = await import('mysql2/promise');
-  const u = new URL(process.env.MYSQL_TEST_URL!);
+  const u = new URL(mysqlAdminUrl());
   const c = await mysql.createConnection({ host: u.hostname, port: Number(u.port || 3306), user: decodeURIComponent(u.username), password: decodeURIComponent(u.password) });
   try { await c.query(`DROP DATABASE IF EXISTS \`${name}\``); } finally { await c.end(); }
 }
@@ -42,27 +61,29 @@ async function dropMysqlTestDatabase(name: string): Promise<void> {
 export function isolateTestEnv(tag: string): TestEnv {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), `shams-${tag}-`));
   process.env.NODE_ENV = 'test';
-  const mysqlDb = onMysql ? createMysqlTestDatabase(tag) : null;
-  process.env.DB_PATH = path.join(dir, 'test.db');
+  const mysqlDb = createMysqlTestDatabase(tag);
+  // Tests that use the database directly (without startServer) need the module migrations registered too.
+  void import('../../../core/boot.js').then((m) => m.registerModuleMigrations());
   process.env.UPLOAD_DIR = path.join(dir, 'uploads');
   process.env.CORS_ORIGIN = 'http://localhost:5173';
   process.env.APP_URL = 'http://localhost:5173';
   process.env.JOBS_DISABLED = '1';
   process.env.REGISTRY_ADAPTER = 'mock';
   process.env.BCRYPT_ROUNDS = '4';
+  process.env.SEED_PASSWORD = TEST_PASSWORD;
   process.env.RATE_LIMIT_SCALE = process.env.KEEP_RATE_LIMITS === '1' ? '1' : '1000';
-  delete process.env.PLATFORM_WEBHOOK_URL;
-  delete process.env.PLATFORM_WEBHOOK_SECRET;
+  delete process.env.SHAMS_WEBHOOK_URL;
+  delete process.env.SHAMS_WEBHOOK_SECRET;
   delete process.env.GMAIL_USER;
   delete process.env.SMTP_HOST;
   return {
     dir,
     cleanup: async () => {
-      const { closeDb } = await import('../src/db/sqlite.js');
+      const { closeDb } = await import('../db/sqlite.js');
       await closeDb();
       await new Promise((r) => setTimeout(r, 50));
       fs.rmSync(dir, { recursive: true, force: true });
-      if (mysqlDb) await dropMysqlTestDatabase(mysqlDb);
+      await dropMysqlTestDatabase(mysqlDb);
     },
   };
 }
@@ -72,15 +93,17 @@ export const sentSms: Array<{ to: string; text: string }> = [];
 
 export interface Started { base: string; integration: string; origin: string; close: () => Promise<void> }
 
+let booted = false;
+
+/** Migrates (core + modules), seeds the platform and module demo data, and starts the platform server. */
 export async function startServer(): Promise<Started> {
-  const { seedDevData } = await import('../src/db/seed.js');
-  const { createApp } = await import('../src/app.js');
-  const { setMailSenderForTests } = await import('../src/mail/mailer.js');
-  const { setSmsAdapterForTests } = await import('../src/integrations/sms/index.js');
-  await seedDevData();
-  // البيانات المرجعية كما في الإنتاج (initDb يزرعها عند التشغيل).
-  const { seedReferenceData } = await import('../src/db/referenceSeed.js');
-  await seedReferenceData();
+  const { bootPlatform } = await import('../../../core/boot.js');
+  const { seedIfEmpty } = await import('../../../core/seed.js');
+  const { createApp } = await import('../../../app.js');
+  const { setMailSenderForTests } = await import('../mail/mailer.js');
+  const { setSmsAdapterForTests } = await import('../integrations/sms/index.js');
+  if (!booted) { await bootPlatform(); booted = true; }
+  await seedIfEmpty();
   setMailSenderForTests(async (m) => { sentMails.push({ to: m.to, subject: m.subject, html: m.html, text: m.text, attachments: (m.attachments ?? []).map((a) => ({ cid: a.cid, filename: a.filename })) }); return 'sent'; });
   setSmsAdapterForTests({ name: 'test', send: async (to, text) => { sentSms.push({ to, text }); } });
   const app = createApp();
@@ -88,7 +111,7 @@ export async function startServer(): Promise<Started> {
   const { port } = server.address() as AddressInfo;
   const origin = `http://127.0.0.1:${port}`;
   return {
-    base: `${origin}/api/v1`, integration: `${origin}/api/integration/v1`, origin,
+    base: `${origin}/api/v1`, integration: `${origin}/api/integration/v1/i/shams`, origin,
     close: () => new Promise((r) => server.close(() => r())),
   };
 }
@@ -121,7 +144,7 @@ export class Client {
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     if (this.token) headers.Authorization = `Bearer ${this.token}`;
     if (this.cookies.size) headers.Cookie = this.cookieHeader();
-    const r = await fetch(`${this.base}${p}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    const r = await fetch(`${this.base}${platformPath(p)}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
     this.keepCookies(r.headers);
     const ct = r.headers.get('content-type') ?? '';
     if (ct.includes('application/json')) {
@@ -153,6 +176,9 @@ export class Client {
     this.token = r.json.data.accessToken;
     this.user = r.json.data.user;
     this.creds = { email, password };
+    // The Shams view of the person (role, organization, factory account status), as the original /auth/login returned.
+    const me = await this.get('/auth/me');
+    if (me.status === 200) this.user = me.json.data.user;
     return this;
   }
 
@@ -163,7 +189,7 @@ export class Client {
     for (const f of files) fd.append(f.field, new Blob([new Uint8Array(f.body)], { type: f.mime ?? 'application/pdf' }), f.name ?? `${f.field}.pdf`);
     const headers: Record<string, string> = {};
     if (this.token) headers.Authorization = `Bearer ${this.token}`;
-    const r = await fetch(`${this.base}${p}`, { method: 'POST', headers, body: fd });
+    const r = await fetch(`${this.base}${platformPath(p)}`, { method: 'POST', headers, body: fd });
     this.keepCookies(r.headers);
     return { status: r.status, json: await r.json(), headers: r.headers };
   }
@@ -174,7 +200,7 @@ export class Client {
     if (file) fd.append('file', new Blob([new Uint8Array(file)], { type: mime }), filename);
     const headers: Record<string, string> = {};
     if (this.token) headers.Authorization = `Bearer ${this.token}`;
-    const r = await fetch(`${this.base}${p}`, { method: 'POST', headers, body: fd });
+    const r = await fetch(`${this.base}${platformPath(p)}`, { method: 'POST', headers, body: fd });
     return { status: r.status, json: await r.json(), headers: r.headers };
   }
 }
@@ -239,7 +265,7 @@ export async function act(c: Client, id: string, action: string, body: Record<st
 }
 
 export async function q<T = any>(sql: string, ...params: Array<string | number | null>): Promise<T[]> {
-  const { getDb } = await import('../src/db/sqlite.js');
+  const { getDb } = await import('../db/sqlite.js');
   return await getDb().prepare(sql).all(...params) as T[];
 }
 
@@ -335,7 +361,7 @@ export async function registerFactory(c: Client, payload: Record<string, unknown
 
 /** رابط التفعيل من آخر بريد للعنوان (بعد معالجة الطابور). */
 export async function activationTokenFor(email: string): Promise<string> {
-  const { processNotifications } = await import('../src/jobs/notificationWorker.js');
+  const { processNotifications } = await import('../jobs/notificationWorker.js');
   await processNotifications(200);
   const mail = [...sentMails].reverse().find((m) => m.to.includes(email) && /#verify-email\//.test(m.html));
   if (!mail) throw new Error(`no activation email for ${email}`);

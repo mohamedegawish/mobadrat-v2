@@ -111,6 +111,6 @@ test('14) data isolation: factory↔factory, IMC/ENCPC vs later-stage documents,
   assert.equal((await c.imc.get(`/applications/${draft}`)).status, 404);
   assert.equal((await c.encpc.get(`/applications/${draft}`)).status, 404);
   // المعرفات تُفحص بالجهة في كل طلب حتى للتنزيل المباشر
-  const docs = await q<{ id: string }>('SELECT id FROM documents WHERE applicationId = ?', draft);
+  const docs = await q<{ id: string }>('SELECT id FROM shams_documents WHERE applicationId = ?', draft);
   assert.equal((await c.factory2.get(`/applications/${draft}/documents/${docs[0].id}/download`)).status, 404);
 });

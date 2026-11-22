@@ -11,7 +11,7 @@ before(async () => { srv = await startServer(); });
 after(async () => { await srv.close(); await env.cleanup(); });
 
 async function flushMail() {
-  const { processNotifications } = await import('../src/jobs/notificationWorker.js');
+  const { processNotifications } = await import('../jobs/notificationWorker.js');
   await processNotifications(200);
 }
 
@@ -52,11 +52,13 @@ test('factory self-registration sends a real verification email and never return
   assert.equal((await c.post('/auth/verify-email', { token })).status, 200);
   assert.equal((await c.post('/auth/verify-email', { token })).status, 400, 'single use');
   // الحساب لا يدخل قبل قبول IMC لطلب التسجيل (أُرسل للمراجعة عند التفعيل).
-  const pendingLogin = await c.post('/auth/login', { email: body.email, password: body.password });
+  // Platform: sign-in works (one account for every initiative); the Shams screens stay closed until IMC accepts.
+  await c.login(body.email, body.password);
+  const pendingLogin = await c.get('/factory/profile');
   assert.equal(pendingLogin.status, 403);
   assert.equal(pendingLogin.json.code, 'ACCOUNT_UNDER_REVIEW');
   const imc = await new Client(srv.base).login(DEV.imc1);
-  const [app] = await q<{ id: string; version: number }>("SELECT a.id, a.version FROM applications a JOIN factories f ON f.id = a.factoryId JOIN users u ON u.organizationId = f.organizationId WHERE u.email = ?", body.email);
+  const [app] = await q<{ id: string; version: number }>("SELECT a.id, a.version FROM shams_applications a JOIN shams_factories f ON f.id = a.factoryId JOIN initiative_memberships m ON m.organizationId = f.organizationId AND m.initiativeId = 'shams' JOIN users u ON u.id = m.userId WHERE u.email = ?", body.email);
   assert.equal((await imc.post(`/applications/${app.id}/actions/accept`, { expectedVersion: app.version })).status, 200);
   await c.login(body.email, body.password);
   assert.equal(c.user.role, 'factory_owner');
@@ -80,7 +82,7 @@ test('M3: escalating delay per (email, IP) instead of locking the account', asyn
   assert.equal((await q<{ lockedUntil: string | null }>('SELECT lockedUntil FROM users WHERE email = ?', DEV.encpc))[0].lockedUntil, null);
   assert.equal((await c.post('/auth/login', { email: DEV.pmu, password: 'Shams@2026' })).status, 200, 'other accounts unaffected');
   // بعد انقضاء مهلة الانتظار يعمل الدخول الصحيح ويمسح العداد.
-  const { getDb } = await import('../src/db/sqlite.js');
+  const { getDb } = await import('../db/sqlite.js');
   await getDb().prepare("UPDATE login_throttle SET nextAllowedAt = '2000-01-01T00:00:00.000Z'").run();
   assert.equal((await c.post('/auth/login', { email: DEV.encpc, password: 'Shams@2026' })).status, 200);
   assert.equal((await c.post('/auth/login', { email: 'nobody@test.local', password: 'x' })).status, 401, 'unknown email: same response as a wrong password');
@@ -92,18 +94,18 @@ test('refresh token: httpOnly cookie only, rotation, reuse revokes the whole fam
   assert.equal(r.status, 200);
   assert.equal(r.json.data.refreshToken, undefined, 'refresh token never in the body');
   const setCookie = r.headers.get('set-cookie') ?? '';
-  assert.match(setCookie, /shams_refresh=/);
+  assert.match(setCookie, /mobadrat_refresh=/);
   assert.match(setCookie, /HttpOnly/i);
   assert.match(setCookie, /Path=\/api\/v1\/auth/);
   c.token = r.json.data.accessToken;
-  const old = c.cookies.get('shams_refresh')!;
+  const old = c.cookies.get('mobadrat_refresh')!;
   const rot = await c.post('/auth/refresh');
   assert.equal(rot.status, 200);
-  const fresh = c.cookies.get('shams_refresh')!;
+  const fresh = c.cookies.get('mobadrat_refresh')!;
   assert.notEqual(old, fresh);
   // إعادة استخدام القديم → 401 وإلغاء العائلة (يسقط الجديد أيضًا)
   const thief = new Client(srv.base);
-  thief.cookies.set('shams_refresh', old);
+  thief.cookies.set('mobadrat_refresh', old);
   assert.equal((await thief.post('/auth/refresh')).status, 401);
   assert.equal((await c.post('/auth/refresh')).status, 401, 'family revoked after reuse');
   // تسجيل الخروج يلغي التوكن
@@ -113,12 +115,12 @@ test('refresh token: httpOnly cookie only, rotation, reuse revokes the whole fam
 });
 
 test('no demo authentication: x-user-id ignored, switch-user does not exist', async () => {
-  const r = await fetch(`${srv.base}/applications`, { headers: { 'x-user-id': 'usr-admin' } });
+  const r = await fetch(`${srv.base}/i/shams/applications`, { headers: { 'x-user-id': 'usr-admin' } });
   assert.equal(r.status, 401);
   const admin = await new Client(srv.base).login(DEV.admin);
   const s = await admin.post('/auth/switch-user', { userId: 'usr-factory-1' });
   assert.equal(s.status, 404, 'route does not exist even for an authenticated admin');
-  const asOther = await fetch(`${srv.base}/factory/profile`, { headers: { Authorization: `Bearer ${admin.token}`, 'x-user-id': 'usr-factory-1' } });
+  const asOther = await fetch(`${srv.base}/i/shams/factory/profile`, { headers: { Authorization: `Bearer ${admin.token}`, 'x-user-id': 'usr-factory-1' } });
   assert.equal(asOther.status, 403, 'header cannot impersonate another user');
 });
 
@@ -184,13 +186,13 @@ test('forgot/reset password: generic response, single-use link, sessions revoked
 });
 
 test('audit log is append-only and never stores secrets', async () => {
-  const { getDb } = await import('../src/db/sqlite.js');
+  const { getDb } = await import('../db/sqlite.js');
   await assert.rejects(async () => await getDb().prepare("UPDATE audit_logs SET action = 'x'").run(), /append-only/);
   await assert.rejects(async () => await getDb().prepare('DELETE FROM audit_logs').run(), /append-only/);
   const rows = await q<{ details: string }>('SELECT details FROM audit_logs');
   const all = rows.map((r) => r.details).join('\n');
   assert.ok(!all.includes('Shams@2026') && !all.includes('NewPass2026') && !all.includes('BankReset2026'));
-  const { redact } = await import('../src/store/audit.js');
+  const { redact } = await import('../store/audit.js');
   assert.deepEqual(redact({ password: 'x', nested: { apiKey: 'y', ok: 1 } }), { password: '[REDACTED]', nested: { apiKey: '[REDACTED]', ok: 1 } });
   const admin = await new Client(srv.base).login(DEV.admin);
   const list = await admin.get('/admin/audit-logs?pageSize=5');
@@ -208,8 +210,8 @@ test('health endpoints', async () => {
 });
 
 test('L4: outbox rows stuck in "sending" after a crash are reclaimed and delivered, fresh claims are left alone', async () => {
-  const { getDb } = await import('../src/db/sqlite.js');
-  const { reclaimStaleSending } = await import('../src/store/outbox.js');
+  const { getDb } = await import('../db/sqlite.js');
+  const { reclaimStaleSending } = await import('../store/outbox.js');
   const db = getDb();
   const row = await db.prepare("SELECT id FROM notification_outbox LIMIT 1").get() as { id: string } | undefined;
   assert.ok(row, 'a notification row exists from earlier tests');

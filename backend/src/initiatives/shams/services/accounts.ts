@@ -92,11 +92,11 @@ export interface AccountRequestRow {
 }
 
 export async function getAccountRequest(id: string): Promise<AccountRequestRow | null> {
-  return (await getDb().prepare('SELECT * FROM account_requests WHERE id = ?').get(id) as unknown as AccountRequestRow | undefined) ?? null;
+  return (await getDb().prepare('SELECT * FROM shams_account_requests WHERE id = ?').get(id) as unknown as AccountRequestRow | undefined) ?? null;
 }
 
 async function pendingRequestForEmail(email: string): Promise<AccountRequestRow | null> {
-  return (await getDb().prepare("SELECT * FROM account_requests WHERE email = ? COLLATE NOCASE AND status = 'pending'").get(email) as unknown as AccountRequestRow | undefined) ?? null;
+  return (await getDb().prepare("SELECT * FROM shams_account_requests WHERE email = ? COLLATE NOCASE AND status = 'pending'").get(email) as unknown as AccountRequestRow | undefined) ?? null;
 }
 
 export async function pmuRecipients(): Promise<Recipient[]> {
@@ -134,7 +134,7 @@ function requesterOf(actor: AuditActor): Pick<AccountRequestRow, 'requestedByTyp
 async function insertRequest(r: Omit<AccountRequestRow, 'id' | 'status' | 'decidedBy' | 'decidedAt' | 'decisionNote' | 'resultUserId' | 'createdAt' | 'updatedAt'>): Promise<AccountRequestRow> {
   const id = newId('acr');
   const now = nowIso();
-  await getDb().prepare(`INSERT INTO account_requests (id, kind, organizationId, role, targetUserId, email, nameAr, nameEn, phone, reason, status,
+  await getDb().prepare(`INSERT INTO shams_account_requests (id, kind, organizationId, role, targetUserId, email, nameAr, nameEn, phone, reason, status,
       requestedByType, requestedByUserId, requestedByKeyId, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`).run(
     id, r.kind, r.organizationId, r.role, r.targetUserId, r.email, r.nameAr, r.nameEn, r.phone, r.reason, r.requestedByType, r.requestedByUserId, r.requestedByKeyId, now, now,
   );
@@ -271,8 +271,8 @@ export async function requestEmailChange(actor: AuditActor, userId: string, body
 /** قائمة الطلبات: الأدمن يرى كل الطلبات الأخيرة؛ مستخدمو الجهات يرون المعلق الذي يملكون الموافقة عليه. */
 export async function listAccountRequests(user: UserInternal) {
   const rows = await getDb().prepare(user.role === 'system_admin'
-    ? 'SELECT * FROM account_requests ORDER BY createdAt DESC LIMIT 200'
-    : "SELECT * FROM account_requests WHERE status = 'pending' ORDER BY createdAt LIMIT 200").all() as unknown as AccountRequestRow[];
+    ? 'SELECT * FROM shams_account_requests ORDER BY createdAt DESC LIMIT 200'
+    : "SELECT * FROM shams_account_requests WHERE status = 'pending' ORDER BY createdAt LIMIT 200").all() as unknown as AccountRequestRow[];
   const visible = user.role === 'system_admin' ? rows : await filterSeq(rows, (r) => canApproveAccountRequest(user, r));
   return mapSeq(visible, (r) => publicAccountRequest(r));
 }
@@ -319,7 +319,7 @@ export async function decideAccountRequest(user: UserInternal, id: string, appro
         { dedupePrefix: `chg-new:${hash.slice(0, 16)}`, sensitive: true, channels: ['email'] });
       await notifyAccountEvent({ ...u, email: r.email }, `تغيير بريد الحساب من ${oldEmail}`, 'account email changed', `acct-email:${r.id}`);
     }
-    await getDb().prepare('UPDATE account_requests SET status = ?, decidedBy = ?, decidedAt = ?, decisionNote = ?, resultUserId = ?, updatedAt = ? WHERE id = ?')
+    await getDb().prepare('UPDATE shams_account_requests SET status = ?, decidedBy = ?, decidedAt = ?, decisionNote = ?, resultUserId = ?, updatedAt = ? WHERE id = ?')
       .run(approve ? 'approved' : 'rejected', user.id, nowIso(), note ?? '', resultUserId, nowIso(), id);
     await addAuditLog({ ...actor, action: approve ? 'account_request.approve' : 'account_request.reject', entityType: 'account_request', entityId: id,
       summaryAr: `${approve ? 'موافقة على' : 'رفض'} طلب ${r.kind === 'create_user' ? 'حساب' : 'تغيير بريد'} في ${org.nameAr}: ${r.email}`, details: { note: note ?? '' } });

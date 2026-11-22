@@ -92,14 +92,16 @@ function cairo(iso?: string): string {
 
 /** رابط شاشة داخلية في الموقع (بلا توكن، ويتطلب تسجيل الدخول). */
 export function siteLink(view: string): string {
-  return `${config.appUrl}/#${view}`;
+  // Platform screens (sign-in, account links) are not under the initiative; everything else is #i/shams/<view>.
+  if (view === 'login' || view.startsWith('verify-email') || view.startsWith('reset-password')) return `${config.appUrl}/#${view}`;
+  return `${config.appUrl}/#i/shams/${view}`;
 }
 
 export interface Rendered { subject: string; html: string; text: string; sms: string }
 
 /** رابط الطلب — بلا أي توكن، ويتطلب تسجيل الدخول. */
 export function applicationLink(appId: string): string {
-  return `${config.appUrl}/#application/${encodeURIComponent(appId)}`;
+  return `${config.appUrl}/#i/shams/application/${encodeURIComponent(appId)}`;
 }
 
 function ref(v: TemplateVars): string { return v.number ?? 'مسودة'; }

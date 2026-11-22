@@ -14,8 +14,8 @@ after(async () => { await srv.close(); await env.cleanup(); });
 const LEGACY = [['sharqia', '10th-ramadan'], ['giza', '6th-october'], ['qalyubia', 'obour'], ['qalyubia', 'khanka'], ['monufia', 'sadat-city'], ['suez', 'sczone']];
 
 test('Z-1 the seed data is consistent: 158 zones, known governorates, stable ids, legacy ids kept', async () => {
-  const { INDUSTRIAL_ZONES } = await import('../src/db/reference/industrialZones.js');
-  const { listGovernorates } = await import('../src/config/locations.js');
+  const { INDUSTRIAL_ZONES } = await import('../../../core/reference/industrialZones.js');
+  const { listGovernorates } = await import('../config/locations.js');
   const govs = new Set(listGovernorates().map((g) => g.value));
   assert.equal(INDUSTRIAL_ZONES.length, 158);
   const keys = new Set<string>();
@@ -41,18 +41,18 @@ test('Z-1 the seed data is consistent: 158 zones, known governorates, stable ids
 test('Z-2 the boot seed fills the table once; running it again changes nothing', async () => {
   const rows = await q<{ n: number }>("SELECT COUNT(*) AS n FROM industrial_zones WHERE source = 'seed' AND isActive = 1");
   assert.equal(rows[0].n, 158, 'seeded at start-up');
-  const { seedIndustrialZones } = await import('../src/db/referenceSeed.js');
+  const { seedIndustrialZones } = await import('../../../core/reference/referenceSeed.js');
   assert.deepEqual(await seedIndustrialZones(), { inserted: 0, updated: 0, deactivated: 0 });
   // initDb (the production boot path) runs it too, still a no-op.
-  const { initDb } = await import('../src/db/sqlite.js');
+  const { initDb } = await import('../db/sqlite.js');
   await initDb();
   assert.equal((await q<{ n: number }>('SELECT COUNT(*) AS n FROM industrial_zones'))[0].n, 158);
 });
 
 test('Z-3 re-seeding repairs edited seed rows, deactivates removed ones (never deletes), and leaves non-seed rows alone', async () => {
-  const { getDb } = await import('../src/db/sqlite.js');
-  const { seedIndustrialZones, loadZoneCache } = await import('../src/db/referenceSeed.js');
-  const { isValidZone, findGovernorate, zoneLabel } = await import('../src/config/locations.js');
+  const { getDb } = await import('../db/sqlite.js');
+  const { seedIndustrialZones, loadZoneCache } = await import('../../../core/reference/referenceSeed.js');
+  const { isValidZone, findGovernorate, zoneLabel } = await import('../config/locations.js');
   const db = getDb();
   const now = new Date().toISOString();
   await db.prepare("UPDATE industrial_zones SET labelAr = 'اسم قديم' WHERE governorate = 'giza' AND value = 'abu-rawash'").run();

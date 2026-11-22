@@ -13,8 +13,8 @@ import { isolateTestEnv, startServer, clients, act, completeSections, pdfVariant
 const env = isolateTestEnv('regform');
 let srv: Started;
 let c: Awaited<ReturnType<typeof clients>>;
-const XLSX = createRequire(path.join(process.cwd(), '..', 'frontend', 'package.json'))('xlsx');
-const WORKBOOK = path.join(process.cwd(), '..', 'details', 'Registration Form V01.xlsx');
+const XLSX = createRequire(path.join(process.cwd(), 'package.json'))('xlsx');
+const WORKBOOK = path.join(process.cwd(), '..', 'docs', 'initiatives', 'shams', 'Registration Form V01.xlsx');
 
 /** Each line of the official form → the platform field(s) that capture it. `optional` = not required by shamsPolicy (★, D9). */
 const MAPPING: Array<{ item: string; kind: 'data' | 'file'; fields: string[]; optional?: true }> = [

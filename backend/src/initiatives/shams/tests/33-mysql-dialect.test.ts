@@ -1,26 +1,25 @@
 // SQLite → MySQL statement translation (src/db/mysqlDialect.ts). Pure unit tests (no database) — they run in both modes.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { translateSql, stripInternalColumns, UntranslatedSqlError } from '../src/db/mysqlDialect.js';
-import { splitSqlStatements, adaptForServer, assertSupportedServer } from '../src/db/mysqlMigrate.js';
-import { parseDbClient } from '../src/config.js';
+import { translateSql, stripInternalColumns, UntranslatedSqlError } from '../../../core/db/mysqlDialect.js';
+import { splitSqlStatements, adaptForServer, assertSupportedServer } from '../../../core/db/migrate.js';
 
 test('D-1 insert-or-ignore and ON CONFLICT DO NOTHING become a plain INSERT whose duplicate-key error means "nothing inserted"', () => {
   const a = translateSql('INSERT OR IGNORE INTO notification_outbox (id, dedupeKey) VALUES (?, ?)');
   assert.equal(a.sql, 'INSERT INTO notification_outbox (id, dedupeKey) VALUES (?, ?)');
   assert.equal(a.ignoreDuplicate, true);
-  const b = translateSql('INSERT INTO application_counters (year, lastSeq) VALUES (?, 0) ON CONFLICT(year) DO NOTHING');
-  assert.equal(b.sql, 'INSERT INTO application_counters (year, lastSeq) VALUES (?, 0)');
+  const b = translateSql('INSERT INTO shams_application_counters (year, lastSeq) VALUES (?, 0) ON CONFLICT(year) DO NOTHING');
+  assert.equal(b.sql, 'INSERT INTO shams_application_counters (year, lastSeq) VALUES (?, 0)');
   assert.equal(b.ignoreDuplicate, true);
   assert.doesNotMatch(a.sql + b.sql, /IGNORE/, 'never MySQL INSERT IGNORE (it would also swallow CHECK / FK violations)');
 });
 
 test('D-2 ON CONFLICT DO UPDATE becomes ON DUPLICATE KEY UPDATE, excluded.x → VALUES(x), and other expressions are kept', () => {
-  const t = translateSql(`INSERT INTO application_data (id, data, updatedAt) VALUES (?, ?, ?)
+  const t = translateSql(`INSERT INTO shams_application_data (id, data, updatedAt) VALUES (?, ?, ?)
     ON CONFLICT(applicationId, section, attempt) DO UPDATE SET data = excluded.data, updatedAt = excluded.updatedAt`);
   assert.match(t.sql, /ON DUPLICATE KEY UPDATE data = VALUES\(data\), updatedAt = VALUES\(updatedAt\)$/);
   assert.equal(t.ignoreDuplicate, false);
-  const c = translateSql('INSERT INTO integration_auth_failures (ip, windowStart, count) VALUES (?, ?, 1) ON CONFLICT(ip, windowStart) DO UPDATE SET count = count + 1');
+  const c = translateSql('INSERT INTO shams_integration_auth_failures (ip, windowStart, count) VALUES (?, ?, 1) ON CONFLICT(ip, windowStart) DO UPDATE SET count = count + 1');
   assert.match(c.sql, /ON DUPLICATE KEY UPDATE count = count \+ 1$/);
   const k = translateSql('INSERT INTO login_throttle (`key`, failures) VALUES (?, ?) ON CONFLICT(`key`) DO UPDATE SET failures = excluded.failures');
   assert.match(k.sql, /\(`key`, failures\) VALUES \(\?, \?\) ON DUPLICATE KEY UPDATE failures = VALUES\(failures\)$/);
@@ -31,14 +30,14 @@ test('D-3 rowid → _seq, COLLATE NOCASE dropped (case-insensitive column), the 
   assert.equal(translateSql('SELECT 1 FROM t tr ORDER BY tr.createdAt DESC, tr.rowid DESC').sql, 'SELECT 1 FROM t tr ORDER BY tr.createdAt DESC, tr._seq DESC');
   assert.equal(translateSql('SELECT * FROM users u WHERE u.email = ? COLLATE NOCASE').sql, 'SELECT * FROM users u WHERE u.email = ?');
   // MySQL would read `+toState` as a numeric cast: 'IMC_REVIEW' → 0 = 0 for every row
-  assert.equal(translateSql('SELECT 1 FROM application_transitions WHERE applicationId = ? AND +toState = ? AND fromState <> toState LIMIT 1').sql,
-    'SELECT 1 FROM application_transitions WHERE applicationId = ? AND toState = ? AND fromState <> toState LIMIT 1');
+  assert.equal(translateSql('SELECT 1 FROM shams_application_transitions WHERE applicationId = ? AND +toState = ? AND fromState <> toState LIMIT 1').sql,
+    'SELECT 1 FROM shams_application_transitions WHERE applicationId = ? AND toState = ? AND fromState <> toState LIMIT 1');
   assert.equal(translateSql('SELECT attempts + 1 AS n FROM t').sql, 'SELECT attempts + 1 AS n FROM t', 'arithmetic is untouched');
 });
 
 test("D-4 LIKE stays case-insensitive and the ESCAPE '\\' literal is doubled for MySQL", () => {
-  const t = translateSql("SELECT * FROM applications a WHERE (a.number LIKE ? ESCAPE '\\' OR a.companyName LIKE ? ESCAPE '\\')");
-  assert.equal(t.sql, "SELECT * FROM applications a WHERE (LOWER(a.number) LIKE LOWER(?) ESCAPE '\\\\' OR LOWER(a.companyName) LIKE LOWER(?) ESCAPE '\\\\')");
+  const t = translateSql("SELECT * FROM shams_applications a WHERE (a.number LIKE ? ESCAPE '\\' OR a.companyName LIKE ? ESCAPE '\\')");
+  assert.equal(t.sql, "SELECT * FROM shams_applications a WHERE (LOWER(a.number) LIKE LOWER(?) ESCAPE '\\\\' OR LOWER(a.companyName) LIKE LOWER(?) ESCAPE '\\\\')");
 });
 
 test('D-5 SQLite-only constructs that have no translation are refused, never sent to MySQL', () => {
@@ -79,7 +78,4 @@ INSERT INTO a VALUES (1);
   delete process.env.MYSQL_ALLOW_MARIADB;
   try { assert.throws(() => assertSupportedServer({ version: '10.4.32-MariaDB', isMariaDb: true }), /not a supported production server/); }
   finally { if (allow !== undefined) process.env.MYSQL_ALLOW_MARIADB = allow; }
-  assert.equal(parseDbClient(undefined), 'sqlite');
-  assert.equal(parseDbClient(' MySQL '), 'mysql');
-  assert.throws(() => parseDbClient('postgres'), /DB_CLIENT must be/);
 });

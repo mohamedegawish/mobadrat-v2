@@ -17,7 +17,7 @@ let c: Awaited<ReturnType<typeof clients>>;
 
 before(async () => { srv = await startServer(); c = await clients(srv.base); });
 after(async () => {
-  const { setMailSenderForTests } = await import('../src/mail/mailer.js');
+  const { setMailSenderForTests } = await import('../mail/mailer.js');
   setMailSenderForTests(null);
   await srv.close(); await env.cleanup();
 });
@@ -26,10 +26,10 @@ type Mail = { templateKey: string; recipientAddress: string; channel: string; su
 const outbox = (id: string) => q<Mail>("SELECT templateKey, recipientAddress, channel, subject, body, textBody, status, createdAt FROM notification_outbox WHERE applicationId = ? AND channel = 'email' ORDER BY createdAt", id);
 const emailsTo = async (id: string, key: string, addr: string) => (await outbox(id)).filter((m) => m.templateKey === key && m.recipientAddress === addr);
 const history = (id: string) => q<{ fromState: string; toState: string; action: string; actorRole: string; actorUserId: string; reason: string; attempt: number; payload: string }>(
-  'SELECT fromState, toState, action, actorRole, actorUserId, reason, attempt, payload FROM application_transitions WHERE applicationId = ? ORDER BY createdAt, rowid', id);
+  'SELECT fromState, toState, action, actorRole, actorUserId, reason, attempt, payload FROM shams_application_transitions WHERE applicationId = ? ORDER BY createdAt, rowid', id);
 const actionsOf = async (cl: Client, id: string) => (await getApp(cl, id)).allowedActions.map((a: { action: string }) => a.action).sort();
 async function dbRun(sql: string, ...params: Array<string | number | null>) {
-  const { getDb } = await import('../src/db/sqlite.js');
+  const { getDb } = await import('../db/sqlite.js');
   await getDb().prepare(sql).run(...params);
 }
 async function upload(cl: Client, id: string, kind: string, tag: string) {
@@ -45,7 +45,7 @@ async function freeFactories() {
 }
 /** An attacker's raw request with the current version (read from the DB, since the attacker may not even see the application). */
 async function raw(cl: Client, id: string, action: string, body: Record<string, unknown> = {}) {
-  const v = (await q<{ version: number }>('SELECT version FROM applications WHERE id = ?', id))[0].version;
+  const v = (await q<{ version: number }>('SELECT version FROM shams_applications WHERE id = ?', id))[0].version;
   return cl.post(`/applications/${id}/actions/${action}`, { expectedVersion: v, ...body });
 }
 /** Refused without effect: 403 (may see, may not act) or 404 (may not even see). */
@@ -81,7 +81,7 @@ test('S1 successful journey: registration → registry verified → IMC → ENCP
   assert.equal(app.state, 'IMC_REVIEW');
   assert.match(app.number, /^SHAMS-\d{4}-\d{5}$/);
   assert.equal(app.registry.result, 'valid');
-  assert.equal((await q("SELECT result FROM registry_verifications WHERE applicationId = ?", id))[0].result, 'valid');
+  assert.equal((await q("SELECT result FROM shams_registry_verifications WHERE applicationId = ?", id))[0].result, 'valid');
   assert.equal((await emailsTo(id, 'app.submitted', F)).length, 1, 'factory receipt');
   assert.equal((await emailsTo(id, 'app.review_assigned', 'imc1@shams.local')).length, 1, 'IMC notified');
   assert.deepEqual(await actionsOf(c.factory, id), ['withdraw'], 'factory only waits');
@@ -200,7 +200,7 @@ test('S1 successful journey: registration → registry verified → IMC → ENCP
   await assertCleanOutbox(id, number);
 
   // delivery through the (fake) mail sender reaches the factory with the reference
-  const { processNotifications } = await import('../src/jobs/notificationWorker.js');
+  const { processNotifications } = await import('../jobs/notificationWorker.js');
   await processNotifications(500);
   assert.ok(sentMails.some((m) => m.to.includes(F) && m.subject.includes(number)), 'delivered to the factory');
 });
@@ -233,7 +233,7 @@ test('S2 IMC information request: notes mandatory → factory edits only flagged
   assert.ok(app.deficiencies.every((d: { resolved: boolean }) => d.resolved), 'deficiencies closed by the resubmission');
   const tax = app.documents.filter((d: { kind: string }) => d.kind === 'taxCardFile');
   assert.equal(tax.length, 2, 'both tax card versions kept');
-  assert.equal((await q("SELECT COUNT(*) AS n FROM application_data WHERE applicationId = ? AND section = 'general'", id) as any)[0].n, 2, 'both submitted versions of the section kept');
+  assert.equal((await q("SELECT COUNT(*) AS n FROM shams_application_data WHERE applicationId = ? AND section = 'general'", id) as any)[0].n, 2, 'both submitted versions of the section kept');
   const h = await history(id);
   assert.equal(h.find((t) => t.action === 'request_correction')?.reason, 'نواقص', 'previous review kept');
   ok(await act(c.imc, id, 'accept'), 'imc accept');
@@ -418,11 +418,11 @@ test('S8 authorization attacks are refused server-side', async () => {
     const r = await act(c.factory, A, 'select_provider', { providerId: pid });
     assert.equal(r.status, 422, `provider ${pid}`); assert.equal(r.json.code, 'PROVIDER_NOT_APPROVED');
   }
-  await dbRun("UPDATE service_providers SET isActive = 0 WHERE id = 'sp-demo-2'");
+  await dbRun("UPDATE shams_service_providers SET isActive = 0 WHERE id = 'sp-demo-2'");
   try {
     const r = await act(c.factory, A, 'select_provider', { providerId: 'sp-demo-2' });
     assert.equal(r.status, 422, 'approved but inactive provider');
-  } finally { await dbRun("UPDATE service_providers SET isActive = 1 WHERE id = 'sp-demo-2'"); }
+  } finally { await dbRun("UPDATE shams_service_providers SET isActive = 1 WHERE id = 'sp-demo-2'"); }
   assert.equal((await c.factory.post('/service-providers', { nameAr: 'مقدم مزيف', nameEn: 'Fake' })).status, 403, 'factory cannot add providers');
 
   // skipping stages and changing the state directly
@@ -448,12 +448,12 @@ test('S8 authorization attacks are refused server-side', async () => {
   ok(await act(c.pmu, A, 'accept'), 'pmu accept electricity');
   const bankIds = async () => (await c.factory.get('/meta')).json.data.banks.map((b: { id: string }) => b.id);
   assert.ok((await bankIds()).includes(BANK_B), 'active bank listed');
-  await dbRun('UPDATE organizations SET isActive = 0 WHERE id = ?', BANK_B);
+  await dbRun('UPDATE shams_organizations SET isActive = 0 WHERE id = ?', BANK_B);
   try {
     assert.ok(!(await bankIds()).includes(BANK_B), 'inactive bank not offered to the factory');
     const r = await act(c.factory, A, 'select_bank', { bankOrgId: BANK_B });
     assert.equal(r.status, 422, 'inactive bank refused');
-  } finally { await dbRun('UPDATE organizations SET isActive = 1 WHERE id = ?', BANK_B); }
+  } finally { await dbRun('UPDATE shams_organizations SET isActive = 1 WHERE id = ?', BANK_B); }
   assert.equal((await act(c.factory, A, 'select_bank', { bankOrgId: 'org-pmu' })).status, 422, 'non-bank organization refused');
   assert.equal((await act(c.factory, A, 'select_bank', { bankOrgId: 'org-nope' })).status, 422, 'unknown bank refused');
   refused(await raw(c.pmu, A, 'select_bank', { bankOrgId: BANK_A }), 'PMU cannot choose the bank for the factory');
@@ -494,8 +494,8 @@ test('S9 failure and retry: registry timeout / bad response, email failure, dupl
       assert.equal(app.state, 'DRAFT'); assert.equal(app.number, null, 'no application number issued');
       assert.equal(app.data.general.companyName, 'مصنع تجريبي للصناعات المعدنية', 'entered data preserved');
     }
-    assert.equal((await q("SELECT COUNT(*) AS n FROM application_transitions WHERE applicationId = ? AND toState <> 'DRAFT'", id) as any)[0].n, 0, 'no referral');
-    assert.deepEqual((await q<{ result: string }>('SELECT result FROM registry_verifications WHERE applicationId = ? ORDER BY checkedAt', id)).map((x) => x.result), ['unavailable', 'unavailable', 'invalid'], 'each failure recorded');
+    assert.equal((await q("SELECT COUNT(*) AS n FROM shams_application_transitions WHERE applicationId = ? AND toState <> 'DRAFT'", id) as any)[0].n, 0, 'no referral');
+    assert.deepEqual((await q<{ result: string }>('SELECT result FROM shams_registry_verifications WHERE applicationId = ? ORDER BY checkedAt', id)).map((x) => x.result), ['unavailable', 'unavailable', 'invalid'], 'each failure recorded');
     assert.equal((await emailsTo(id, 'app.registry_failed', 'factory@shams.local')).length, 3, 'factory told each time');
     assert.equal((await emailsTo(id, 'app.review_assigned', 'imc1@shams.local')).length, 0, 'IMC not notified of an unverified application');
     mode = 'ok';
@@ -529,8 +529,8 @@ test('S9 failure and retry: registry timeout / bad response, email failure, dupl
   if ((await getApp(c.factory, id)).state !== 'REJECTED') ok(await act(c.factory, id, 'withdraw', { reason: 'إنهاء سيناريو الاختبار' }), 'cleanup');
 
   // email delivery failure does not change the workflow, and is retried
-  const { processNotifications } = await import('../src/jobs/notificationWorker.js');
-  const { setMailSenderForTests } = await import('../src/mail/mailer.js');
+  const { processNotifications } = await import('../jobs/notificationWorker.js');
+  const { setMailSenderForTests } = await import('../mail/mailer.js');
   await processNotifications(1000);
   setMailSenderForTests(async () => { throw new Error('SMTP 421 (fake outage)'); });
   try {
@@ -559,6 +559,6 @@ test('S9 failure and retry: registry timeout / bad response, email failure, dupl
   assert.equal(dup.status, 409); assert.equal(dup.json.code, 'DUPLICATE_REGISTRY');
   const d = await getApp(c.factory2, draft);
   assert.equal(d.state, 'DRAFT'); assert.equal(d.number, null, 'no number, no transition');
-  assert.equal((await q("SELECT COUNT(*) AS n FROM registry_conflicts WHERE attemptedApplicationId = ?", draft) as any)[0].n, 1, 'conflict recorded for IMC/PMU');
+  assert.equal((await q("SELECT COUNT(*) AS n FROM shams_registry_conflicts WHERE attemptedApplicationId = ?", draft) as any)[0].n, 1, 'conflict recorded for IMC/PMU');
   assert.equal((await getApp(c.factory, holder)).state, 'IMC_REVIEW', 'holder unaffected');
 });

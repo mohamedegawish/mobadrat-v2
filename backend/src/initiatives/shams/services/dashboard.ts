@@ -37,11 +37,11 @@ function actionLabel(action: string, from: ApplicationState): { ar: string; en: 
   return exact ? { ar: exact.labelAr, en: exact.labelEn } : ACTION_LABEL.get(action) ?? { ar: action, en: action };
 }
 
-const scopeBase = (sql: string) => `SELECT a.id FROM applications a JOIN factories f ON f.id = a.factoryId WHERE ${sql}`;
+const scopeBase = (sql: string) => `SELECT a.id FROM shams_applications a JOIN shams_factories f ON f.id = a.factoryId WHERE ${sql}`;
 
 /** عدد الطلبات (ضمن النطاق) التي سبق أن جرى عليها انتقال محدد — مثل «قبلتها IMC». */
 async function countTransitioned(scopeSql: string, params: SqlParam[], fromState: ApplicationState, action: string): Promise<number> {
-  return (await getDb().prepare(`SELECT COUNT(DISTINCT tr.applicationId) AS n FROM application_transitions tr
+  return (await getDb().prepare(`SELECT COUNT(DISTINCT tr.applicationId) AS n FROM shams_application_transitions tr
     WHERE tr.fromState = ? AND tr.action = ? AND tr.applicationId IN (${scopeBase(scopeSql)})`).get(fromState, action, ...params) as { n: number }).n;
 }
 
@@ -51,7 +51,7 @@ export async function buildDashboard(user: UserInternal) {
   // overdue, bank choice/outcome) are computed only over the non-terminal rows — a terminal application has no action and
   // no SLA, so the numbers are identical. Before, every application in scope (about 80 % closed history) was loaded and
   // run through listFlags on every dashboard view.
-  const stateRows = await getDb().prepare(`SELECT a.state AS state, COUNT(*) AS n FROM applications a JOIN factories f ON f.id = a.factoryId
+  const stateRows = await getDb().prepare(`SELECT a.state AS state, COUNT(*) AS n FROM shams_applications a JOIN shams_factories f ON f.id = a.factoryId
     WHERE ${scope.sql} AND a.state <> 'DRAFT' GROUP BY a.state`).all(...scope.params) as Array<{ state: ApplicationState; n: number }>;
   const byState = Object.fromEntries(APPLICATION_STATES.map((s) => [s, 0])) as Record<ApplicationState, number>;
   for (const r of stateRows) byState[r.state] = Number(r.n);
@@ -127,7 +127,7 @@ export async function buildDashboard(user: UserInternal) {
       if (keys) attention.push({ key: 'keys', labelAr: 'مفاتيح ربط بانتظار الاعتماد', labelEn: 'Integration keys awaiting approval', count: keys, link: { view: 'approvals', param: null } });
       extra = {
         byStage: APPLICATION_STATES.filter((s) => s !== 'DRAFT').map((s) => ({ state: s, labelAr: STATE_LABELS[s].ar, labelEn: STATE_LABELS[s].en, count: byState[s] })),
-        drafts: (await getDb().prepare(`SELECT COUNT(*) AS n FROM applications WHERE state = 'DRAFT'`).get() as { n: number }).n,
+        drafts: (await getDb().prepare(`SELECT COUNT(*) AS n FROM shams_applications WHERE state = 'DRAFT'`).get() as { n: number }).n,
         stuck: stuck.slice(0, 5).map((s) => ({ id: s.id, number: s.number, companyName: s.companyName, reasonAr: s.reasonAr, reasonEn: s.reasonEn })),
       };
       break;
@@ -152,7 +152,7 @@ export async function buildDashboard(user: UserInternal) {
 /** آخر 10 أحداث ضمن ما يحق للدور رؤيته (نفس visibleTransitions). */
 async function recentActivity(user: UserInternal, scope: { sql: string; params: SqlParam[] }): Promise<RecentItem[]> {
   const db = getDb();
-  const rows = await db.prepare(`SELECT tr.*, a.number AS number, a.companyName AS companyName FROM application_transitions tr JOIN applications a ON a.id = tr.applicationId
+  const rows = await db.prepare(`SELECT tr.*, a.number AS number, a.companyName AS companyName FROM shams_application_transitions tr JOIN shams_applications a ON a.id = tr.applicationId
     WHERE tr.applicationId IN (${scopeBase(scope.sql)}) AND tr.fromState <> 'DRAFT' ORDER BY tr.createdAt DESC, tr.rowid DESC LIMIT 60`).all(...scope.params) as Array<Record<string, unknown>>;
   const out: RecentItem[] = [];
   for (const r of rows) {

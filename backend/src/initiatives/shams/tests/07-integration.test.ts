@@ -31,7 +31,7 @@ function call(key: string | null, method: string, p: string, body?: unknown, hea
 test('18a) keys: stored hashed, scope enforced, revoked/rotated keys rejected', async () => {
   const read = await createKey(['read']);
   assert.match(read.key, /^shk_[a-f0-9]{8}_/);
-  const stored = await q<{ keyHash: string }>('SELECT keyHash FROM integration_keys WHERE id = ?', read.id);
+  const stored = await q<{ keyHash: string }>('SELECT keyHash FROM shams_integration_keys WHERE id = ?', read.id);
   assert.notEqual(stored[0].keyHash, read.key);
   assert.equal(stored[0].keyHash.length, 64);
   // لا مفتاح / مفتاح خطأ
@@ -70,9 +70,9 @@ test('H1) data scopes are disabled by project decision: no key can be created or
     assert.equal(r.status, 403, scope);
     assert.equal(r.json.code, 'DATA_SCOPES_DISABLED');
   }
-  assert.equal((await q("SELECT 1 FROM integration_keys WHERE name LIKE 'data-%'")).length, 0, 'no key row was created');
+  assert.equal((await q("SELECT 1 FROM shams_integration_keys WHERE name LIKE 'data-%'")).length, 0, 'no key row was created');
   // مفتاح قديم بنطاق بيانات (قبل التعطيل) لا يعمل: يُدرج مباشرة كما لو أنشئ قبل القرار.
-  const { createIntegrationKey } = await import('../src/store/integrationKeys.js');
+  const { createIntegrationKey } = await import('../store/integrationKeys.js');
   const legacy = await createIntegrationKey({ name: 'legacy-docs', scopes: ['read', 'read_documents'], rateLimitPerMinute: 60, createdBy: null });
   const r = await call(legacy.plaintext, 'GET', '/audit-logs');
   assert.equal(r.status, 403);
@@ -112,7 +112,7 @@ test('18c) there is no decision endpoint, and manage_users cannot touch system a
   }
   assert.equal((await getApp(c.imc, id)).state, 'IMC_REVIEW');
   // الوثيقة نفسها لا تحتوي أي عملية كتابة على الطلبات
-  const spec = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '..', '..', 'contracts', 'integration.openapi.json'), 'utf8'));
+  const spec = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '..', 'contracts', 'integration.openapi.json'), 'utf8'));
   for (const [p, ops] of Object.entries<Record<string, unknown>>(spec.paths)) {
     if (p.startsWith('/applications')) assert.deepEqual(Object.keys(ops).filter((k) => k !== 'parameters'), ['get'], p);
   }
@@ -123,7 +123,7 @@ test('18c) there is no decision endpoint, and manage_users cannot touch system a
   // F-02: السجل التاريخي وصفي (حالات وإجراء ودور وتوقيت)، والمستندات لم تعد جزءًا من عرض الربط — المعرّف من القاعدة (التفاصيل في اختبار F-02).
   assert.ok(detail.data.history.length >= 1);
   assert.equal(detail.data.documents, undefined);
-  const doc = (await q<{ id: string }>('SELECT id FROM documents WHERE applicationId = ? LIMIT 1', id))[0];
+  const doc = (await q<{ id: string }>('SELECT id FROM shams_documents WHERE applicationId = ? LIMIT 1', id))[0];
   // تنزيل المستندات يحتاج read_documents وهو معطل: لا مفتاح من هذا الاختبار يستطيع التنزيل.
   const dl = await call(all.key, 'GET', `/applications/${id}/documents/${doc.id}`);
   assert.equal(dl.status, 403);
@@ -144,7 +144,7 @@ test('18c) there is no decision endpoint, and manage_users cannot touch system a
   // M5: الربط لا يعتمد مقدمي الخدمة ولا يوقفهم (قرار PMU فقط).
   assert.equal((await call(all.key, 'PUT', `/service-providers/${spj.data.id}`, { status: 'approved' })).status, 400);
   assert.equal((await call(all.key, 'PUT', `/service-providers/${spj.data.id}`, { notes: 'ملاحظة' })).status, 200);
-  assert.equal((await q<{ status: string }>('SELECT status FROM service_providers WHERE id = ?', spj.data.id))[0].status, 'pending');
+  assert.equal((await q<{ status: string }>('SELECT status FROM shams_service_providers WHERE id = ?', spj.data.id))[0].status, 'pending');
 });
 
 test('18d) webhook: HMAC-signed, same eventId on retry, never re-sent after delivery', async () => {
@@ -163,22 +163,22 @@ test('18d) webhook: HMAC-signed, same eventId on retry, never re-sent after deli
     });
   });
   await new Promise<void>((r) => hook.listen(0, '127.0.0.1', () => r()));
-  process.env.PLATFORM_WEBHOOK_URL = `http://127.0.0.1:${(hook.address() as AddressInfo).port}/hooks`;
-  process.env.PLATFORM_WEBHOOK_SECRET = secret;
+  process.env.SHAMS_WEBHOOK_URL = `http://127.0.0.1:${(hook.address() as AddressInfo).port}/hooks`;
+  process.env.SHAMS_WEBHOOK_SECRET = secret;
   try {
     const open = (await c.factory.get('/factory/profile')).json.data.openApplicationId;
     if (open) await act(c.factory, open, 'withdraw', { reason: 'إنهاء' });
     const id = await advanceTo('IMC_REVIEW', c, 'IND-HOOK-1');
     const rows = await q<{ id: string; eventId: string; status: string }>(
-      "SELECT w.id, w.eventId, w.status FROM webhook_outbox w JOIN application_transitions t ON t.id = w.transitionId WHERE t.applicationId = ? AND t.toState = 'IMC_REVIEW'", id);
+      "SELECT w.id, w.eventId, w.status FROM shams_webhook_outbox w JOIN shams_application_transitions t ON t.id = w.transitionId WHERE t.applicationId = ? AND t.toState = 'IMC_REVIEW'", id);
     assert.equal(rows.length, 1);
     assert.equal(rows[0].status, 'pending');
-    const { processWebhooks } = await import('../src/jobs/webhookWorker.js');
+    const { processWebhooks } = await import('../jobs/webhookWorker.js');
     const first = await processWebhooks();
     assert.equal(first.retried >= 1, true);
     // تقديم موعد إعادة المحاولة ثم تشغيل العامل مجددًا
-    const { getDb } = await import('../src/db/sqlite.js');
-    await getDb().prepare("UPDATE webhook_outbox SET nextAttemptAt = '2000-01-01T00:00:00.000Z' WHERE status = 'pending'").run();
+    const { getDb } = await import('../db/sqlite.js');
+    await getDb().prepare("UPDATE shams_webhook_outbox SET nextAttemptAt = '2000-01-01T00:00:00.000Z' WHERE status = 'pending'").run();
     await processWebhooks();
     const forThis = received.filter((r) => r.id === rows[0].eventId);
     assert.equal(forThis.length, 2, 'one failed attempt + one retry');
@@ -191,17 +191,17 @@ test('18d) webhook: HMAC-signed, same eventId on retry, never re-sent after deli
       assert.equal(payload.id, rows[0].eventId);
       assert.equal(payload.data.toState, 'IMC_REVIEW');
     }
-    const status = await q<{ status: string }>('SELECT status FROM webhook_outbox WHERE id = ?', rows[0].id);
+    const status = await q<{ status: string }>('SELECT status FROM shams_webhook_outbox WHERE id = ?', rows[0].id);
     assert.equal(status[0].status, 'delivered');
     // لا إعادة إرسال بعد التسليم
-    await getDb().prepare("UPDATE webhook_outbox SET nextAttemptAt = '2000-01-01T00:00:00.000Z'").run();
+    await getDb().prepare("UPDATE shams_webhook_outbox SET nextAttemptAt = '2000-01-01T00:00:00.000Z'").run();
     const before = received.length;
     await processWebhooks();
     assert.equal(received.filter((r) => r.id === rows[0].eventId).length, 2);
     assert.ok(received.length >= before);
   } finally {
-    delete process.env.PLATFORM_WEBHOOK_URL;
-    delete process.env.PLATFORM_WEBHOOK_SECRET;
+    delete process.env.SHAMS_WEBHOOK_URL;
+    delete process.env.SHAMS_WEBHOOK_SECRET;
     await new Promise((r) => hook.close(() => r(null)));
   }
 });
@@ -267,8 +267,8 @@ test('F-02) integration `read` returns an explicit metadata allowlist only — n
 
   const rich = await getApp(c.pmu, contractedId);
   const providerName: string = rich.provider.nameAr;
-  const docRows = await q<{ originalName: string; sha256: string; storedName: string }>('SELECT originalName, sha256, storedName FROM documents WHERE applicationId = ?', contractedId);
-  const factoryId: string = (await q<{ factoryId: string }>('SELECT factoryId FROM applications WHERE id = ?', contractedId))[0].factoryId;
+  const docRows = await q<{ originalName: string; sha256: string; storedName: string }>('SELECT originalName, sha256, storedName FROM shams_documents WHERE applicationId = ?', contractedId);
+  const factoryId: string = (await q<{ factoryId: string }>('SELECT factoryId FROM shams_applications WHERE id = ?', contractedId))[0].factoryId;
   const allSecrets = [
     ...Object.values(SECRET).map(String), 'IND-META-1', 'IND-META-2', providerName, factoryId,
     ...docRows.flatMap((d) => [d.originalName, d.sha256, d.storedName]), 'offer-private-name', 'approval-private-name', 'contract-private-name',
@@ -318,12 +318,12 @@ test('F-02) integration `read` returns an explicit metadata allowlist only — n
   }
 
   // 5) لا تصعيد: مفتاح قديم بنطاق read_full يحصل على العرض الوصفي نفسه، ونطاقات البيانات الأخرى ما زالت مرفوضة
-  const { createIntegrationKey } = await import('../src/store/integrationKeys.js');
+  const { createIntegrationKey } = await import('../store/integrationKeys.js');
   const legacy = await createIntegrationKey({ name: 'legacy-full', scopes: ['read', 'read_full', 'read_documents', 'read_audit'], rateLimitPerMinute: 1000, createdBy: null });
   const ld = await (await call(legacy.plaintext, 'GET', `/applications/${contractedId}`)).json();
   assert.deepEqual(Object.keys(ld.data).sort(), [...LIST_KEYS, 'history'].sort(), 'read_full does not widen the response');
   assert.ok(!JSON.stringify(ld).includes(SECRET.bankNotes));
-  const docId = (await q<{ id: string }>('SELECT id FROM documents WHERE applicationId = ? LIMIT 1', contractedId))[0].id;
+  const docId = (await q<{ id: string }>('SELECT id FROM shams_documents WHERE applicationId = ? LIMIT 1', contractedId))[0].id;
   const dl = await call(legacy.plaintext, 'GET', `/applications/${contractedId}/documents/${docId}`);
   assert.equal(dl.status, 403);
   assert.equal((await dl.json()).code, 'DATA_SCOPES_DISABLED');

@@ -93,7 +93,7 @@ export async function readinessReport() {
     detailEn: stuck.length ? `${stuck.length} application(s) waiting on an unavailable party.` : 'Every open application has someone to act on it.',
     items: stuck.map((s) => ({ id: s.id, labelAr: `${s.number ?? 'مسودة'} — ${s.companyName}`, labelEn: `${s.number ?? 'Draft'} — ${s.companyName}`, extraAr: s.reasonAr, extraEn: s.reasonEn })),
   });
-  const failed = (await db.prepare("SELECT COUNT(*) AS n FROM notification_outbox WHERE status = 'failed'").get() as { n: number }).n;
+  const failed = (await db.prepare("SELECT COUNT(*) AS n FROM notification_outbox WHERE status = 'failed' AND initiativeId = 'shams'").get() as { n: number }).n;
   checks.push({
     key: 'failed_notifications', ok: failed === 0,
     labelAr: 'لا توجد رسائل فاشلة', labelEn: 'No failed messages',
@@ -107,8 +107,8 @@ export async function readinessReport() {
     detailAr: support ? 'SUPPORT_EMAIL وSUPPORT_PHONE مضبوطان ويظهران في الموقع والبريد.' : 'SUPPORT_EMAIL أو SUPPORT_PHONE غير مضبوط — المصنع لا يعرف كيف يستفسر أو يعترض.',
     detailEn: support ? 'SUPPORT_EMAIL and SUPPORT_PHONE are set.' : 'SUPPORT_EMAIL or SUPPORT_PHONE is missing.',
   });
-  const skipped = (await db.prepare("SELECT COUNT(*) AS n FROM notification_outbox WHERE status = 'skipped'").get() as { n: number }).n;
-  const pending = (await db.prepare("SELECT COUNT(*) AS n FROM notification_outbox WHERE status IN ('pending','sending')").get() as { n: number }).n;
+  const skipped = (await db.prepare("SELECT COUNT(*) AS n FROM notification_outbox WHERE status = 'skipped' AND initiativeId = 'shams'").get() as { n: number }).n;
+  const pending = (await db.prepare("SELECT COUNT(*) AS n FROM notification_outbox WHERE status IN ('pending','sending') AND initiativeId = 'shams'").get() as { n: number }).n;
   return {
     ok: checks.every((c) => c.ok),
     checks,

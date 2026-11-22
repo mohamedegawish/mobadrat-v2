@@ -18,7 +18,7 @@ before(async () => { srv = await startServer(); });
 after(async () => { await srv.close(); await env.cleanup(); });
 
 const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
-const storedCount = () => { try { return fs.readdirSync(path.join(env.dir, 'uploads', 'documents')).length; } catch { return 0; } };
+const storedCount = () => { try { return fs.readdirSync(path.join(env.dir, 'uploads', 'shams', 'documents')).length; } catch { return 0; } };
 const userCount = async (email: string) => (await q('SELECT 1 FROM users WHERE email = ?', email)).length;
 
 test('RP-1 one request creates the pending account, the draft with all the form data, and every document', async () => {
@@ -28,12 +28,12 @@ test('RP-1 one request creates the pending account, the draft with all the form 
   assert.equal(r.status, 201, JSON.stringify(r.json));
 
   const [f] = await q<{ id: string; accountStatus: string; approvedAt: string | null; organizationId: string }>(
-    'SELECT f.id, f.accountStatus, f.approvedAt, f.organizationId FROM factories f JOIN users u ON u.organizationId = f.organizationId WHERE u.email = ?', email);
+    `SELECT f.id, f.accountStatus, f.approvedAt, f.organizationId FROM shams_factories f JOIN initiative_memberships m ON m.organizationId = f.organizationId AND m.initiativeId = 'shams' JOIN users u ON u.id = m.userId WHERE u.email = ?`, email);
   assert.equal(f.accountStatus, 'pending');
   assert.equal(f.approvedAt, null);
-  const [app] = await q<{ id: string; state: string }>('SELECT id, state FROM applications WHERE factoryId = ?', f.id);
+  const [app] = await q<{ id: string; state: string }>('SELECT id, state FROM shams_applications WHERE factoryId = ?', f.id);
   assert.equal(app.state, 'DRAFT', 'sent to IMC only after the email is verified');
-  const data = Object.fromEntries((await q<{ section: string; data: string }>('SELECT section, data FROM application_data WHERE applicationId = ?', app.id)).map((d) => [d.section, JSON.parse(d.data)]));
+  const data = Object.fromEntries((await q<{ section: string; data: string }>('SELECT section, data FROM shams_application_data WHERE applicationId = ?', app.id)).map((d) => [d.section, JSON.parse(d.data)]));
   assert.equal(data.general.companyName, 'مصنع التسجيل الذاتي');
   assert.equal(data.general.website, 'https://www.regpage.test');
   assert.equal(data.contact.contactEmail, email);
@@ -42,7 +42,7 @@ test('RP-1 one request creates the pending account, the draft with all the form 
   assert.equal(data.engineering.roofAreas.length, 2);
 
   const docs = await q<{ kind: string; originalName: string; sha256: string; storedName: string; attempt: number; status: string }>(
-    'SELECT kind, originalName, sha256, storedName, attempt, status FROM documents WHERE applicationId = ? ORDER BY kind, originalName', app.id);
+    'SELECT kind, originalName, sha256, storedName, attempt, status FROM shams_documents WHERE applicationId = ? ORDER BY kind, originalName', app.id);
   assert.equal(docs.length, files.length);
   for (const sent of files) {
     const d = docs.find((x) => x.sha256 === sha(sent.body));
@@ -51,7 +51,7 @@ test('RP-1 one request creates the pending account, the draft with all the form 
     assert.equal(d!.attempt, 1);
     assert.equal(d!.status, 'current');
     assert.match(d!.storedName, /^[0-9a-f-]{36}\.pdf$/);
-    assert.ok(fs.existsSync(path.join(env.dir, 'uploads', 'documents', d!.storedName)));
+    assert.ok(fs.existsSync(path.join(env.dir, 'uploads', 'shams', 'documents', d!.storedName)));
   }
   // Not usable before activation.
   assert.equal((await new Client(srv.base).post('/auth/login', { email, password: 'Factory123' })).json.code, 'EMAIL_NOT_VERIFIED');
@@ -103,7 +103,7 @@ test('RP-3 the industrial registry number is checked before anything is created'
   assert.equal(down.status, 503);
   assert.equal(down.json.code, 'REGISTRY_UNAVAILABLE');
   // A number held by another factory's submitted application.
-  const held = await q<{ n: string }>("SELECT industrialRegistryNumber AS n FROM applications WHERE state NOT IN ('DRAFT','REJECTED','CONTRACTED','CLOSED_NOT_CONTRACTED','WITHDRAWN') AND industrialRegistryNumber IS NOT NULL LIMIT 1");
+  const held = await q<{ n: string }>("SELECT industrialRegistryNumber AS n FROM shams_applications WHERE state NOT IN ('DRAFT','REJECTED','CONTRACTED','CLOSED_NOT_CONTRACTED','WITHDRAWN') AND industrialRegistryNumber IS NOT NULL LIMIT 1");
   if (held.length) {
     const dup = await registerFactory(c, registrationPayload('regpage.dup@test.local', held[0].n));
     assert.equal(dup.status, 409);
@@ -116,13 +116,13 @@ test('RP-3 the industrial registry number is checked before anything is created'
 test('RP-4 an existing email gets the same response, and its documents are discarded (nothing written to the existing account)', async () => {
   const c = new Client(srv.base);
   const before = storedCount();
-  const docsBefore = (await q<{ n: number }>('SELECT COUNT(*) AS n FROM documents'))[0].n;
+  const docsBefore = (await q<{ n: number }>('SELECT COUNT(*) AS n FROM shams_documents'))[0].n;
   const fresh = await registerFactory(c, registrationPayload('regpage.someone@test.local', 'IND-RP-4A'));
   const freshFiles = storedCount();
   const dup = await registerFactory(c, registrationPayload(DEV.factory, 'IND-RP-4B'));
   assert.equal(dup.status, 201);
   assert.equal(dup.json.message, fresh.json.message, 'no account enumeration');
-  assert.equal((await q<{ n: number }>('SELECT COUNT(*) AS n FROM documents'))[0].n, docsBefore + registrationFiles().length, 'only the new account got documents');
+  assert.equal((await q<{ n: number }>('SELECT COUNT(*) AS n FROM shams_documents'))[0].n, docsBefore + registrationFiles().length, 'only the new account got documents');
   for (let i = 0; i < 20 && storedCount() !== freshFiles; i++) await new Promise((r) => setTimeout(r, 50));
   assert.equal(storedCount(), freshFiles, 'the duplicate’s files were removed');
   assert.ok(freshFiles > before);

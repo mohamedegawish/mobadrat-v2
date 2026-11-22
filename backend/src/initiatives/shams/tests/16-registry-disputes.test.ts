@@ -19,10 +19,10 @@ async function closeOpen() {
     if (open) await act(f, open, 'withdraw', { reason: 'إنهاء لأغراض الاختبار' });
   }
 }
-const factoryId = async (client: { user: { organizationId: string } }) => (await q<{ id: string }>('SELECT id FROM factories WHERE organizationId = ?', client.user.organizationId))[0].id;
+const factoryId = async (client: { user: { organizationId: string } }) => (await q<{ id: string }>('SELECT id FROM shams_factories WHERE organizationId = ?', client.user.organizationId))[0].id;
 const decision = { reason: 'ثبت التفويض بخطاب رسمي من المنشأة', reference: 'PMU-2026-31' };
 async function flushMail() {
-  const { processNotifications } = await import('../src/jobs/notificationWorker.js');
+  const { processNotifications } = await import('../jobs/notificationWorker.js');
   await processNotifications(200);
 }
 
@@ -75,7 +75,7 @@ test('conflict → objection with PDF → PMU accepts: number reserved for the o
   assert.equal((await c.pmu.post(`/registry-objections/${id}/accept`, decision)).status, 409, 'single decision');
 
   // الرقم صار للمعترض فقط
-  const { registryAccess } = await import('../src/store/registry.js');
+  const { registryAccess } = await import('../store/registry.js');
   const f1 = await factoryId(c.factory);
   const f2 = await factoryId(c.factory2);
   assert.equal((await registryAccess(number, f2)).allowed, true);
@@ -124,7 +124,7 @@ test('PMU decides a dispute directly: only a party can be named, reason + refere
   assert.equal(r.json.data.heldByOtherApplication, null, 'the holder is the named factory itself');
   const objs = (await c.pmu.get('/registry-objections')).json.data.items.filter((o: any) => o.registryNumber === number);
   assert.equal(objs[0].status, 'rejected', 'the competing objection is closed by the decision');
-  const { registryAccess } = await import('../src/store/registry.js');
+  const { registryAccess } = await import('../store/registry.js');
   assert.equal((await registryAccess(number, f1)).allowed, true);
   assert.equal((await registryAccess(number, f2)).allowed, false);
   assert.equal((await act(c.factory2, draft, 'submit')).status, 409, 'the other factory cannot register the number any more');

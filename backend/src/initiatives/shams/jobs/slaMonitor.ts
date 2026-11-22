@@ -19,7 +19,7 @@ export async function runSlaSweep(now = Date.now()): Promise<number> {
   const states = (Object.entries(shamsPolicy.slaDays) as Array<[ApplicationState, number | null]>)
     .filter(([, d]) => d !== null && d !== undefined).map(([s]) => s);
   if (!states.length) return 0;
-  const rows = await getDb().prepare(`SELECT id FROM applications WHERE state IN (${states.map(() => '?').join(',')})`).all(...states) as Array<{ id: string }>;
+  const rows = await getDb().prepare(`SELECT id FROM shams_applications WHERE state IN (${states.map(() => '?').join(',')})`).all(...states) as Array<{ id: string }>;
   let n = 0;
   for (const { id } of rows) {
     const app = await getApplication(id);

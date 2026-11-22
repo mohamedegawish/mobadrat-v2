@@ -5,10 +5,8 @@
  *   قبول (IMC_REVIEW → ENCPC_REVIEW) → approved (دخول كامل) رفض → rejected (لا دخول)
  * المصنع approved لا يتأثر بعدها بأي انتقال (طلبات لاحقة أو مراحل أخرى).
  */
-import { getDb } from '../db/sqlite.js';
 import { getFactory, setFactoryAccountStatus, type FactoryAccountStatus } from '../store/factories.js';
 import { addAuditLog } from '../store/audit.js';
-import { revokeAllSessions } from '../store/refreshTokens.js';
 import type { AppRow } from '../store/applications.js';
 import type { ApplicationState, ActionName } from '../workflow/shamsWorkflow.js';
 import type { UserInternal } from '../store/users.js';
@@ -31,7 +29,8 @@ function nextStatus(from: ApplicationState, to: ApplicationState, action: Action
 
 /**
  * يُستدعى داخل معاملة الانتقال نفسها (performAction). يرجع حدث الحساب لإيميل المصنع، أو null لمصنع مقبول أو انتقال لا يخص الحساب.
- * إعادة الإرسال من الوضع المقيّد تُنهي جلسات المصنع: لا دخول حتى القرار التالي.
+ * المنصة الموحدة: حالة الحساب تقيّد شاشات المبادرة فقط (middleware/factoryAccess) ولا تُنهي جلسة المنصة —
+ * صاحب المصنع يبقى قادرًا على الدخول لمبادراته الأخرى.
  */
 export async function syncFactoryAccount(app: AppRow, from: ApplicationState, to: ApplicationState, action: ActionName, actor: UserInternal, ip: string): Promise<AccountEvent | null> {
   const factory = await getFactory(app.factoryId);
@@ -39,11 +38,6 @@ export async function syncFactoryAccount(app: AppRow, from: ApplicationState, to
   const next = nextStatus(from, to, action);
   if (!next || next.status === factory.accountStatus) return null;
   await setFactoryAccountStatus(factory.id, next.status);
-  if (next.status === 'under_review' && action === 'resubmit') {
-    for (const u of await getDb().prepare("SELECT id FROM users WHERE organizationId = ? AND role = 'factory_owner'").all(factory.organizationId) as Array<{ id: string }>) {
-      await revokeAllSessions(u.id);
-    }
-  }
   await addAuditLog({
     actorType: 'user', actorUserId: actor.id, actorName: actor.nameAr, actorRole: actor.role, actorOrgId: actor.organizationId, ip,
     action: 'factory.account_status', entityType: 'factory', entityId: factory.id, applicationId: app.id,
@@ -53,15 +47,15 @@ export async function syncFactoryAccount(app: AppRow, from: ApplicationState, to
   return next.event;
 }
 
-/** رسائل منع الدخول (تسجيل الدخول وتجديد الجلسة). null = الدخول مسموح (كامل أو مقيّد). */
+/** رسائل منع الدخول على شاشات المبادرة (لا تمنع الدخول للمنصة). null = مسموح (كامل أو مقيّد). */
 export function accountLoginBlock(status: FactoryAccountStatus | null): { code: string; ar: string; en: string } | null {
   if (status === 'under_review') {
-    return { code: 'ACCOUNT_UNDER_REVIEW', ar: 'طلب تسجيل مصنعكم قيد مراجعة مركز تحديث الصناعة (IMC). ستصلكم رسالة على البريد بالقرار، ويمكنكم الدخول بعد قبول الحساب.',
-      en: 'Your factory registration is under IMC review. You will be emailed the decision and can sign in once the account is approved.' };
+    return { code: 'ACCOUNT_UNDER_REVIEW', ar: 'طلب تسجيل مصنعكم في مبادرة «شمس الصناعة» قيد مراجعة مركز تحديث الصناعة (IMC). ستصلكم رسالة على البريد بالقرار، وتُفتح لوحة المبادرة بعد قبول الحساب.',
+      en: 'Your factory registration in Shams El-Senaa is under IMC review. You will be emailed the decision; the initiative dashboard opens once it is approved.' };
   }
   if (status === 'rejected') {
-    return { code: 'ACCOUNT_REJECTED', ar: 'لم يُقبل طلب تسجيل هذا المصنع، فلا يمكن الدخول بهذا الحساب. سبب القرار مرسل على بريدكم — للاستفسار تواصلوا مع الدعم.',
-      en: 'This factory registration was not approved, so the account cannot sign in. The reason was emailed to you; contact support with any questions.' };
+    return { code: 'ACCOUNT_REJECTED', ar: 'لم يُقبل طلب تسجيل هذا المصنع في مبادرة «شمس الصناعة». سبب القرار مرسل على بريدكم — للاستفسار تواصلوا مع الدعم. حسابكم على المنصة يبقى صالحًا لباقي المبادرات.',
+      en: 'This factory registration in Shams El-Senaa was not approved. The reason was emailed to you. Your platform account stays valid for the other initiatives.' };
   }
   return null;
 }

@@ -82,17 +82,17 @@ test('B2: reaching provider selection with no approved provider alerts PMU and a
 
 test('B2/I9: check:readiness fails without a support channel and reports each condition', async () => {
   const run = (extra: Record<string, string>) => spawnSync(process.execPath, ['--import', 'tsx', 'src/cli/checkReadiness.ts'], {
-    cwd: path.resolve(import.meta.dirname, '..'), encoding: 'utf8', env: { ...process.env, ...extra },
+    cwd: path.resolve(import.meta.dirname, '..', '..', '..', '..'), encoding: 'utf8', env: { ...process.env, ...extra },
   });
   const missing = run({ SUPPORT_EMAIL: '', SUPPORT_PHONE: '' });
   assert.equal(missing.status, 1, missing.stdout + missing.stderr);
   assert.match(missing.stdout, /قناة استفسار رسمية/);
   assert.match(missing.stderr, /check:readiness FAILED/);
   // No database: a missing SQLite file, or (MySQL) a database that does not exist on the server.
-  const missingMysql = () => { const u = new URL(process.env.DATABASE_URL!); u.pathname = '/shams_t_missing_db_x'; return u.toString(); };
+  const missingMysql = () => { const u = new URL(process.env.DATABASE_URL!); u.pathname = '/mbt_missing_db_x'; return u.toString(); };
   const noDb = run(onMysql ? { DATABASE_URL: missingMysql() } : { DB_PATH: path.join(env.dir, 'missing.db') });
   assert.equal(noDb.status, 1);
-  const { readinessReport } = await import('../src/services/readiness.js');
+  const { readinessReport } = await import('../services/readiness.js');
   process.env.SUPPORT_EMAIL = 'support@shams.test';
   process.env.SUPPORT_PHONE = '19000';
   try {
@@ -119,7 +119,7 @@ test('disabling a bank chosen by open applications needs explicit confirmation, 
   assert.equal(blocked.status, 409);
   assert.equal(blocked.json.code, 'OPEN_REFERRALS');
   assert.match(blocked.json.messageAr, /1 طلب/);
-  assert.equal((await q("SELECT isActive FROM organizations WHERE id = ?", BANK_A))[0].isActive, 1, 'nothing changed');
+  assert.equal((await q("SELECT isActive FROM shams_organizations WHERE id = ?", BANK_A))[0].isActive, 1, 'nothing changed');
   const ok = await c.admin.put(`/admin/organizations/${BANK_A}`, { isActive: false, confirmOpenReferrals: true });
   assert.equal(ok.status, 200);
   try {
@@ -217,8 +217,8 @@ test('M5/I6: PMU work queue excludes drafts (counted separately) and "awaiting m
   assert.ok(all.draftsCount >= 1);
   const drafts = (await c.pmu.get('/applications?state=DRAFT')).json.data;
   assert.ok(drafts.items.length >= 1 && drafts.items.every((i: any) => i.state === 'DRAFT'));
-  const { getDb } = await import('../src/db/sqlite.js');
-  await getDb().prepare("UPDATE applications SET stateEnteredAt = '2026-01-01T00:00:00.000Z' WHERE id = ?").run(a1);
+  const { getDb } = await import('../db/sqlite.js');
+  await getDb().prepare("UPDATE shams_applications SET stateEnteredAt = '2026-01-01T00:00:00.000Z' WHERE id = ?").run(a1);
   const mine = (await c.pmu.get('/applications?mine=1')).json.data.items;
   const dates = mine.map((i: any) => i.stateEnteredAt);
   assert.deepEqual(dates, [...dates].sort(), 'oldest first');
@@ -244,7 +244,7 @@ test('I7: the Excel sheet has Arabic headers, readable names, Cairo time and yes
   assert.ok(!rows.some((row: any[]) => /^[A-Z_]+$/.test(String(row[state]))), 'state label, not code');
   const sub = headers.indexOf('تاريخ الإرسال (القاهرة)');
   assert.ok(rows.some((row: any[]) => /^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/.test(String(row[sub]))), 'Cairo dd/mm/yyyy hh:mm');
-  const { cairoDateTime } = await import('../src/services/reports.js');
+  const { cairoDateTime } = await import('../services/reports.js');
   assert.equal(cairoDateTime('2026-11-02T22:30:00.000Z'), '03/11/2026 00:30', 'UTC+2 Cairo (no DST in November)');
   const above = headers.findIndex((h: string) => h.startsWith('أعلى من'));
   assert.ok(rows.some((row: any[]) => row[above] === 'نعم'));

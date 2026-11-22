@@ -12,28 +12,28 @@ let c: Awaited<ReturnType<typeof clients>>;
 
 before(async () => { srv = await startServer(); c = await clients(srv.base); });
 after(async () => {
-  const { setMailSenderForTests } = await import('../src/mail/mailer.js');
+  const { setMailSenderForTests } = await import('../mail/mailer.js');
   setMailSenderForTests(null);
   await srv.close(); await env.cleanup();
 });
 
 /** Simulates the passage of time for due rows (the worker reads the real clock). */
 async function makeDue(ids: string[]) {
-  const { getDb } = await import('../src/db/sqlite.js');
+  const { getDb } = await import('../db/sqlite.js');
   for (const id of ids) await getDb().prepare("UPDATE notification_outbox SET nextAttemptAt = '2000-01-01T00:00:00.000Z' WHERE id = ?").run(id);
 }
 
 test('OB-1 failed email delivery: retried with backoff on the same row, failed after the limit, requeued by the admin, delivered once — workflow untouched', async () => {
-  const { processNotifications } = await import('../src/jobs/notificationWorker.js');
-  const { setMailSenderForTests } = await import('../src/mail/mailer.js');
-  const { MAX_ATTEMPTS } = await import('../src/store/outbox.js');
+  const { processNotifications } = await import('../jobs/notificationWorker.js');
+  const { setMailSenderForTests } = await import('../mail/mailer.js');
+  const { MAX_ATTEMPTS } = await import('../store/outbox.js');
   await processNotifications(500); // drain everything produced by logins/seed so only the new rows matter
   let failing = true;
   let calls = 0;
   setMailSenderForTests(async (m) => { calls++; if (failing) throw new Error('SMTP 451 temporary failure (fake)'); sentMails.push({ to: m.to, subject: m.subject, html: m.html, text: m.text, attachments: [] }); return 'sent'; });
 
   const id = await advanceTo('IMC_REVIEW', c, 'IND-OB-1');
-  const app0 = (await q<any>('SELECT state, version FROM applications WHERE id = ?', id))[0];
+  const app0 = (await q<any>('SELECT state, version FROM shams_applications WHERE id = ?', id))[0];
   const rows0 = await q<any>("SELECT id FROM notification_outbox WHERE applicationId = ? AND channel = 'email' AND status = 'pending'", id);
   assert.ok(rows0.length >= 1, 'the submission produced email notifications');
   const ids = rows0.map((r) => r.id);
@@ -64,7 +64,7 @@ test('OB-1 failed email delivery: retried with backoff on the same row, failed a
   // no new logical notification was created by the retries
   assert.equal((await q("SELECT 1 FROM notification_outbox WHERE applicationId = ? AND channel = 'email'", id)).length, rows0.length);
   // delivery failures did not touch the workflow
-  const app1 = (await q<any>('SELECT state, version FROM applications WHERE id = ?', id))[0];
+  const app1 = (await q<any>('SELECT state, version FROM shams_applications WHERE id = ?', id))[0];
   assert.deepEqual(app1, app0);
 
   // admin requeue → delivered exactly once
@@ -84,8 +84,8 @@ test('OB-1 failed email delivery: retried with backoff on the same row, failed a
 });
 
 test('OB-2 idempotency: dispatching the same logical notification again creates no row (outbox and inbox), and a claim is exclusive', async () => {
-  const { dispatch } = await import('../src/notifications/notify.js');
-  const { claimNotification } = await import('../src/store/outbox.js');
+  const { dispatch } = await import('../notifications/notify.js');
+  const { claimNotification } = await import('../store/outbox.js');
   const recipients = [{ userId: 'usr-pmu-1', email: 'pmu@shams.local' }];
   const vars = { appId: 'x', number: 'N-1', companyName: 'c', amount: 1, threshold: 0 };
   const n1 = await dispatch('ops.contract_amount_alert', vars, recipients, { dedupePrefix: 'ob2-fixed', channels: ['email'] });
@@ -99,7 +99,7 @@ test('OB-2 idempotency: dispatching the same logical notification again creates 
 });
 
 test('OB-3 a hung SMTP server: the attempt fails within the SMTP timeouts, well inside the 10-minute stale-claim window (a thrown send is retried: OB-1)', async () => {
-  const { setMailSenderForTests, sendMail, SMTP_TIMEOUTS } = await import('../src/mail/mailer.js');
+  const { setMailSenderForTests, sendMail, SMTP_TIMEOUTS } = await import('../mail/mailer.js');
   const sockets: net.Socket[] = [];
   const hang = net.createServer((s) => { sockets.push(s); }); // accepts the TCP connection and never sends the SMTP greeting
   await new Promise<void>((r) => hang.listen(0, '127.0.0.1', () => r()));

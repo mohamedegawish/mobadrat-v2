@@ -68,11 +68,11 @@ test('5a) IMC correction returns to IMC and keeps both versions', async () => {
   const tax = imcView.documents.filter((d: any) => d.kind === 'taxCardFile');
   assert.equal(tax.length, 2, 'both versions kept');
   assert.deepEqual(tax.map((d: any) => d.version).sort(), [1, 2]);
-  const versions = await q('SELECT attempt FROM application_data WHERE applicationId = ? AND section = ? ORDER BY attempt', id, 'general');
+  const versions = await q('SELECT attempt FROM shams_application_data WHERE applicationId = ? AND section = ? ORDER BY attempt', id, 'general');
   assert.equal(versions.length, 2, 'data version per attempt');
   assert.ok((await q("SELECT 1 FROM notification_outbox WHERE applicationId = ? AND templateKey = 'app.resubmitted'", id)).length >= 1);
   app = await getApp(c.factory, id);
-  assert.equal((await q('SELECT 1 FROM deficiencies WHERE applicationId = ? AND resolvedAtTransitionId IS NULL', id)).length, 0, 'deficiencies resolved');
+  assert.equal((await q('SELECT 1 FROM shams_deficiencies WHERE applicationId = ? AND resolvedAtTransitionId IS NULL', id)).length, 0, 'deficiencies resolved');
 });
 
 test('7) editing a field outside the deficiencies is rejected', async () => {

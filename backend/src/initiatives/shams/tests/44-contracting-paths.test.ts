@@ -31,7 +31,7 @@ const emails = (id: string, key: string) =>
 const inbox = (id: string, key: string) => q<{ userId: string }>('SELECT userId FROM user_notifications WHERE applicationId = ? AND templateKey = ?', id, key);
 const upload = (client: Client, id: string, kind: string, tag: string) => client.upload(`/applications/${id}/documents`, { kind }, pdfVariant(tag), `${tag}.pdf`);
 const transitionsOf = (id: string, action: string) => q<{ fromState: string; toState: string; reason: string; actorRole: string; payload: string }>(
-  'SELECT fromState, toState, reason, actorRole, payload FROM application_transitions WHERE applicationId = ? AND action = ? ORDER BY createdAt, rowid', id, action);
+  'SELECT fromState, toState, reason, actorRole, payload FROM shams_application_transitions WHERE applicationId = ? AND action = ? ORDER BY createdAt, rowid', id, action);
 
 // ── Scenario A — the existing bank path still works end to end ─────────────────────────────────────────────────────────
 test('A) bank path: electricity accepted → both paths offered → bank chosen (path locked to bank) → evidence → contracted', async () => {
@@ -230,10 +230,10 @@ test('D2) the two paths can never be combined or switched (API and database)', a
   assert.equal(app.bank, null);
 
   // the database itself refuses an inconsistent row
-  const { getDb } = await import('../src/db/sqlite.js');
-  await assert.rejects(getDb().prepare('UPDATE applications SET bankOrgId = ? WHERE id = ?').run(BANK_A, id), /CHECK|constraint/i, 'no bank on the distribution path');
-  await assert.rejects(getDb().prepare("UPDATE applications SET contractPath = NULL WHERE id = ?").run(id), /CHECK|constraint/i, 'distribution stages require the distribution path');
-  await assert.rejects(getDb().prepare("UPDATE applications SET contractPath = 'other' WHERE id = ?").run(id), /CHECK|constraint/i);
+  const { getDb } = await import('../db/sqlite.js');
+  await assert.rejects(getDb().prepare('UPDATE shams_applications SET bankOrgId = ? WHERE id = ?').run(BANK_A, id), /CHECK|constraint/i, 'no bank on the distribution path');
+  await assert.rejects(getDb().prepare("UPDATE shams_applications SET contractPath = NULL WHERE id = ?").run(id), /CHECK|constraint/i, 'distribution stages require the distribution path');
+  await assert.rejects(getDb().prepare("UPDATE shams_applications SET contractPath = 'other' WHERE id = ?").run(id), /CHECK|constraint/i);
   await closeOpen();
 });
 
@@ -282,7 +282,7 @@ test('D4) concurrent decisions, double submissions and racing path choices leave
   ]);
   assert.deepEqual(decisions.map((r) => r.status).sort(), [200, 409]);
   const decided = await getApp(c.pmu, id);
-  const t = await q('SELECT COUNT(*) AS n FROM application_transitions WHERE applicationId = ? AND fromState = ?', id, 'DISTRIBUTION_REVIEW');
+  const t = await q('SELECT COUNT(*) AS n FROM shams_application_transitions WHERE applicationId = ? AND fromState = ?', id, 'DISTRIBUTION_REVIEW');
   assert.equal(Number((t[0] as { n: number }).n), 1, 'exactly one decision recorded');
   assert.equal(decided.distributionContract.reviewStatus, decided.state === 'CONTRACTED' ? 'approved' : 'rejected', 'result row matches the state');
 
@@ -305,10 +305,10 @@ test('D4) concurrent decisions, double submissions and racing path choices leave
     c.factory.post(`/applications/${id}/actions/select_distribution_path`, { expectedVersion: v }),
   ]);
   assert.deepEqual(race.map((r) => r.status).sort(), [200, 409]);
-  const row = (await q<{ state: string; contractPath: string; bankOrgId: string | null }>('SELECT state, contractPath, bankOrgId FROM applications WHERE id = ?', id))[0];
+  const row = (await q<{ state: string; contractPath: string; bankOrgId: string | null }>('SELECT state, contractPath, bankOrgId FROM shams_applications WHERE id = ?', id))[0];
   assert.ok((row.contractPath === 'bank' && row.bankOrgId === BANK_A && row.state === 'CONTRACT_OUTCOME')
     || (row.contractPath === 'distribution' && row.bankOrgId === null && row.state === 'DISTRIBUTION_UPLOAD'), JSON.stringify(row));
-  assert.equal(Number((await q<{ n: number }>('SELECT COUNT(*) AS n FROM distribution_contracts WHERE applicationId = ?', id))[0].n), row.contractPath === 'distribution' ? 1 : 0);
+  assert.equal(Number((await q<{ n: number }>('SELECT COUNT(*) AS n FROM shams_distribution_contracts WHERE applicationId = ?', id))[0].n), row.contractPath === 'distribution' ? 1 : 0);
   await closeOpen();
 });
 

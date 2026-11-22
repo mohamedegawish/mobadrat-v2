@@ -24,10 +24,10 @@ test('2) invalid registry number stays DRAFT, factory corrects only the number a
   assert.equal(app.data.general.companyName, 'مصنع تجريبي للصناعات المعدنية', 'data preserved');
   assert.equal(app.documents.length, 7, 'documents preserved');
   // سطر تاريخي + إشعار للمصنع + تحقق محفوظ
-  const t = (await q<{ fromState: string; toState: string }>('SELECT fromState, toState FROM application_transitions WHERE applicationId = ?', id)).map((x) => ({ ...x }));
+  const t = (await q<{ fromState: string; toState: string }>('SELECT fromState, toState FROM shams_application_transitions WHERE applicationId = ?', id)).map((x) => ({ ...x }));
   assert.deepEqual(t, [{ fromState: 'DRAFT', toState: 'DRAFT' }]);
   assert.ok((await q("SELECT 1 FROM notification_outbox WHERE applicationId = ? AND templateKey = 'app.registry_failed'", id)).length >= 1);
-  assert.equal((await q("SELECT result FROM registry_verifications WHERE applicationId = ?", id))[0]?.result, 'invalid');
+  assert.equal((await q("SELECT result FROM shams_registry_verifications WHERE applicationId = ?", id))[0]?.result, 'invalid');
   // IMC لا يرى المسودة
   assert.equal((await c.imc.get(`/applications/${id}`)).status, 404);
 
@@ -63,7 +63,7 @@ test('3) registry API outage: no referral, no data loss, retry succeeds (real HT
     let app = await getApp(c.factory2, id);
     assert.equal(app.state, 'DRAFT');
     assert.equal(app.registry.result, 'unavailable');
-    assert.equal((await q("SELECT 1 FROM application_transitions WHERE applicationId = ? AND toState = 'IMC_REVIEW'", id)).length, 0, 'no referral');
+    assert.equal((await q("SELECT 1 FROM shams_application_transitions WHERE applicationId = ? AND toState = 'IMC_REVIEW'", id)).length, 0, 'no referral');
     assert.equal(app.documents.length, 7);
 
     mode = 'up';
@@ -80,7 +80,7 @@ test('3) registry API outage: no referral, no data loss, retry succeeds (real HT
 });
 
 test('3b) registry timeout/network errors map to unavailable', async () => {
-  const { mapResponse } = await import('../src/integrations/registry/mapResponse.js');
+  const { mapResponse } = await import('../integrations/registry/mapResponse.js');
   assert.equal(mapResponse('X', 500, null).result, 'unavailable');
   assert.equal(mapResponse('X', 200, { weird: true }).result, 'unavailable');
   assert.equal(mapResponse('X', 404, null).result, 'invalid');
@@ -89,7 +89,7 @@ test('3b) registry timeout/network errors map to unavailable', async () => {
   process.env.REGISTRY_ADAPTER = 'http';
   process.env.REGISTRY_API_URL = 'http://127.0.0.1:1';
   try {
-    const { getRegistryClient } = await import('../src/integrations/registry/index.js');
+    const { getRegistryClient } = await import('../integrations/registry/index.js');
     const r = await getRegistryClient().verify('IND-1');
     assert.equal(r.result, 'unavailable');
   } finally { process.env.REGISTRY_ADAPTER = 'mock'; }

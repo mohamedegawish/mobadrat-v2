@@ -37,11 +37,11 @@ export interface RecoveryRow {
 const OPEN: RecoveryStatus[] = ['pending_approval', 'cooling'];
 
 export async function getRecovery(id: string): Promise<RecoveryRow | null> {
-  return (await getDb().prepare('SELECT * FROM account_recovery_requests WHERE id = ?').get(id) as unknown as RecoveryRow | undefined) ?? null;
+  return (await getDb().prepare('SELECT * FROM shams_account_recovery_requests WHERE id = ?').get(id) as unknown as RecoveryRow | undefined) ?? null;
 }
 
 async function openRecoveryFor(userId: string): Promise<RecoveryRow | null> {
-  return (await getDb().prepare("SELECT * FROM account_recovery_requests WHERE userId = ? AND status IN ('pending_approval','cooling')").get(userId) as unknown as RecoveryRow | undefined) ?? null;
+  return (await getDb().prepare("SELECT * FROM shams_account_recovery_requests WHERE userId = ? AND status IN ('pending_approval','cooling')").get(userId) as unknown as RecoveryRow | undefined) ?? null;
 }
 
 /** طلب استرداد مفتوح على الحساب (يُعرض للأدمن وPMU، ويمنع طلبًا ثانيًا). */
@@ -67,7 +67,7 @@ function ownerRecipients(u: UserInternal): Recipient[] {
 
 function newCancelToken(): { token: string; hash: string; link: string } {
   const token = randomBytes(32).toString('hex');
-  return { token, hash: sha256(token), link: `${config.appUrl}/#cancel-recovery/${token}` };
+  return { token, hash: sha256(token), link: `${config.appUrl}/#i/shams/cancel-recovery/${token}` };
 }
 
 function canDecide(user: UserInternal, r: RecoveryRow): boolean {
@@ -102,7 +102,7 @@ export async function requestRecovery(actor: AuditActor & { actorUserId: string 
   const id = newId('rec');
   const now = nowIso();
   await tx(async () => {
-    await getDb().prepare(`INSERT INTO account_recovery_requests (id, userId, oldEmail, newEmail, reason, requestReference, documentOriginalName, documentStoredName,
+    await getDb().prepare(`INSERT INTO shams_account_recovery_requests (id, userId, oldEmail, newEmail, reason, requestReference, documentOriginalName, documentStoredName,
         documentSizeBytes, documentSha256, status, requestedBy, requestedAt, cancelTokenHash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_approval', ?, ?, ?)`).run(
       id, u!.id, u!.email, email, reason!, requestReference!, stored.originalName, stored.storedName, stored.sizeBytes, stored.sha256, actor.actorUserId, now, cancel.hash,
     );
@@ -140,7 +140,7 @@ export async function approveRecovery(user: UserInternal, id: string, body: unkn
   const until = new Date(Date.now() + shamsPolicy.accountRecoveryCoolingHours * 3600_000).toISOString();
   const cancel = newCancelToken();
   await tx(async () => {
-    const changed = await getDb().prepare(`UPDATE account_recovery_requests SET status = 'cooling', approvedBy = ?, approvedAt = ?, coolingEndsAt = ?, cancelTokenHash = ?
+    const changed = await getDb().prepare(`UPDATE shams_account_recovery_requests SET status = 'cooling', approvedBy = ?, approvedAt = ?, coolingEndsAt = ?, cancelTokenHash = ?
       WHERE id = ? AND status = 'pending_approval'`).run(user.id, nowIso(), until, cancel.hash, id);
     if (Number(changed.changes) !== 1) throw Errors.conflict('RECOVERY_CLOSED', 'هذا الطلب مغلق بالفعل.', 'This request is already closed.');
     await addAuditLog({ ...userActor(user, ip), action: 'account_recovery.approve', entityType: 'account_recovery', entityId: id,
@@ -155,7 +155,7 @@ async function closeRecovery(r: RecoveryRow, status: 'cancelled' | 'rejected', c
   const owner = await getUserById(r.userId);
   const requester = await getUserById(r.requestedBy);
   await tx(async () => {
-    const changed = await getDb().prepare(`UPDATE account_recovery_requests SET status = ?, closedBy = ?, closedAt = ?, closeReason = ?, cancelTokenHash = NULL
+    const changed = await getDb().prepare(`UPDATE shams_account_recovery_requests SET status = ?, closedBy = ?, closedAt = ?, closeReason = ?, cancelTokenHash = NULL
       WHERE id = ? AND status IN ('pending_approval','cooling')`).run(status, closedBy, nowIso(), reason, r.id);
     if (Number(changed.changes) !== 1) throw Errors.conflict('RECOVERY_CLOSED', 'هذا الطلب مغلق بالفعل.', 'This request is already closed.');
     await addAuditLog({ ...actor, action: `account_recovery.${status === 'rejected' ? 'reject' : 'cancel'}`, entityType: 'account_recovery', entityId: r.id,
@@ -193,7 +193,7 @@ export async function cancelRecoveryByPmu(user: UserInternal, id: string, body: 
 export async function cancelRecoveryByOwner(token: unknown, ip: string): Promise<boolean> {
   const t = typeof token === 'string' ? token.trim() : '';
   if (!/^[a-f0-9]{64}$/.test(t)) return false;
-  const r = await getDb().prepare("SELECT * FROM account_recovery_requests WHERE cancelTokenHash = ? AND status IN ('pending_approval','cooling')").get(sha256(t)) as unknown as RecoveryRow | undefined;
+  const r = await getDb().prepare("SELECT * FROM shams_account_recovery_requests WHERE cancelTokenHash = ? AND status IN ('pending_approval','cooling')").get(sha256(t)) as unknown as RecoveryRow | undefined;
   if (!r) return false;
   await closeRecovery(r, 'cancelled', 'owner', 'ألغاه صاحب الحساب برابط الإلغاء', { actorType: 'anonymous', ip }, 'ألغى صاحب الحساب الطلب', 'cancelled by the account owner');
   return true;
@@ -201,7 +201,7 @@ export async function cancelRecoveryByOwner(token: unknown, ip: string): Promise
 
 /** 4) التنفيذ بعد المهلة (العامل الدوري). يرجع عدد الطلبات المنفذة. */
 export async function executeDueRecoveries(now = Date.now()): Promise<number> {
-  const due = await getDb().prepare("SELECT * FROM account_recovery_requests WHERE status = 'cooling' AND coolingEndsAt <= ?").all(new Date(now).toISOString()) as unknown as RecoveryRow[];
+  const due = await getDb().prepare("SELECT * FROM shams_account_recovery_requests WHERE status = 'cooling' AND coolingEndsAt <= ?").all(new Date(now).toISOString()) as unknown as RecoveryRow[];
   let n = 0;
   for (const r of due) {
     const u = await getUserById(r.userId);
@@ -213,7 +213,7 @@ export async function executeDueRecoveries(now = Date.now()): Promise<number> {
     const token = randomBytes(32).toString('hex');
     const hash = sha256(token);
     await tx(async () => {
-      const changed = await getDb().prepare("UPDATE account_recovery_requests SET status = 'executed', executedAt = ?, cancelTokenHash = NULL WHERE id = ? AND status = 'cooling'").run(nowIso(), r.id);
+      const changed = await getDb().prepare("UPDATE shams_account_recovery_requests SET status = 'executed', executedAt = ?, cancelTokenHash = NULL WHERE id = ? AND status = 'cooling'").run(nowIso(), r.id);
       if (Number(changed.changes) !== 1) return;
       const oldEmail = u.email;
       await changeEmail(u.id, r.newEmail);
@@ -233,7 +233,7 @@ export async function executeDueRecoveries(now = Date.now()): Promise<number> {
 }
 
 export async function listRecoveries(): Promise<Array<Awaited<ReturnType<typeof publicRecovery>>>> {
-  return mapSeq(await getDb().prepare(`SELECT * FROM account_recovery_requests
+  return mapSeq(await getDb().prepare(`SELECT * FROM shams_account_recovery_requests
     ORDER BY CASE WHEN status IN ('pending_approval','cooling') THEN 0 ELSE 1 END, requestedAt DESC LIMIT 200`).all() as unknown as RecoveryRow[], (r) => publicRecovery(r));
 }
 

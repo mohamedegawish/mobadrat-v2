@@ -42,8 +42,8 @@ test('fractional MAX_FILE_SIZE_MB is enforced in whole bytes: at the limit accep
   const far = await uploadWithLimit('0.01', 40_000);
   assert.equal(far.status, 413, `40 KB against ~10 KB: ${JSON.stringify(far.json)}`);
   // nothing truncated was stored: every stored file has the size and hash recorded for it
-  for (const d of await q<any>('SELECT storedName, sizeBytes FROM documents WHERE applicationId = ?', draftId)) {
-    assert.equal(fs.statSync(path.join(process.env.UPLOAD_DIR!, 'documents', d.storedName)).size, d.sizeBytes);
+  for (const d of await q<any>('SELECT storedName, sizeBytes FROM shams_documents WHERE applicationId = ?', draftId)) {
+    assert.equal(fs.statSync(path.join(process.env.UPLOAD_DIR!, 'shams', 'documents', d.storedName)).size, d.sizeBytes);
   }
   assert.equal(fs.readdirSync(path.join(process.env.UPLOAD_DIR!, 'tmp')).length, 0, 'no temp file left behind');
 });
@@ -64,7 +64,7 @@ test('invalid MAX_FILE_SIZE_MB values are refused instead of silently becoming a
 });
 
 test('parseMaxFileSizeMB: valid, fractional, missing, zero, negative and malformed values; the boot check refuses bad values', async () => {
-  const { parseMaxFileSizeMB, maxFileSizeBytes, assertConfigValid } = await import('../src/config.js');
+  const { parseMaxFileSizeMB, maxFileSizeBytes, assertConfigValid } = await import('../config.js');
   assert.equal(parseMaxFileSizeMB(undefined), 15);
   assert.equal(parseMaxFileSizeMB(''), 15);
   assert.equal(parseMaxFileSizeMB('  '), 15);
