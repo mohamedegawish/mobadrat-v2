@@ -30,6 +30,7 @@ import { APPLICATION_SECTIONS, STUDY_SECTIONS, deficiencyFieldsOf, type FormSect
 import { completenessIssues, studyTotals, type FormData } from './validate.js';
 import { ageOn } from './nationalId.js';
 import { deficiencyLabels } from './applicationView.js';
+import { syncProfileAfterSubmit } from '../profileSync.js';
 
 interface Deficiency { field: string; note: string }
 interface MilestoneInput { title: string; dueDate: string | null; amount: number }
@@ -392,5 +393,9 @@ export async function performAction(user: UserInternal, appId: string, actionRaw
     }, !(config.platformWebhookUrl && config.platformWebhookSecret));
   });
 
+  // Shared profile write-back: only after the submission committed, only from the submitted form.
+  if (appData && (action === 'submit' || action === 'resubmit')) {
+    await syncProfileAfterSubmit({ actorUserId: user.id, actorName: user.nameAr, applicantId: app.applicantId, form: appData });
+  }
   return (await getApplication(app.id))!;
 }

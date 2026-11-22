@@ -33,6 +33,7 @@ import {
 import { FORM_SECTIONS, ELECTRICITY_DEFICIENCY_FIELDS } from './applicationForm.js';
 import { ALL_FORM_FIELD_KEYS, completenessIssues, totalRoofArea, type FormData } from './validate.js';
 import { actionBlock, deficiencyLabels } from './applicationView.js';
+import { syncProfileAfterSubmit } from '../profileSync.js';
 
 interface Deficiency { field: string; note: string }
 
@@ -514,6 +515,10 @@ export async function performAction(user: UserInternal, appId: string, actionRaw
       unavailable ? 'تعذر التحقق من السجل الصناعي حاليًا. الطلب محفوظ — أعد المحاولة لاحقًا.' : 'رقم السجل الصناعي غير صحيح أو غير مسجل. صحّح الرقم وأعد الإرسال — بياناتك محفوظة.',
       unavailable ? 'The industrial registry is unavailable right now. Your application is saved — retry later.' : 'The industrial registry number is invalid. Correct it and submit again — your data is saved.',
       [{ field: 'industrialRegistryNumber', issue: outcome.failedRegistry }]);
+  }
+  // Shared profile write-back: only after the submission committed, only from the submitted form.
+  if (formData && (action === 'submit' || action === 'resubmit')) {
+    await syncProfileAfterSubmit({ userId: user.id, actorName: user.nameAr, factoryId: app.factoryId, form: formData });
   }
   return (await getApplication(app.id))!;
 }
