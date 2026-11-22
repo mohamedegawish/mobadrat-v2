@@ -1,6 +1,6 @@
 import { mapSeq } from '../http/helpers.js';
 /** التقارير ومؤشرات لوحة المتابعة (docs/SONA3_DESIGN.md §13) — دالة واحدة لـ /reports/summary و Integration GET /summary. */
-import { getDb } from '../db/sqlite.js';
+import { getDb, sqlDaysBetween } from '../db/sqlite.js';
 import type { SqlParam } from '../http/helpers.js';
 import { listApplications, type AppRow } from '../store/applications.js';
 import { getCohort, openCohort, listCohorts } from '../store/cohorts.js';
@@ -89,7 +89,7 @@ export async function buildSummary(scope: Scope, opts: SummaryOptions = {}) {
       FROM sona3_application_transitions tr
       WHERE tr.fromState <> tr.toState AND tr.applicationId IN (SELECT a.id ${base})
     )
-    SELECT state, AVG(julianday(leftAt) - julianday(enteredAt)) AS avgDays, COUNT(*) AS n FROM t WHERE leftAt IS NOT NULL GROUP BY state`)
+    SELECT state, AVG(${sqlDaysBetween('enteredAt', 'leftAt')}) AS avgDays, COUNT(*) AS n FROM t WHERE leftAt IS NOT NULL GROUP BY state`)
     .all(...params) as Array<{ state: ApplicationState; avgDays: number; n: number }>;
   const avgDaysPerState: Record<string, { avgDays: number; samples: number }> = {};
   for (const r of avgRows) avgDaysPerState[r.state] = { avgDays: Math.round(r.avgDays * 100) / 100, samples: r.n };
