@@ -136,6 +136,14 @@ export const api = {
   // admin
   adminStats: (q: { from?: string; to?: string } = {}) => call<AdminStats>('/admin/stats', { query: q }),
   adminInitiativeStats: (id: string) => call<AdminInitiativeStats>('/admin/stats/' + encodeURIComponent(id)),
+  adminBodies: (q: { q?: string; kind?: string; status?: string; initiativeId?: string } = {}) => call<{ items: PlatformBody[] } & BodiesMeta>('/admin/bodies', { query: q }),
+  adminBody: (id: string) => call<PlatformBodyDetail>('/admin/bodies/' + encodeURIComponent(id)),
+  adminBodyOrganizations: () => call<BodyOrganizations>('/admin/bodies/organizations'),
+  adminCreateBody: (b: BodyInput & { links?: Array<{ initiativeId: string; organizationId: string }> }) => call<PlatformBody>('/admin/bodies', { method: 'POST', body: b }),
+  adminUpdateBody: (id: string, b: Partial<BodyInput> & { isActive?: boolean }) => call<PlatformBody>('/admin/bodies/' + encodeURIComponent(id), { method: 'PUT', body: b }),
+  adminDeleteBody: (id: string) => call<unknown>('/admin/bodies/' + encodeURIComponent(id), { method: 'DELETE' }),
+  adminLinkBody: (id: string, l: { initiativeId: string; organizationId: string }) => call<PlatformBody>(`/admin/bodies/${encodeURIComponent(id)}/links`, { method: 'POST', body: l }),
+  adminUnlinkBody: (id: string, initiativeId: string) => call<PlatformBody>(`/admin/bodies/${encodeURIComponent(id)}/links/${encodeURIComponent(initiativeId)}`, { method: 'DELETE' }),
   adminActivity: () => call<{ items: Array<{ at: string; initiativeId: string; titleAr: string; titleEn: string; labelAr: string; labelEn: string; view: string }> }>('/admin/activity', { query: { limit: 30 } }),
   adminModules: () => call<{ items: Array<{ id: string; titleAr: string; titleEn: string; staffEntryPoints: Array<{ view: string; labelAr: string; labelEn: string }>; defaultAdminView: string }>; platformRoles: Array<{ key: string; ar: string; en: string }> }>('/admin/modules'),
   adminUsers: (q: { q?: string; page?: number; platformRole?: string; initiativeId?: string }) => call<Page<AdminUser>>('/admin/users', { query: q }),
@@ -173,6 +181,27 @@ export interface StatsSummary {
   timeline: Array<{ month: string; submitted: number; closed: number }>;
 }
 export type AdminInitiativeStats = AdminStats['initiatives'][number] & { staffEntryPoints: Array<{ view: string; labelAr: string; labelEn: string }> };
+
+// ── The unified directory of bodies ──
+export interface BodyActivity { staff: number; decisions: number; pending: number; lastActivityAt: string | null }
+export interface ModuleBody { id: string; type: string; typeLabelAr: string; typeLabelEn: string; nameAr: string; nameEn: string; isActive: boolean }
+export interface BodyLinkView {
+  initiativeId: string; titleAr: string; titleEn: string; organizationId: string; organization: ModuleBody | null; missing: boolean;
+  activity: BodyActivity | null; linkedAt: string;
+}
+export interface BodyInput { nameAr: string; nameEn?: string; kind: string; description?: string; contactEmail?: string; contactPhone?: string; website?: string }
+export interface PlatformBody extends Required<BodyInput> {
+  id: string; kindLabelAr: string; kindLabelEn: string; isActive: boolean; createdAt: string; updatedAt: string;
+  links: BodyLinkView[]; totals: BodyActivity & { initiatives: number };
+}
+export interface BodiesMeta { kinds: Array<{ key: string; labelAr: string; labelEn: string }>; initiatives: Array<{ id: string; titleAr: string; titleEn: string }> }
+export interface PlatformBodyDetail extends PlatformBody, BodiesMeta {
+  people: Array<{ userId: string; nameAr: string; email: string; isActive: boolean; initiativeId: string; titleAr: string; role: string; roleLabelAr: string; roleLabelEn: string; status: string }>;
+}
+export interface BodyOrganizations extends BodiesMeta {
+  items: Array<{ initiativeId: string; titleAr: string; titleEn: string; organization: ModuleBody; body: { id: string; nameAr: string; nameEn: string } | null }>;
+  suggestions: Array<{ nameAr: string; nameEn: string; organizations: Array<{ initiativeId: string; titleAr: string; organizationId: string; nameAr: string }> }>;
+}
 
 export interface AdminStats {
   generatedAt: string;

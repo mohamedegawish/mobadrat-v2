@@ -35,6 +35,7 @@ import { uploadRoot } from './http/upload.js';
 import { addAuditLog } from './store/audit.js';
 import { requirements, sectionsFromProfile, DOC_MAP } from './requirements.js';
 import { stats } from './stats.js';
+import { shamsBodies } from './bodies.js';
 import { seedDevData } from './db/seed.js';
 import { readinessReport } from './services/readiness.js';
 import { startSlaMonitor, stopSlaMonitor } from './jobs/slaMonitor.js';
@@ -172,6 +173,7 @@ export const shamsModule: InitiativeModule = {
   },
 
   stats,
+  bodies: shamsBodies,
   staffEntryPoints: [
     { view: 'work-queue', labelAr: 'قائمة العمل', labelEn: 'Work queue', roles: ['imc_reviewer', 'encpc_reviewer', 'pmu_reviewer', 'system_admin'] },
     { view: 'pmu-monitor', labelAr: 'متابعة وحدة إدارة المبادرة', labelEn: 'PMU monitoring', roles: ['pmu_reviewer'] },

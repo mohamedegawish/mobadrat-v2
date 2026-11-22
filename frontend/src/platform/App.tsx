@@ -9,6 +9,7 @@ import { HomePage, InitiativesPage, InitiativePage, ImpactPage } from './pages/p
 import { LoginPage, RegisterPage, VerifyEmailPage, ForgotPasswordPage, ResetPasswordPage, ChangePasswordPage } from './pages/auth';
 import { HubPage, ProfilePage, ApplyPage, NotificationsPage } from './pages/account';
 import { AdminLayout, AdminDashboard, AdminInitiative, AdminUsers, AdminCatalog, AdminBanners, AdminAudit, AdminOutbox, AdminReadiness } from './pages/admin';
+import { AdminBodies, AdminBody } from './pages/bodies';
 import { moduleOf } from '../initiatives/registry';
 
 const SCREENS: Record<View, React.FC> = {
@@ -16,7 +17,7 @@ const SCREENS: Record<View, React.FC> = {
   login: LoginPage, register: RegisterPage, 'verify-email': VerifyEmailPage, 'forgot-password': ForgotPasswordPage, 'reset-password': ResetPasswordPage,
   'change-password': ChangePasswordPage, hub: HubPage, profile: ProfilePage, apply: ApplyPage, notifications: NotificationsPage,
   admin: AdminDashboard, 'admin-initiative': AdminInitiative, 'admin-users': AdminUsers, 'admin-catalog': AdminCatalog, 'admin-banners': AdminBanners,
-  'admin-audit': AdminAudit, 'admin-outbox': AdminOutbox, 'admin-readiness': AdminReadiness,
+  'admin-audit': AdminAudit, 'admin-outbox': AdminOutbox, 'admin-readiness': AdminReadiness, 'admin-bodies': AdminBodies, 'admin-body': AdminBody,
 };
 
 function useHash(): string {

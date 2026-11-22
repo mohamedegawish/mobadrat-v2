@@ -24,7 +24,7 @@ export default defineConfig({
     { name: 'shams', testDir: './tests/shams', testIgnore: /mobile/, use: { ...devices['Desktop Chrome'] } },
     { name: 'shams-mobile', testDir: './tests/shams', testMatch: /mobile/, use: { ...devices['Pixel 7'] }, dependencies: ['shams'] },
     { name: 'sona3', testDir: './tests/sona3', use: { ...devices['Desktop Chrome'] }, dependencies: ['shams-mobile'] },
-    { name: 'platform', testMatch: /platform\.spec\.ts/, use: { ...devices['Desktop Chrome'] }, dependencies: ['sona3'] },
+    { name: 'platform', testMatch: /(platform|bodies)\.spec\.ts/, use: { ...devices['Desktop Chrome'] }, dependencies: ['sona3'] },
   ],
   webServer: [
     { command: 'node start-backend.mjs', url: 'http://localhost:5200/health', timeout: 180_000, reuseExistingServer: false, stdout: 'ignore', stderr: 'pipe' },

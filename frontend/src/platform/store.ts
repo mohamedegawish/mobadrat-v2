@@ -9,13 +9,13 @@ import { onTokenChange, refreshSession, getAccessToken } from '../core/session';
 export type View =
   | 'home' | 'initiatives' | 'initiative' | 'impact' | 'login' | 'register' | 'verify-email' | 'forgot-password' | 'reset-password'
   | 'hub' | 'profile' | 'apply' | 'notifications' | 'change-password'
-  | 'admin' | 'admin-initiative' | 'admin-users' | 'admin-catalog' | 'admin-banners' | 'admin-audit' | 'admin-outbox' | 'admin-readiness';
+  | 'admin' | 'admin-initiative' | 'admin-users' | 'admin-catalog' | 'admin-banners' | 'admin-audit' | 'admin-outbox' | 'admin-readiness' | 'admin-bodies' | 'admin-body';
 
 const VIEWS: View[] = ['home', 'initiatives', 'initiative', 'impact', 'login', 'register', 'verify-email', 'forgot-password', 'reset-password',
-  'hub', 'profile', 'apply', 'notifications', 'change-password', 'admin', 'admin-initiative', 'admin-users', 'admin-catalog', 'admin-banners', 'admin-audit', 'admin-outbox', 'admin-readiness'];
+  'hub', 'profile', 'apply', 'notifications', 'change-password', 'admin', 'admin-initiative', 'admin-users', 'admin-catalog', 'admin-banners', 'admin-audit', 'admin-outbox', 'admin-readiness', 'admin-bodies', 'admin-body'];
 
 export const AUTH_VIEWS: View[] = ['hub', 'profile', 'apply', 'notifications', 'change-password'];
-export const ADMIN_VIEWS: View[] = ['admin', 'admin-initiative', 'admin-users', 'admin-catalog', 'admin-banners', 'admin-audit', 'admin-outbox', 'admin-readiness'];
+export const ADMIN_VIEWS: View[] = ['admin', 'admin-initiative', 'admin-users', 'admin-catalog', 'admin-banners', 'admin-audit', 'admin-outbox', 'admin-readiness', 'admin-bodies', 'admin-body'];
 
 interface Snapshot {
   lang: Lang; hash: string; view: View; param: string | null; query: URLSearchParams;

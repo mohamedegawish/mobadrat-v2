@@ -3,7 +3,7 @@
  * catalog content, banners, audit log, outbox and readiness. Each initiative's own staff screens open inside its module.
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { BarChart3, Users, BookOpen, Image, ScrollText, Mail, ClipboardCheck, ExternalLink, RefreshCw, Download } from 'lucide-react';
+import { BarChart3, Users, BookOpen, Image, ScrollText, Mail, ClipboardCheck, ExternalLink, RefreshCw, Download, Building } from 'lucide-react';
 import { api, errText, type AdminStats, type AdminInitiativeStats, type AdminUser, type Banner, type Initiative, type StatsSummary } from '../api';
 import { usePlatform, store, canManage, canEditContent } from '../store';
 import { Alert, Loading, Forbidden } from '../layout';
@@ -37,6 +37,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         {(mods?.items ?? []).map((m) => <React.Fragment key={m.id}>{link(`admin-initiative/${m.id}`, isAr ? m.titleAr : m.titleEn, <span>●</span>, view === 'admin-initiative' && param === m.id)}</React.Fragment>)}
         <div className="grp">{t('الإدارة', 'Administration')}</div>
         {link('admin-users', t('الحسابات والصلاحيات', 'Accounts & roles'), <Users size={15} />, view === 'admin-users')}
+        {me.user.platformRole !== 'catalog_manager' ? link('admin-bodies', t('دليل الجهات', 'Directory of bodies'), <Building size={15} />, view === 'admin-bodies' || view === 'admin-body') : null}
         {canEditContent(me) ? link('admin-catalog', t('محتوى المبادرات', 'Initiatives content'), <BookOpen size={15} />, view === 'admin-catalog') : null}
         {canEditContent(me) ? link('admin-banners', t('بانرات الرئيسية', 'Home banners'), <Image size={15} />, view === 'admin-banners') : null}
         {me.user.platformRole === 'super_admin' || me.user.platformRole === 'auditor' ? link('admin-audit', t('سجل التدقيق', 'Audit log'), <ScrollText size={15} />, view === 'admin-audit') : null}

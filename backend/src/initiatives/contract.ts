@@ -72,6 +72,35 @@ export interface InitiativeStatsProvider {
   recentActivity(limit: number): Promise<ActivityItem[]>;
 }
 
+/** An organization of the initiative that is a participating body (reviewers, committees, funders, banks — not applicants). */
+export interface ModuleBody {
+  id: string;
+  type: string;
+  typeLabelAr: string;
+  typeLabelEn: string;
+  nameAr: string;
+  nameEn: string;
+  isActive: boolean;
+}
+
+/** What a body did and has pending in the initiative (for the platform's unified directory of bodies). */
+export interface BodyActivity {
+  /** Active staff (active accounts with an active membership in this organization). */
+  staff: number;
+  /** Workflow decisions taken by its staff (and, where the initiative has them, submitted evaluations). */
+  decisions: number;
+  /** Open applications currently waiting for this body. */
+  pending: number;
+  lastActivityAt: string | null;
+}
+
+export interface InitiativeBodies {
+  /** Every participating-body organization of the initiative (active or not). */
+  list(): Promise<ModuleBody[]>;
+  /** Activity per organization id (ids that are not bodies of the initiative are absent). */
+  activity(orgIds: string[]): Promise<Record<string, BodyActivity>>;
+}
+
 export interface EnrollResult {
   /** Module view to open after enrolling (hash route under #i/<id>/). */
   view: string;
@@ -113,6 +142,8 @@ export interface InitiativeModule {
   enroll(user: CoreUser, input: { factoryProfileId?: string | null; ip: string }): Promise<EnrollResult>;
   hubCard(user: CoreUser, membership: Membership): Promise<HubCard>;
   stats: InitiativeStatsProvider;
+  /** The initiative's participating bodies, linked by the platform to its unified directory of bodies. */
+  bodies: InitiativeBodies;
   /** Staff screens the unified admin links to. */
   staffEntryPoints: Array<{ view: string; labelAr: string; labelEn: string; roles: string[] }>;
   /** Default module view per role (used by the hub). */

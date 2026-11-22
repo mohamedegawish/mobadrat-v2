@@ -7,6 +7,7 @@ import { hashPassword } from './auth/jwt.js';
 import { createAccount } from './identity.js';
 import { savePersonProfile } from './profile/store.js';
 import { MODULES } from '../initiatives/registry.js';
+import { seedDemoBodies } from './bodies/seed.js';
 import { seedPassword } from '../config.js';
 
 export const DEMO_PLATFORM_ACCOUNTS = [
@@ -29,6 +30,7 @@ export async function seedDemo(password = seedPassword()): Promise<void> {
     }
   });
   for (const m of MODULES) await m.seedDemo?.(password);
+  await seedDemoBodies();
 }
 
 /** Seeds only an empty database. Returns true when it seeded. */

@@ -127,3 +127,9 @@ html[dir="ltr"] .pf-ini-hero::before { background: linear-gradient(270deg, rgba(
 .pf-empty { text-align: center; color: var(--text-muted, #64748B); padding: 36px 12px; }
 .pf-muted { color: var(--text-muted, #64748B); }
 .pf-gap { display: grid; gap: 16px; }
+
+/* ── Directory of bodies (دليل الجهات) ── */
+.pf-table-wrap { overflow-x: auto; }
+.pf-table td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pf-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 14px; }
+.pf-suggestion { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px dashed #CBD5E1; border-radius: 10px; background: #F8FAFC; }

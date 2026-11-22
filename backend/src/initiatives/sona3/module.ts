@@ -34,6 +34,7 @@ import { uploadRoot } from './http/upload.js';
 import { addAuditLog } from './store/audit.js';
 import { requirements, personalFromProfile, DOC_MAP } from './requirements.js';
 import { stats } from './stats.js';
+import { sona3Bodies } from './bodies.js';
 import { seedDevData } from './db/seed.js';
 import { readinessReport } from './services/readiness.js';
 import { startSlaMonitor, stopSlaMonitor } from './jobs/slaMonitor.js';
@@ -153,6 +154,7 @@ export const sona3Module: InitiativeModule = {
   },
 
   stats,
+  bodies: sona3Bodies,
   staffEntryPoints: [
     { view: 'work-queue', labelAr: 'قائمة العمل', labelEn: 'Work queue', roles: ['imc_officer', 'funder_reviewer', 'system_admin'] },
     { view: 'ranking', labelAr: 'ترتيب الدورة', labelEn: 'Cohort ranking', roles: ['imc_officer'] },

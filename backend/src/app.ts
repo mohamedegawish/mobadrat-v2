@@ -20,6 +20,7 @@ import { authRouter } from './core/routes/auth.js';
 import { meRouter, profileMetaRouter } from './core/routes/me.js';
 import { adminCatalogRouter, publicCatalogRouter } from './core/routes/catalog.js';
 import { adminRouter } from './core/routes/admin.js';
+import { bodiesRouter } from './core/routes/bodies.js';
 import { MODULES } from './initiatives/registry.js';
 import type { ModuleContext } from './initiatives/contract.js';
 
@@ -72,6 +73,7 @@ export function createApp() {
   v1.use(meRouter);
   v1.use(adminCatalogRouter);
   v1.use(adminRouter);
+  v1.use(bodiesRouter);
   for (const m of MODULES) v1.use(`/i/${m.id}`, moduleAuth(m), m.router(ctx));
   app.use('/api/v1', v1);
   app.use('/api/v1', (req, res) => apiError(res, 404, 'NOT_FOUND', 'المسار غير موجود.', `Route not found: ${req.method} ${req.path}`));
