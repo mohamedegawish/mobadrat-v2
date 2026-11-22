@@ -1,33 +1,135 @@
-# COOLIFY compose (Docker Compose build pack) — ONE service built from the root Dockerfile:
-# the API serves the SPA on the same domain, Coolify's proxy (Traefik) terminates TLS.
-# In Coolify set the `app` service domain WITH the container port, e.g.
-#   https://www.industrial.talentooo.com:4000
-# Manual VPS with its own nginx + certbot: docker-compose.vps.yml. See docs/DEPLOY.md.
+# Production deployment of the National Industrial Initiatives Platform — Docker Compose
+# (Coolify: build pack "Docker Compose", file /docker-compose.yml; any Docker host: `docker compose up -d --build`).
+#
+#   app    Node.js backend + the built frontend on one origin, port 4000 (the only service that gets a domain). Serves the
+#          platform and every initiative module (Shams El-Senaa, Sona'a El-Mostaqbal) and runs the background jobs in-process
+#          (notification outbox, module webhooks, SLA monitors).
+#   mysql  MySQL 8.4 LTS — internal only (no published port), data in the mysql-data volume.
+#
+# No `ports:` on purpose: the reverse proxy reaches `app` on the internal network (Coolify domain https://<domain>:4000).
+# Setup:  cp .env.example .env  →  fill the values  →  docker compose up -d --build
+# First platform administrator:  docker compose exec app node dist/cli/createSuperAdmin.js --email … --name "…" [--print-link]
+# One-time import of the legacy apps: docs/DEPLOY.md («ترحيل البيانات»).
+
 services:
   app:
     build:
       context: .
-      dockerfile: ./Dockerfile
+      dockerfile: Dockerfile
     restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
     environment:
-      # Required — boot refuses a missing/default secret in production.
-      JWT_SECRET: ${JWT_SECRET}
-      CORS_ORIGIN: ${CORS_ORIGIN}
-      APP_URL: ${APP_URL}
-      # Seeds an EMPTY DB only (demo accounts + initiatives); later boots apply versioned seed
-      # updates (new accounts / Shams content) without touching edited data. 0 = clean empty DB.
-      SEED_ON_BOOT: ${SEED_ON_BOOT:-1}
-      # Message center — Gmail reminders (empty GMAIL_* = email disabled)
+      # ── fixed for this deployment (not secrets) ──
+      NODE_ENV: production
+      PORT: "4000"
+      HOST: 0.0.0.0
+      SERVE_FRONTEND: "1"
+      TRUST_PROXY: "1"
+      UPLOAD_DIR: /data/uploads
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      # Demo accounts + data on the first start of an EMPTY database only (skipped once any account exists).
+      # Needs its own SEED_PASSWORD (12+ chars, not the dev default) or the app refuses to start. Never with real data.
+      SEED_ON_BOOT: ${SEED_ON_BOOT:-0}
+      SEED_PASSWORD: ${SEED_PASSWORD:-}
+      # ── database (the same values as the mysql service below) ──
+      DB_NAME: ${MYSQL_DATABASE:-mobadrat}
+      DB_USER: ${MYSQL_USER:-mobadrat}
+      DB_PASSWORD: ${MYSQL_PASSWORD:?}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
+      DB_CONNECT_TIMEOUT_MS: ${DB_CONNECT_TIMEOUT_MS:-120000}
+      DB_TX_LOCK_TIMEOUT_SEC: ${DB_TX_LOCK_TIMEOUT_SEC:-10}
+      # ── public URL and secrets ──
+      APP_URL: ${APP_URL:?}
+      CORS_ORIGIN: ${CORS_ORIGIN:?}
+      JWT_SECRET: ${JWT_SECRET:?}
+      JWT_ACCESS_TTL_SEC: ${JWT_ACCESS_TTL_SEC:-900}
+      JWT_REFRESH_TTL_SEC: ${JWT_REFRESH_TTL_SEC:-604800}
+      # ── Shams El-Senaa: industrial registry (production refuses the mock adapter) ──
+      # http in a real deployment; mock (+ ALLOW_MOCK_REGISTRY_IN_PRODUCTION=1) only for a demo deployment.
+      REGISTRY_ADAPTER: ${REGISTRY_ADAPTER:-http}
+      ALLOW_MOCK_REGISTRY_IN_PRODUCTION: ${ALLOW_MOCK_REGISTRY_IN_PRODUCTION:-0}
+      REGISTRY_API_URL: ${REGISTRY_API_URL:-}
+      REGISTRY_API_KEY: ${REGISTRY_API_KEY:-}
+      REGISTRY_TIMEOUT_MS: ${REGISTRY_TIMEOUT_MS:-8000}
+      # ── mail (SMTP, or Gmail with an app password) ──
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-0}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-المنصة الوطنية للمبادرات الصناعية}
+      SONA3_MAIL_FROM_NAME: ${SONA3_MAIL_FROM_NAME:-}
       GMAIL_USER: ${GMAIL_USER:-}
       GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD:-}
-      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-المنصة الوطنية للتمويل والمبادرات الصناعية}
-      CHAT_REMINDER_DELAY_MIN: ${CHAT_REMINDER_DELAY_MIN:-15}
-      CHAT_MAX_FILE_MB: ${CHAT_MAX_FILE_MB:-20}
-    # SQLite + uploads + backups. Fresh named volume → inherits the image's node:node ownership.
+      # ── official enquiry channel (shown on the site; check:readiness requires both) ──
+      SUPPORT_EMAIL: ${SUPPORT_EMAIL:-}
+      SUPPORT_PHONE: ${SUPPORT_PHONE:-}
+      # ── optional integrations ──
+      SMS_PROVIDER: ${SMS_PROVIDER:-}
+      SMS_API_URL: ${SMS_API_URL:-}
+      SMS_API_KEY: ${SMS_API_KEY:-}
+      SMS_SENDER: ${SMS_SENDER:-}
+      # Outbound state-change webhooks of each module (off when empty).
+      SHAMS_WEBHOOK_URL: ${SHAMS_WEBHOOK_URL:-}
+      SHAMS_WEBHOOK_SECRET: ${SHAMS_WEBHOOK_SECRET:-}
+      SONA3_WEBHOOK_URL: ${SONA3_WEBHOOK_URL:-}
+      SONA3_WEBHOOK_SECRET: ${SONA3_WEBHOOK_SECRET:-}
+      MAX_FILE_SIZE_MB: ${MAX_FILE_SIZE_MB:-15}
+      # e-mail/SMS outbox retention in days for finished messages (sent/skipped/failed); 0 = keep forever (default)
+      NOTIFICATION_OUTBOX_RETENTION_DAYS: ${NOTIFICATION_OUTBOX_RETENTION_DAYS:-0}
     volumes:
+      # Uploaded documents (core/, shams/, sona3/) and the legacy databases copied in for the one-time import.
       - app-data:/data
     expose:
       - "4000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+  mysql:
+    image: mysql:8.4.11
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-mobadrat}
+      MYSQL_USER: ${MYSQL_USER:-mobadrat}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_bin
+      - --default-time-zone=+00:00
+      # Lets the application user create the schema's triggers while binary logging is on (MySQL 8.4 default).
+      - --log-bin-trust-function-creators=1
+      # Binary logs (point-in-time recovery) kept 7 days, to bound disk use on a small server.
+      - --binlog-expire-logs-seconds=604800
+      - --innodb-buffer-pool-size=${MYSQL_INNODB_BUFFER_POOL_SIZE:-256M}
+      - --max-connections=${MYSQL_MAX_CONNECTIONS:-100}
+      - --skip-name-resolve
+    volumes:
+      - mysql-data:/var/lib/mysql
+    # internal only: no `ports:` — reachable from `app` as mysql:3306 on the compose network
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_ROOT_PASSWORD\" mysqladmin ping -h 127.0.0.1 -uroot --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    stop_grace_period: 60s
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
 
 volumes:
   app-data:
+  mysql-data:

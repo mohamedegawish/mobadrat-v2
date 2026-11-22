@@ -1,31 +1,26 @@
 @echo off
 cd /d "%~dp0"
-title Egyptian Industrial Initiatives Platform
+title National Industrial Initiatives Platform
 
 echo ======================================================================
 echo    Arab Republic of Egypt - Ministry of Industry
-echo    National Industrial Initiatives Platform (Prototype Demo)
+echo    National Industrial Initiatives Platform
 echo ======================================================================
 echo.
-
-if not exist frontend\node_modules goto DO_INSTALL
-goto RUN_APP
-
-:DO_INSTALL
-echo [1/2] Installing required packages (frontend/npm install)...
-cd frontend
-call npm install
-if errorlevel 1 goto ON_ERROR
-cd /d "%~dp0"
-
-:RUN_APP
-echo [2/2] Launching platform and opening browser...
-echo Frontend: http://localhost:5173 (API=http://localhost:5000 via frontend/.env)
-echo Backend : cd backend ^&^& npm run dev  -- http://localhost:5000
-echo.
-echo ======================================================================
+echo Starts the backend (with MySQL in Docker) in a second window, then the frontend here.
 echo.
 
+start "Backend :5000" cmd /c "%~dp0RUN_BACKEND.bat"
+
+if not exist frontend\node_modules (
+  echo Installing frontend packages...
+  cd frontend
+  call npm install
+  if errorlevel 1 goto ON_ERROR
+  cd /d "%~dp0"
+)
+
+echo Frontend: http://localhost:5173  (the API is proxied to http://localhost:5000)
 cd frontend
 call npm run dev -- --open
 if errorlevel 1 goto ON_ERROR

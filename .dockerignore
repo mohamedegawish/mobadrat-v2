@@ -1,22 +1,21 @@
-# Root build context — used by BOTH the single-service ./Dockerfile (Coolify; copies
-# frontend/ + backend/ + contracts/ + seed-data.json) and compose's api image
-# (./backend/Dockerfile). Never ship deps, build output, secrets or live data.
+# Build context = repository root (Dockerfile). Never ship dependencies, build output, secrets or live data.
 **/node_modules
 **/dist
 **/*.tsbuildinfo
 **/.env
 **/.env.*
+!**/.env.example
 data
 backend/data
 **/*.db
 **/*.db-shm
 **/*.db-wal
-backups
 uploads
-certbot-www
 coverage
 *.log
 .git
 .github
 .vscode
 docs
+e2e
+legacy-import-*

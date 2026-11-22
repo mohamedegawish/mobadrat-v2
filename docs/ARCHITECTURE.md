@@ -1,0 +1,125 @@
+# معمارية المنصة الوطنية للمبادرات الصناعية
+
+المنصة **مظلة** واحدة تتكوّن من ثلاثة أجزاء:
+
+1. **موقع عام** يعرض كل المبادرات، ولكل مبادرة صفحتها وتسجيلها الخاص.
+2. **لوحة إدارة موحّدة** تجمع إحصائيات كل المبادرات وحساباتها وسجل التدقيق.
+3. **مبادرات مبنية كوحدات كود (modules)** داخل المنصة. كل مبادرة لها منطق أعمالها وشاشاتها وقاعدة بياناتها (جداول بادئة باسمها).
+
+حتى الآن هناك وحدتان: **شمس الصناعة** (`shams`، لكل مصنع) و**صُنّاع المستقبل** (`sona3`، لكل شخص).
+
+```
+                    ┌──────────────── المنصة (core) ────────────────┐
+  المستخدم ──► #home / #initiatives / #hub / #profile / #apply/<slug> / #admin…
+                    │  حساب واحد · ملف شخصي + ملفات مصانع · عضويات · تدقيق · إشعارات │
+                    └───────────────┬───────────────────┬───────────────┘
+                                    │ /api/v1/i/shams   │ /api/v1/i/sona3
+                            ┌───────▼──────┐     ┌──────▼───────┐
+                            │ شمس الصناعة  │     │ صُنّاع المستقبل │   ← #i/<id>/<view>
+                            │ shams_* جداول │     │ sona3_* جداول │
+                            └──────────────┘     └──────────────┘
+                                  MySQL 8.4 (قاعدة واحدة)
+```
+
+## 1. الباك (`backend/src`)
+
+| المسار | المحتوى |
+|---|---|
+| `core/db` | درايفر MySQL (`getDb().prepare(sql).get/all/run`، `tx()`، `withJobLock()`)، وترجمة SQL، ومشغّل الـ migrations لكل وحدة |
+| `core/db/migrations/001_core.sql` | جداول المنصة: `users`، `initiative_memberships`، `initiatives` (الكتالوج)، `person_profiles`، `factory_profiles`، `profile_documents`، `audit_logs`، `notification_outbox`، `user_notifications`، `industrial_zones`، `home_banners`، `site_content`، `legacy_*` |
+| `core/routes` | `auth` (دخول/تسجيل/تحقق/استعادة كلمة المرور لكل المبادرات)، `me` (الملف الشخصي، المصانع، المستندات، المتطلبات، الالتحاق، صندوق الإشعارات)، `catalog`، `admin` |
+| `core/profile` | كتالوج حقول الملف المشترك (`catalog.ts`)، ومحرك «البيانات الناقصة» (`requirements.ts`)، والكتابة العكسية بعد الإرسال (`writeback.ts`) |
+| `core/middleware/auth.ts` | `auth`، `requirePlatformRole`، `moduleAuth(module)` |
+| `core/stats.ts` | إحصائيات موحدة من كل وحدة (`module.stats`) + أثر عام للموقع |
+| `initiatives/contract.ts` | عقد الوحدة `InitiativeModule` (انظر §3) |
+| `initiatives/registry.ts` | قائمة الوحدات المسجلة `MODULES = [shams, sona3]` |
+| `initiatives/<id>/` | كود المبادرة كاملًا: `store/`، `workflow/`، `services/`، `routes/`، `notifications/`، `jobs/`، `integration/`، `db/migrations/`، `tests/`، و`requirements.ts` و`stats.ts` و`module.ts` |
+| `cli/` | `migrate`، `seed`، `createSuperAdmin`، `checkReadiness`، `legacy-import/` |
+
+### مسارات الـ API
+
+- `/api/v1/auth/*`، `/api/v1/me/*`، `/api/v1/initiatives`، `/api/v1/admin/*`: هذه مسارات المنصة.
+- `/api/v1/i/<id>/public/*`: مسارات عامة للمبادرة (التسجيل، الإعدادات العامة).
+- `/api/v1/i/<id>/*`: مسارات المبادرة، وتمر أولًا على `auth` ثم `moduleAuth`.
+- `/api/integration/v1/i/<id>/*`: واجهة التكامل لكل مبادرة (مفاتيح API خاصة بالوحدة).
+
+### الحسابات والصلاحيات
+
+- **حساب واحد لكل شخص.** تُعرَّف الحسابات بالبريد في جدول `users`، وكلمة المرور واحدة لكل المبادرات.
+- **دور المنصة** (`users.platformRole`) يأخذ إحدى القيم: `super_admin` | `ministry_viewer` | `auditor` | `catalog_manager`.
+- **العضوية في مبادرة** صف في `initiative_memberships(userId, initiativeId, role, organizationId, status)`: عضوية واحدة لكل شخص في كل مبادرة. الدور والجهة ثابتان (trigger)، وتغييرهما يكون بإلغاء العضوية وإنشاء أخرى.
+- **الممثل المحوَّل (adapter actor).** يحمّل `moduleAuth` عضوية المستخدم ثم يستدعي `module.resolveActor` ليحصل على مستخدم بنفس شكل التطبيق الأصلي (`role`، `organizationId`…). لذلك بقيت قواعد الرؤية وسير العمل في كل وحدة كما هي بدون تعديل.
+- **مدير المنصة** (`super_admin`) يدخل أي مبادرة كمدير نظامها (`system_admin`) بدون عضوية.
+- **حالة حساب مصنع شمس** (قيد المراجعة/مقبول…) صارت بوابة داخل وحدة شمس فقط. الدخول للمنصة نفسه لا يُمنع.
+
+## 2. الملف المشترك و«البيانات الناقصة»
+
+- **الملف الشخصي** `person_profiles`: الاسم، الرقم القومي، تاريخ الميلاد، الجنسية، المحافظة، العنوان، الهاتف، المؤهل، الخبرة.
+- **ملفات المصانع** `factory_profiles`: بيانات الشركة والتواصل والسجلات والأسطح والقدرة والحيازة. ترتبط بالأشخاص عبر `factory_profile_members` (مالك/عضو).
+- **مستندات الملف** `profile_documents`: صورة الرقم القومي، المؤهل، السجل التجاري، السجل الصناعي، البطاقة الضريبية، إثبات الحيازة. تُخزن في `uploads/core/documents`.
+- **بيان متطلبات كل مبادرة** في `initiatives/<id>/requirements.ts`، ويحدد:
+  - الحقول المطلوبة من الملف، وما يقابل كلًا منها في نموذج المبادرة.
+  - المستندات المطلوبة.
+  - الموانع (`precheck`)، مثل: طلب مفتوح، أو لا توجد دورة مفتوحة، أو السن.
+- **عرض الناقص:** `GET /api/v1/me/initiatives/:slug/requirements` يرجع الناقص فقط والموانع وقيم التعبئة المسبقة. صفحة `#apply/<slug>` تعرضها وتطلب استكمالها.
+- **الالتحاق:** `POST /api/v1/me/initiatives/:slug/enroll` يعيد فحص كل شيء على السيرفر، ثم:
+  - ينشئ جهة الشخص في الوحدة والعضوية ومسودة طلب معبأة مسبقًا؛
+  - ينسخ مستندات الملف إلى ملف المبادرة بنفس الـ sha256.
+- **الكتابة العكسية:** بعد **إرسال** الطلب أو إعادة إرساله بنجاح (وليس عند حفظ المسودة) تنسخ الوحدة القيم المرسلة إلى الملف المشترك، ويُسجَّل ذلك في التدقيق.
+  - حقول الهوية المقفولة (الرقم القومي، تاريخ الميلاد، رقم السجل الصناعي) لا تُكتب فوق قيمة موجودة.
+  - لقطة الطلب المرسل لا تتغير أبدًا.
+
+## 3. إضافة مبادرة جديدة
+
+1. أنشئ `backend/src/initiatives/<id>/` وفيه `module.ts` يصدّر كائنًا من نوع `InitiativeModule`. ستحتاج تحديدًا:
+   - `id` و`titleAr/En`.
+   - `migrations`، وهي `db/migrations/*.sql` بجداول بادئتها `<id>_` (وأسماء القيود والـ triggers أيضًا بالبادئة، لأنها عامة على مستوى القاعدة في MySQL).
+   - `roles` و`applicantRole` و`adminRole`، و`subject` بقيمة `person` أو `factory`.
+   - `requirements` (بيان المتطلبات) و`catalogDefaults` (صفحة الكتالوج).
+   - `publicRouter` و`router` و`integrationRouter`.
+   - `resolveActor` و`access` و`enroll` و`hubCard` و`stats` و`staffEntryPoints` و`defaultView`.
+   - اختياريًا: `hooks.onEmailVerified` و`startJobs`/`stopJobs` و`readiness` و`seedDemo` و`registerMail`.
+2. أضفها إلى `MODULES` في `initiatives/registry.ts`. عند الإقلاع تُطبق جداولها وتُنشأ صفحتها في الكتالوج تلقائيًا.
+3. للواجهة:
+   - أنشئ `frontend/src/initiatives/<id>/index.tsx` (غلاف `div.theme-<id>` + `PlatformBar`).
+   - أضفها إلى `frontend/src/initiatives/registry.ts` (تحميل كسول).
+   - شاشاتها تعمل على `#i/<id>/<view>`، وتستخدم الجلسة المشتركة `core/session.ts`.
+4. الاختبارات في `initiatives/<id>/tests`، وتُضاف كحزمة في `scripts/run-tests.mjs`.
+
+## 4. الواجهة (`frontend/src`)
+
+| المسار | المحتوى |
+|---|---|
+| `platform/` | الموقع العام، شاشات الدخول، `#hub` (اختيار المبادرة)، `#profile`، `#apply/<slug>`، `#notifications`، لوحة الإدارة `#admin*` |
+| `initiatives/<id>/` | واجهة المبادرة الأصلية كما هي، chunk مستقل يُحمَّل عند الحاجة، تحت `#i/<id>/…` |
+| `core/session.ts` | التوكن في الذاكرة، تجديد الجلسة مرة واحدة لكل التبويبات، وتحويل مسارات API الخاصة بكل وحدة |
+| `vite.config.ts` | عزل الـ CSS: ملفات `src/initiatives/<id>/**` تُحصر داخل `.theme-<id>`، وملفات `src/styles/**` داخل `.platform-root`. لا يتسرب تصميم مبادرة إلى غيرها |
+
+**بعد الدخول:**
+- من ليس له مبادرة يذهب إلى `#initiatives`.
+- من له مبادرة واحدة فقط يدخل لوحتها مباشرة.
+- غير ذلك يذهب إلى `#hub`، وفيه بطاقة لكل مبادرة بحالتها والخطوة التالية.
+
+## 5. قاعدة البيانات
+
+- **MySQL 8.4** في كل البيئات: Docker محليًا (`docker-compose.dev.yml`) وفي الإنتاج (`docker-compose.yml`).
+- **الـ migrations:** جدول `schema_migrations(module, version, checksum)`. تُطبَّق جداول المنصة أولًا ثم كل وحدة بالترتيب، تحت قفل. يرفض الإقلاع لو تغيّر ملف migration سبق تطبيقه، والتعديل يكون بملف جديد دائمًا.
+- **الكتابات المتزامنة** تُسلسل بـ `GET_LOCK` داخل `tx()`.
+- **الملفات** في `UPLOAD_DIR/<namespace>/…`، حيث الـ namespace هو `core` أو `shams` أو `sona3`.
+
+## 6. الاختبارات
+
+```bash
+docker compose -f docker-compose.dev.yml --profile test up -d mysql-test   # MySQL على 3308 (tmpfs)
+cd backend && npm test               # كل الحزم: core + shams + sona3
+npm run test:shams -- 03-decisions   # ملف بعينه
+```
+
+كل ملف اختبار يعمل على قاعدة مستقلة تُنشأ وتُحذف تلقائيًا.
+
+## 7. قرارات وحدود الإصدار الحالي
+
+- **المراسلات بين الجهات** (شات المنصة القديمة) لم تُنقل. كل مبادرة لها قنواتها: النواقص، الاعتراضات، صندوق الإشعارات.
+- **عضوية واحدة لكل شخص في كل مبادرة.** في شمس: مصنع واحد لكل شخص.
+- **تغيير البريد أو تعطيل حساب له أكثر من مبادرة** من صلاحية مدير المنصة فقط، لأن الحساب مشترك.
+- **المبادرات القديمة في المنصة العامة** (غير شمس) صفحات معلومات فقط إلى أن تُبنى وحدتها. سجلاتها محفوظة للقراءة في `legacy_platform_archive`.
