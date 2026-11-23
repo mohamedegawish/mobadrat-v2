@@ -70,6 +70,27 @@ test('SD-1 a fresh database: an account for every role, each usable at once with
   assert.ok(r.notes.some((x) => x.includes('demo banks added')));
 });
 
+/** The accounts of ACCOUNTS.md — one for each dashboard — and the platform dashboard each one opens (null: none). */
+const DASHBOARD_ACCOUNTS: Array<[string, string | null]> = [
+  ['admin@mobadrat.local', 'system_admin'], ['ministry@mobadrat.local', null], ['auditor@mobadrat.local', null], ['content@mobadrat.local', null],
+  ['imc@mobadrat.local', 'imc'], ['encpc@shams.local', 'encpc'], ['pmu@shams.local', 'pmu'], ['funder@sona3.local', 'funder'],
+  ['evaluator1@sona3.local', 'evaluator'], ['admin@shams.local', 'system_admin'], ['factory@shams.local', null], ['applicant@sona3.local', null],
+];
+
+test('SD-1b the accounts of ACCOUNTS.md exist after the deploy seeder, each signs in and opens its dashboard', async () => {
+  for (const [email, type] of DASHBOARD_ACCOUNTS) {
+    const c = await signIn(email);
+    if (!type) continue;
+    const r = await c.get(`/me/workspace/${type}`);
+    assert.equal(r.status, 200, `${email} → ${type}: ${JSON.stringify(r.json)}`);
+    assert.ok(r.json.data.parts.every((p: { ok: boolean }) => p.ok), email);
+  }
+  // the shared IMC account: IMC in both initiatives, one dashboard for both
+  const imc = await signIn('imc@mobadrat.local');
+  const d = (await imc.get('/me/workspace/imc')).json.data;
+  assert.deepEqual(d.initiatives.map((i: { initiativeId: string }) => i.initiativeId).sort(), ['shams', 'sona3']);
+});
+
 test('SD-2 every later run (each deploy): nothing duplicated, nothing changed — including an account its owner disabled or edited', async () => {
   const counts = async () => Promise.all(['users', 'initiative_memberships', 'shams_organizations', 'shams_factories', 'shams_service_providers', 'sona3_organizations',
     'sona3_applicants', 'sona3_cohorts', 'sona3_experts', 'platform_bodies', 'platform_body_links', 'factory_profiles'].map((t) => n(`SELECT COUNT(*) AS n FROM ${t}`)));
