@@ -20,7 +20,8 @@ function appsCountLabel(count: number, isAr: boolean): string {
 /** لون شارة حالة الطلب كما تحددها المبادرة. */
 const CARD_TONE: Record<string, StatusTone> = { success: 'approved', warning: 'rework', danger: 'rejected', info: 'pending', neutral: 'draft' };
 
-const dashboardOf = (m: MembershipItem) => `i/${m.initiativeId}/${m.card?.view ?? m.defaultView}`;
+/** Staff open the dashboard of their user type on this initiative (one page for every initiative); applicants their file. */
+const dashboardOf = (m: MembershipItem) => (m.userType ? `workspace/${m.userType}?i=${m.initiativeId}` : `i/${m.initiativeId}/${m.card?.view ?? m.defaultView}`);
 const canOpen = (m: MembershipItem) => m.status === 'active' && m.access.status !== 'blocked';
 
 /** رسالة المبادرة عن الحساب (موقوف / مقيد / محظور) — تظهر داخل بطاقة المبادرة. */

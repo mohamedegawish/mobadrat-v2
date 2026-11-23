@@ -18,6 +18,7 @@ import { makeLimiter } from './core/http/rateLimits.js';
 import { healthHandler, healthRouter } from './core/routes/health.js';
 import { authRouter } from './core/routes/auth.js';
 import { meRouter, profileMetaRouter } from './core/routes/me.js';
+import { workspaceRouter } from './core/routes/workspace.js';
 import { adminCatalogRouter, publicCatalogRouter } from './core/routes/catalog.js';
 import { adminRouter } from './core/routes/admin.js';
 import { bodiesRouter } from './core/routes/bodies.js';
@@ -71,6 +72,7 @@ export function createApp() {
   v1.use(auth);
   v1.use(requirePasswordChanged);
   v1.use(meRouter);
+  v1.use(workspaceRouter);
   v1.use(adminCatalogRouter);
   v1.use(adminRouter);
   v1.use(bodiesRouter);

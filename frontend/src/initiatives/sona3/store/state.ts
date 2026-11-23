@@ -39,6 +39,22 @@ export const VIEW_ACCESS: Record<View, Access> = {
   'admin-audit': ['system_admin'], 'admin-integration': ['system_admin'], 'admin-outbox': ['system_admin'], 'admin-content': ['system_admin'],
 };
 
+/**
+ * The platform dashboard of each staff role (#workspace/<type>): one page per user type for every initiative. The role's
+ * old dashboard / work queue / monitoring screens redirect there (App.tsx).
+ */
+export const USER_TYPE: Partial<Record<Role, string>> = { imc_officer: 'imc', evaluator: 'evaluator', funder_reviewer: 'funder', system_admin: 'system_admin' };
+
+/** The platform dashboard of the role, on this initiative (null for an applicant). */
+export function workspaceHash(role: Role, preset: { tab?: string; state?: string } = {}): string | null {
+  const type = USER_TYPE[role];
+  if (!type) return null;
+  const q = new URLSearchParams({ i: 'sona3' });
+  if (preset.tab) q.set('tab', preset.tab);
+  if (preset.state) q.set('state', preset.state);
+  return `workspace/${type}?${q.toString()}`;
+}
+
 export const DEFAULT_VIEW: Record<Role, View> = {
   applicant: 'applicant-dashboard', imc_officer: 'work-queue', evaluator: 'my-evaluations', funder_reviewer: 'work-queue', system_admin: 'admin-dashboard',
 };

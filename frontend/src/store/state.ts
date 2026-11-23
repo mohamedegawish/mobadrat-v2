@@ -178,11 +178,9 @@ export function navigate(view: string, initiativeId?: string): void {
   platform.go(ROUTES[view] ?? view);
 }
 
-/** Where the signed-in person works: one initiative → its dashboard; several (or staff) → «مبادراتي» / the admin. */
+/** Where the signed-in person works: platform staff → the administration; initiative staff → the dashboard of their user type; one initiative → its dashboard; several → «مبادراتي». */
 export function goToWorkspace(): void {
-  const me = platform.get().me;
-  if (me?.user.platformRole) platform.go('admin');
-  else platform.goHome(me);
+  platform.goHome(platform.get().me);
 }
 
 /** The platform's page under the old page names (active states of the header and the sidebar). */
@@ -217,7 +215,8 @@ export function startApplication(initiativeId: string): void {
   if (!c) { platform.go('initiatives'); return; }
   const me = platform.get().me;
   const m = c.moduleId ? me?.memberships.find((x) => x.initiativeId === c.moduleId) : undefined;
-  if (m) { platform.go(`i/${m.initiativeId}/${m.card?.view ?? m.defaultView}`); return; }
+  // Staff: the dashboard of their user type on this initiative; applicants: their file.
+  if (m) { platform.go(m.userType ? `workspace/${m.userType}?i=${m.initiativeId}` : `i/${m.initiativeId}/${m.card?.view ?? m.defaultView}`); return; }
   if (!me) {
     if (c.registerView) { platform.go(c.registerView); return; }
     platform.rememberReturn(`apply/${c.slug}`);

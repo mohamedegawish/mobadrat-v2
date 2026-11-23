@@ -9,13 +9,15 @@ import { getShellLang, onShellLang, setShellLang } from '../core/shell';
 
 export type View =
   | 'home' | 'initiatives' | 'initiative' | 'compare' | 'impact' | 'login' | 'register' | 'verify-email' | 'forgot-password' | 'reset-password'
-  | 'hub' | 'profile' | 'apply' | 'notifications' | 'change-password'
+  | 'hub' | 'profile' | 'apply' | 'notifications' | 'change-password' | 'workspace'
   | 'admin' | 'admin-initiative' | 'admin-users' | 'admin-catalog' | 'admin-banners' | 'admin-audit' | 'admin-outbox' | 'admin-readiness' | 'admin-bodies' | 'admin-body';
 
 const VIEWS: View[] = ['home', 'initiatives', 'initiative', 'compare', 'impact', 'login', 'register', 'verify-email', 'forgot-password', 'reset-password',
-  'hub', 'profile', 'apply', 'notifications', 'change-password', 'admin', 'admin-initiative', 'admin-users', 'admin-catalog', 'admin-banners', 'admin-audit', 'admin-outbox', 'admin-readiness', 'admin-bodies', 'admin-body'];
+  'hub', 'profile', 'apply', 'notifications', 'change-password', 'workspace', 'admin', 'admin-initiative', 'admin-users', 'admin-catalog', 'admin-banners', 'admin-audit', 'admin-outbox', 'admin-readiness', 'admin-bodies', 'admin-body'];
 
-export const AUTH_VIEWS: View[] = ['hub', 'profile', 'apply', 'notifications', 'change-password'];
+export const AUTH_VIEWS: View[] = ['hub', 'profile', 'apply', 'notifications', 'change-password', 'workspace'];
+/** Staff work pages of the platform (compact header, no footer): the dashboard of each user type. */
+export const STAFF_WORK_VIEWS: View[] = ['workspace'];
 export const ADMIN_VIEWS: View[] = ['admin', 'admin-initiative', 'admin-users', 'admin-catalog', 'admin-banners', 'admin-audit', 'admin-outbox', 'admin-readiness', 'admin-bodies', 'admin-body'];
 
 interface Snapshot {
@@ -90,10 +92,15 @@ class Store {
     return me;
   }
 
-  /** Where a signed-in person lands: staff → the administration; one initiative → its dashboard; several → «مبادراتي». */
+  /**
+   * Where a signed-in person lands: platform staff → the administration; initiative staff → the dashboard of their user type
+   * (one page for every initiative); one initiative → its dashboard; several → «مبادراتي».
+   */
   goHome(me = this.s.me) {
     if (!me) { this.go('home'); return; }
-    if (me.user.platformRole) { this.go('admin'); return; }
+    if (me.user.platformRole) { this.go(me.user.platformRole === 'catalog_manager' ? 'admin-catalog' : 'admin'); return; }
+    const staff = me.memberships.find((m) => m.userType && m.status === 'active' && m.access?.status !== 'blocked');
+    if (staff) { this.go(`workspace/${staffTypeOf(me)}`); return; }
     if (!me.user.platformRole && me.memberships.length === 1 && me.memberships[0].status === 'active' && me.memberships[0].access?.status !== 'blocked') {
       const m = me.memberships[0];
       this.go(`i/${m.initiativeId}/${m.card?.view ?? m.defaultView}`);
@@ -103,6 +110,13 @@ class Store {
   }
 
   async logout() { await api.logout().catch(() => undefined); this.set({ me: null }); this.go('home'); }
+}
+
+/** The first dashboard of the person (in the platform's order: IMC, PMU, ENCPC, funder, evaluator, system admin). */
+function staffTypeOf(me: Me): string {
+  const order = ['imc', 'pmu', 'encpc', 'funder', 'evaluator', 'system_admin'];
+  const mine = me.memberships.filter((m) => m.userType && m.status === 'active' && m.access?.status !== 'blocked').map((m) => m.userType as string);
+  return order.find((x) => mine.includes(x)) ?? mine[0];
 }
 
 export const store = new Store();

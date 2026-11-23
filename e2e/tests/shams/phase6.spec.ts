@@ -29,14 +29,16 @@ test('a correction request is confirmed first: the dialog says it returns to the
 
 test('home: a signed-in reviewer reaches the page from the header and gets a working button to the workspace, with no "start application" call to action', async ({ page }) => {
   await login(page, 'imc1@shams.local');
-  await expect(page).toHaveURL(/#i\/shams\/dashboard/);
+  await expect(page).toHaveURL(/#workspace\/imc/);
+  // the initiative's own screens keep the bar; from a tool screen «عن المبادرة» opens its page on the platform
+  await open(page, '#approvals');
   await page.getByTestId('initiative-bar').getByRole('link', { name: 'عن المبادرة' }).click();
   await expect(page).toHaveURL(/#initiative\/shams/);
   const hero = page.getByTestId('initiative-apply').first();
   await expect(hero).toContainText('ادخل لوحة المبادرة');
   await expect(page.getByTestId('cta-bottom')).toHaveCount(0);
   await hero.click();
-  await expect(page).toHaveURL(/#i\/shams\/dashboard/);
+  await expect(page).toHaveURL(/#workspace\/imc\?i=shams/);
 });
 
 test('outbox retry cannot be double-clicked: exactly one request leaves, and the button is disabled meanwhile', async ({ page }) => {
@@ -57,14 +59,15 @@ test('outbox retry cannot be double-clicked: exactly one request leaves, and the
 
 test('pagers and charts follow the interface language: Arabic digits in Arabic, Latin in English', async ({ page }) => {
   await login(page, 'pmu@shams.local');
-  await expect(page).toHaveURL(/#i\/shams\/pmu-monitor/);
-  const bars = page.locator('.card', { hasText: 'التوزيع على المراحل' });
-  await expect(bars).toBeVisible();
+  await expect(page).toHaveURL(/#workspace\/pmu/);
+  await page.getByTestId('tab-monitoring').click();
+  const bars = page.getByTestId('block-by-state');
+  await expect(bars).toContainText('الطلبات حسب الحالة');
   const text = await bars.innerText();
   expect(/[0-9]/.test(text.replace(/[A-Za-z_\-\s]/g, ''))).toBe(false);          // لا أرقام لاتينية داخل رسم المراحل بالعربية
   await page.getByRole('button', { name: 'تبديل اللغة إلى الإنجليزية' }).click();
-  await expect(page.locator('.card', { hasText: 'Distribution by stage' })).toBeVisible();
-  const en = await page.locator('.card', { hasText: 'Distribution by stage' }).innerText();
+  await expect(bars).toContainText('Applications by state');
+  const en = await bars.innerText();
   expect(/[٠-٩]/.test(en)).toBe(false);
   await page.getByRole('button', { name: 'Switch language to Arabic' }).click();
 });

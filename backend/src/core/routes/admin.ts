@@ -49,7 +49,8 @@ adminRouter.get('/admin/stats/:id', viewers, ah(async (req, res) => {
   const s = await initiativeStats(req.params.id, dateRange(req));
   if (!s) throw Errors.notFound();
   const mod = getModule(req.params.id)!;
-  return okMessage(res, 200, 'ok', { ...s, staffEntryPoints: mod.staffEntryPoints });
+  // Only the screens the platform admin can open there (it acts as the module's admin role).
+  return okMessage(res, 200, 'ok', { ...s, staffEntryPoints: mod.staffEntryPoints.filter((e) => e.roles.includes(mod.adminRole)) });
 }));
 
 adminRouter.get('/admin/activity', viewers, ah(async (req, res) => {

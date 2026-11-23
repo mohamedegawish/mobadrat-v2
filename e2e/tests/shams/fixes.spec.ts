@@ -73,11 +73,11 @@ test('I12/I2/M3: wizard ticks only complete sections, blocks an incomplete submi
 
 test('I5/I6: PMU lands on what awaits its decision; no fake "overdue 0"; days-waiting column', async ({ page }) => {
   await login(page, 'pmu@shams.local');
-  await expect(page).toHaveURL(/#i\/shams\/pmu-monitor/);
-  await expect(page.getByTestId('awaiting-me')).toContainText('بانتظار قرارك');
+  await expect(page).toHaveURL(/#workspace\/pmu/);
+  await expect(page.getByTestId('awaiting-me')).toContainText('بانتظار قراري');
   await expect(page.getByTestId('sla-not-set')).toContainText('لم تُحدد مهل');
   await page.getByTestId('awaiting-me').click();
-  await expect(page).toHaveURL(/#i\/shams\/work-queue/);
+  await expect(page.getByTestId('tab-mine')).toHaveClass(/active/);
   await expect(page.getByTestId('tab-overdue')).toBeDisabled();
   await page.getByTestId('tab-all').click();
   await expect(page.getByTestId('drafts-count')).toBeVisible();
@@ -85,7 +85,8 @@ test('I5/I6: PMU lands on what awaits its decision; no fake "overdue 0"; days-wa
 
 test('18/B2/M6: admin lands on readiness & operations — unmet conditions listed, no PMU dashboard or provider approval', async ({ page }) => {
   await login(page, 'admin@shams.local');
-  await expect(page).toHaveURL(/#i\/shams\/admin-dashboard/);
+  await expect(page).toHaveURL(/#workspace\/system_admin/);
+  await expect(page.getByTestId('tab-readiness')).toHaveClass(/active/);
   await expect(page.getByTestId('check-support_contact')).toHaveAttribute('data-ok', '0');
   await expect(page.getByTestId('check-banks_available')).toHaveAttribute('data-ok', '1');
   await expect(page.getByTestId('failed-messages')).toBeVisible();

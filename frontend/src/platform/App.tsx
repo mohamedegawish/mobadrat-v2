@@ -3,12 +3,13 @@
  * every other route is a platform screen inside the platform shell: the official header, the page, the official footer.
  */
 import React, { Suspense, useEffect, useSyncExternalStore } from 'react';
-import { usePlatform, store, isAdmin, AUTH_VIEWS, ADMIN_VIEWS, type View } from './store';
+import { usePlatform, store, isAdmin, AUTH_VIEWS, ADMIN_VIEWS, STAFF_WORK_VIEWS, type View } from './store';
 import { Loading, SignInRequired, Forbidden } from './layout';
 import { VerifyEmailPage, ForgotPasswordPage, ResetPasswordPage, ChangePasswordPage } from './pages/auth';
 import { ProfilePage, ApplyPage, NotificationsPage } from './pages/account';
 import { AdminDashboard, AdminInitiative, AdminUsers, AdminCatalog, AdminBanners, AdminAudit, AdminOutbox, AdminReadiness } from './pages/admin';
 import { AdminBodies, AdminBody } from './pages/bodies';
+import { WorkspacePage } from './pages/workspace';
 import { moduleOf, type ModuleEntry } from '../initiatives/registry';
 import { getShellWorkspace, onShellWorkspace } from '../core/shell';
 import { ToastProvider, useToast } from '../components/common/ToastSystem';
@@ -27,7 +28,7 @@ import { ChatWidget } from '../components/chatbot/ChatWidget';
 const SCREENS: Record<View, React.FC> = {
   home: HomeView, initiatives: InitiativesView, initiative: InitiativeDetailPage, compare: CompareView, impact: ImpactView,
   login: LoginView, register: LoginView, 'verify-email': VerifyEmailPage, 'forgot-password': ForgotPasswordPage, 'reset-password': ResetPasswordPage,
-  'change-password': ChangePasswordPage, hub: MyInitiativesView, profile: ProfilePage, apply: ApplyPage, notifications: NotificationsPage,
+  'change-password': ChangePasswordPage, hub: MyInitiativesView, workspace: WorkspacePage, profile: ProfilePage, apply: ApplyPage, notifications: NotificationsPage,
   admin: AdminDashboard, 'admin-initiative': AdminInitiative, 'admin-users': AdminUsers, 'admin-catalog': AdminCatalog, 'admin-banners': AdminBanners,
   'admin-audit': AdminAudit, 'admin-outbox': AdminOutbox, 'admin-readiness': AdminReadiness, 'admin-bodies': AdminBodies, 'admin-body': AdminBody,
 };
@@ -64,6 +65,8 @@ const PlatformShell: React.FC<{ module: ModuleEntry | null }> = ({ module }) => 
 
   const Screen = SCREENS[view];
   const isAdminView = module ? moduleWorkspace : ADMIN_VIEWS.includes(view);
+  // The staff dashboards are work pages too (compact header, no footer), open to initiative staff (not platform roles only).
+  const isWorkView = !module && STAFF_WORK_VIEWS.includes(view);
   const needsAuth = AUTH_VIEWS.includes(view) || isAdminView || STAFF_VIEWS.includes(view);
   let body: React.ReactNode;
   if (module) {
@@ -78,13 +81,13 @@ const PlatformShell: React.FC<{ module: ModuleEntry | null }> = ({ module }) => 
   else if (isAdminView) body = <AdminLayout><Screen /></AdminLayout>;
   else body = <Screen key={view} />;
   return (
-    <div className={`app-container${isAdminView ? ' admin-mode' : ''}`}>
+    <div className={`app-container${isAdminView || isWorkView ? ' admin-mode' : ''}`}>
         {/* 1. Official Government Header */}
         <HeaderNavbar />
         {/* 2. Main View Router with Access Control Guard */}
         <main className="main-content" id="main">{body}</main>
         {/* 3. Official Government Footer — مخفي في وضع الإدارة لتوفير المساحة */}
-        {isAdminView ? null : <Footer />}
+        {isAdminView || isWorkView ? null : <Footer />}
         {/* 4. Floating platform assistant */}
         <ChatWidget />
     </div>

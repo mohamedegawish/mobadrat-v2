@@ -140,6 +140,9 @@ export async function buildDashboard(user: UserInternal) {
     role: user.role,
     awaitingMe: { count: awaitingMe, link: { view: 'work-queue' as const, param: 'mine' } },
     total: totalInScope,
+    /** Open (submitted, not closed) applications in scope, and how many of them are past their stage deadline. */
+    open: apps.length,
+    overdue,
     slaConfigured: sla,
     cards,
     attention,

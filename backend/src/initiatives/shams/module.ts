@@ -5,7 +5,7 @@
  * to the platform's shared outbox/log tagged with this initiative.
  */
 import { Router } from 'express';
-import type { InitiativeModule, HubCard } from '../contract.js';
+import type { InitiativeModule, HubCard, UserType } from '../contract.js';
 import { migrationsDirFor } from '../../core/db/index.js';
 import { SHAMS_PUBLIC_CONTENT } from './catalogContent.js';
 import { makeLimiter } from './http/rateLimits.js';
@@ -49,6 +49,12 @@ import { getFactoryProfile, listCurrentDocuments } from '../../core/profile/stor
 import { copyStoredFile } from '../../core/http/upload.js';
 import { kickNotificationWorker } from './jobs/notificationWorker.js';
 import { MODULE_ID } from './config.js';
+import { shamsWorkspace } from './workspace.js';
+
+/** The platform dashboard of each role (bank_reviewer is retired: no account, no dashboard). */
+const USER_TYPE: Partial<Record<Role, UserType>> = {
+  factory_owner: 'applicant', imc_reviewer: 'imc', encpc_reviewer: 'encpc', pmu_reviewer: 'pmu', system_admin: 'system_admin',
+};
 
 const DEFAULT_VIEW: Record<Role, string> = {
   factory_owner: 'factory-dashboard', imc_reviewer: 'dashboard', encpc_reviewer: 'dashboard', pmu_reviewer: 'pmu-monitor',
@@ -62,7 +68,7 @@ export const shamsModule: InitiativeModule = {
   migrations: { module: MODULE_ID, dir: migrationsDirFor(import.meta.url, 'db/migrations') },
   roles: (Object.keys(ROLE_LABELS) as Role[]).filter((r) => r !== 'bank_reviewer').map((r) => ({
     key: r, labelAr: ROLE_LABELS[r].ar, labelEn: ROLE_LABELS[r].en,
-    kind: r === 'factory_owner' ? 'applicant' : r === 'system_admin' ? 'admin' : 'staff', orgTypes: [ROLE_ORG_TYPE[r]],
+    kind: r === 'factory_owner' ? 'applicant' : r === 'system_admin' ? 'admin' : 'staff', orgTypes: [ROLE_ORG_TYPE[r]], userType: USER_TYPE[r],
   })),
   applicantRole: 'factory_owner',
   adminRole: 'system_admin',
@@ -171,14 +177,16 @@ export const shamsModule: InitiativeModule = {
 
   stats,
   bodies: shamsBodies,
+  // The dashboards (queue, monitoring, readiness) are the platform's, one per user type (core/routes/workspace.ts).
   staffEntryPoints: [
-    { view: 'work-queue', labelAr: 'قائمة العمل', labelEn: 'Work queue', roles: ['imc_reviewer', 'encpc_reviewer', 'pmu_reviewer', 'system_admin'] },
-    { view: 'pmu-monitor', labelAr: 'متابعة وحدة إدارة المبادرة', labelEn: 'PMU monitoring', roles: ['pmu_reviewer'] },
     { view: 'providers', labelAr: 'مقدمو الخدمة', labelEn: 'Service providers', roles: ['encpc_reviewer', 'pmu_reviewer'] },
     { view: 'approvals', labelAr: 'الموافقات', labelEn: 'Approvals', roles: ['imc_reviewer', 'encpc_reviewer', 'pmu_reviewer'] },
-    { view: 'admin-dashboard', labelAr: 'إدارة المبادرة', labelEn: 'Initiative administration', roles: ['system_admin'] },
+    { view: 'admin-accounts', labelAr: 'الحسابات', labelEn: 'Accounts', roles: ['system_admin'] },
+    { view: 'admin-organizations', labelAr: 'الجهات والبنوك', labelEn: 'Organizations & banks', roles: ['system_admin'] },
+    { view: 'admin-outbox', labelAr: 'سجل الإشعارات', labelEn: 'Notifications log', roles: ['system_admin'] },
   ],
   defaultView(role) { return DEFAULT_VIEW[role as Role] ?? 'factory-dashboard'; },
+  workspace: shamsWorkspace,
 
   hooks: {
     /** A self-registered factory: once the e-mail is proven, the registration (data + documents) goes to IMC automatically. */
@@ -225,6 +233,13 @@ export const shamsModule: InitiativeModule = {
 
   seedDemo(password) { return seedDevData(password); },
   seedDeploy(passwordHash) { return seedDeployData(passwordHash); },
+  async seedSharedStaff(userId, type) {
+    const staff: Partial<Record<UserType, [Role, string]>> = { imc: ['imc_reviewer', ORG_IDS.imc] };
+    const s = staff[type];
+    if (!s || await getMembership(userId, MODULE_ID)) return null;
+    await createMembership({ userId, initiativeId: MODULE_ID, role: s[0], organizationId: s[1] });
+    return s[0];
+  },
 
   registerMail() { registerCidResolver(providerLogoAttachments); },
 };

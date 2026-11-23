@@ -24,7 +24,8 @@ import { hashPassword } from './auth/jwt.js';
 import { accountStatus, ensureSeedAccount } from './seedAccounts.js';
 import { getUserByEmail, setPassword, setPlatformRole, type PlatformRole } from './store/users.js';
 import { revokeAllSessions } from './store/refreshTokens.js';
-import { DEMO_PLATFORM_ACCOUNTS } from './seed.js';
+import { DEMO_PLATFORM_ACCOUNTS, SHARED_DEMO_ACCOUNTS } from './seed.js';
+import { getMembership } from './store/memberships.js';
 import { DEMO_BODIES } from './bodies/seed.js';
 import { addLink, createBody, findLinkOfOrganization, getBody } from './bodies/store.js';
 import { MODULES } from '../initiatives/registry.js';
@@ -98,6 +99,15 @@ export async function seedOnDeploy(password = seedPassword()): Promise<DeploySee
     for (const m of MODULES) {
       const r = await m.seedDeploy?.(passwordHash);
       if (r) { accounts.push(...r.accounts); notes.push(...r.notes); }
+    }
+    // Shared staff (one account, the same kind of role in every initiative): its memberships are given only when this run
+    // created the account — an existing account is never changed (it is listed with the memberships it has).
+    for (const a of SHARED_DEMO_ACCOUNTS) {
+      const u = await ensureSeedAccount(a, passwordHash, 'platform');
+      for (const m of MODULES) {
+        const role = u.created ? await m.seedSharedStaff?.(u.id, a.type) : (await getMembership(u.id, m.id))?.role;
+        if (role) accounts.push({ email: u.email, initiativeId: m.id, role, status: accountStatus(u) });
+      }
     }
     await resetSeedAccountsOnce(accounts, passwordHash, notes);
     await seedBodies(notes);

@@ -7,6 +7,8 @@ import { BarChart3, Users, BookOpen, Image, ScrollText, Mail, ClipboardCheck, Ex
 import { api, errText, type AdminStats, type AdminInitiativeStats, type AdminUser, type Banner, type Initiative, type StatsSummary } from '../api';
 import { usePlatform, store, canManage, canEditContent } from '../store';
 import { Alert, Loading, Forbidden } from '../layout';
+import { WorkspaceBoard } from './workspace';
+import type { WorkspaceTab } from '../api';
 import { formatEGP } from '../../utils/format';
 
 const PHASES: Array<{ key: string; ar: string; en: string; color: string }> = [
@@ -45,7 +47,36 @@ const Funnel: React.FC<{ s: StatsSummary; color: string }> = ({ s, color }) => {
   );
 };
 
+/**
+ * The platform administration's dashboard. The super admin (system admin of every initiative) gets the operations of all the
+ * initiatives on the same page: readiness, every application (read-only) and monitoring — the «إدارة المبادرات» dashboard.
+ */
+/** The content manager has no statistics: its home is the initiatives catalog. */
+const ToCatalog: React.FC = () => { useEffect(() => { store.go('admin-catalog'); }, []); return <Loading />; };
+
 export const AdminDashboard: React.FC = () => {
+  const { t, me, query } = usePlatform();
+  if (me?.user.platformRole === 'catalog_manager') return <ToCatalog />;
+  if (!canManage(me)) return <AdminOverview />;
+  const tab = query.get('tab') ?? 'overview';
+  const tabs: Array<{ key: string; label: string; fixed?: WorkspaceTab }> = [
+    { key: 'overview', label: t('النظرة العامة', 'Overview') },
+    { key: 'readiness', label: t('الجاهزية والتشغيل', 'Readiness & operations'), fixed: 'readiness' },
+    { key: 'all', label: t('كل الطلبات', 'All applications'), fixed: 'all' },
+    { key: 'monitoring', label: t('المتابعة والتقارير', 'Monitoring & reports'), fixed: 'monitoring' },
+  ];
+  const current = tabs.find((x) => x.key === tab) ?? tabs[0];
+  return (
+    <div className="pf-gap">
+      <div className="pf-tabs" role="tablist" data-testid="admin-tabs">
+        {tabs.map((x) => <button key={x.key} type="button" role="tab" aria-selected={current.key === x.key} className={current.key === x.key ? 'active' : ''} onClick={() => store.go(x.key === 'overview' ? 'admin' : `admin?tab=${x.key}`)} data-testid={`admin-tab-${x.key}`}>{x.label}</button>)}
+      </div>
+      {current.fixed ? <WorkspaceBoard key={current.key} type="system_admin" base="admin" fixedTab={current.fixed} header={false} /> : <AdminOverview />}
+    </div>
+  );
+};
+
+const AdminOverview: React.FC = () => {
   const { t, isAr } = usePlatform();
   const [s, setS] = useState<AdminStats | null>(null);
   const [act, setAct] = useState<Awaited<ReturnType<typeof api.adminActivity>>['items']>([]);
@@ -115,7 +146,7 @@ export const AdminDashboard: React.FC = () => {
 };
 
 export const AdminInitiative: React.FC = () => {
-  const { t, isAr, param } = usePlatform();
+  const { t, isAr, param, me } = usePlatform();
   const [d, setD] = useState<AdminInitiativeStats | null>(null);
   useEffect(() => { setD(null); if (param) void api.adminInitiativeStats(param).then(setD).catch(() => setD(null)); }, [param]);
   if (!d) return <Loading />;
@@ -124,7 +155,7 @@ export const AdminInitiative: React.FC = () => {
     <div className="pf-gap">
       <div className="pf-section-head">
         <div><h2 style={{ color: d.themeColor }}>{isAr ? d.titleAr : d.titleEn}</h2><p className="pf-muted">{t('إحصاءات المبادرة وروابط شاشاتها', 'The initiative\'s statistics and screens')}</p></div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{d.staffEntryPoints.map((e) => <a key={e.view} className="btn btn-outline btn-sm" href={`#i/${d.initiativeId}/${e.view}`}><ExternalLink size={14} /> {isAr ? e.labelAr : e.labelEn}</a>)}</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{(canManage(me) ? d.staffEntryPoints : []).map((e) => <a key={e.view} className="btn btn-outline btn-sm" href={`#i/${d.initiativeId}/${e.view}`}><ExternalLink size={14} /> {isAr ? e.labelAr : e.labelEn}</a>)}</div>
       </div>
       {!s ? <Alert tone="err">{d.error}</Alert> : (
         <>

@@ -6,7 +6,7 @@
  */
 import { Router } from 'express';
 import fs from 'node:fs';
-import type { InitiativeModule, HubCard } from '../contract.js';
+import type { InitiativeModule, HubCard, UserType } from '../contract.js';
 import { migrationsDirFor } from '../../core/db/index.js';
 import { makeLimiter } from './http/rateLimits.js';
 import { sona3ActorGuard } from './middleware/auth.js';
@@ -21,7 +21,7 @@ import { inboxRouter } from './routes/inbox.js';
 import { reportsRouter } from './routes/reports.js';
 import { adminRouter } from './routes/admin.js';
 import { integrationRouter } from './integration/router.js';
-import { ROLE_LABELS, ROLE_ORG_TYPE, type Role } from './domain.js';
+import { ROLE_LABELS, ROLE_ORG_TYPE, ORG_IDS, type Role } from './domain.js';
 import { getUserById, platformAdminActor } from './store/users.js';
 import { createOrganization, getOrganization } from './store/organizations.js';
 import { createApplicant, getApplicantByOrg } from './store/applicants.js';
@@ -41,10 +41,16 @@ import { startSlaMonitor, stopSlaMonitor } from './jobs/slaMonitor.js';
 import { startWebhookWorker, stopWebhookWorker } from './jobs/webhookWorker.js';
 import { registerCidResolver } from '../../core/mail/mailer.js';
 import { LOGO_CID, logoAttachment } from './mail/layout.js';
-import { createMembership } from '../../core/store/memberships.js';
+import { createMembership, getMembership } from '../../core/store/memberships.js';
 import { getPersonProfile, listCurrentDocuments } from '../../core/profile/store.js';
 import { copyStoredFile } from '../../core/http/upload.js';
 import { MODULE_ID } from './config.js';
+import { sona3Workspace } from './workspace.js';
+
+/** The platform dashboard of each role. */
+const USER_TYPE: Record<Role, UserType> = {
+  applicant: 'applicant', imc_officer: 'imc', evaluator: 'evaluator', funder_reviewer: 'funder', system_admin: 'system_admin',
+};
 
 const DEFAULT_VIEW: Record<Role, string> = {
   applicant: 'applicant-dashboard', imc_officer: 'work-queue', evaluator: 'my-evaluations', funder_reviewer: 'work-queue', system_admin: 'admin-dashboard',
@@ -57,7 +63,7 @@ export const sona3Module: InitiativeModule = {
   migrations: { module: MODULE_ID, dir: migrationsDirFor(import.meta.url, 'db/migrations') },
   roles: (Object.keys(ROLE_LABELS) as Role[]).map((r) => ({
     key: r, labelAr: ROLE_LABELS[r].ar, labelEn: ROLE_LABELS[r].en,
-    kind: r === 'applicant' ? 'applicant' : r === 'system_admin' ? 'admin' : 'staff', orgTypes: [ROLE_ORG_TYPE[r]],
+    kind: r === 'applicant' ? 'applicant' : r === 'system_admin' ? 'admin' : 'staff', orgTypes: [ROLE_ORG_TYPE[r]], userType: USER_TYPE[r],
   })),
   applicantRole: 'applicant',
   adminRole: 'system_admin',
@@ -155,15 +161,17 @@ export const sona3Module: InitiativeModule = {
 
   stats,
   bodies: sona3Bodies,
+  // The dashboards (queue, monitoring, evaluations, readiness) are the platform's, one per user type (core/routes/workspace.ts).
   staffEntryPoints: [
-    { view: 'work-queue', labelAr: 'قائمة العمل', labelEn: 'Work queue', roles: ['imc_officer', 'funder_reviewer', 'system_admin'] },
     { view: 'ranking', labelAr: 'ترتيب الدورة', labelEn: 'Cohort ranking', roles: ['imc_officer'] },
-    { view: 'my-evaluations', labelAr: 'تقييماتي', labelEn: 'My evaluations', roles: ['evaluator'] },
-    { view: 'monitoring', labelAr: 'المتابعة', labelEn: 'Monitoring', roles: ['imc_officer', 'funder_reviewer'] },
     { view: 'experts', labelAr: 'الخبراء', labelEn: 'Experts', roles: ['imc_officer'] },
-    { view: 'admin-dashboard', labelAr: 'إدارة المبادرة', labelEn: 'Initiative administration', roles: ['system_admin'] },
+    { view: 'admin-cohorts', labelAr: 'الدورات والأوزان', labelEn: 'Cohorts & weights', roles: ['system_admin'] },
+    { view: 'admin-accounts', labelAr: 'الحسابات', labelEn: 'Accounts', roles: ['system_admin'] },
+    { view: 'admin-organizations', labelAr: 'الجهات', labelEn: 'Organizations', roles: ['system_admin'] },
+    { view: 'admin-content', labelAr: 'محتوى المبادرة', labelEn: 'Initiative content', roles: ['system_admin'] },
   ],
   defaultView(role) { return DEFAULT_VIEW[role as Role] ?? 'applicant-dashboard'; },
+  workspace: sona3Workspace,
 
   startJobs() { startWebhookWorker(); startSlaMonitor(); },
   stopJobs() { stopWebhookWorker(); stopSlaMonitor(); },
@@ -179,6 +187,13 @@ export const sona3Module: InitiativeModule = {
 
   async seedDemo(password) { return await seedDevData(password); },
   async seedDeploy(passwordHash) { return await seedDeployData(passwordHash); },
+  async seedSharedStaff(userId, type) {
+    const staff: Partial<Record<UserType, [Role, string]>> = { imc: ['imc_officer', ORG_IDS.imc] };
+    const s = staff[type];
+    if (!s || await getMembership(userId, MODULE_ID)) return null;
+    await createMembership({ userId, initiativeId: MODULE_ID, role: s[0], organizationId: s[1] });
+    return s[0];
+  },
 
   registerMail() {
     registerCidResolver((html) => {

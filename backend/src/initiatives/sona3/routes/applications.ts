@@ -1,39 +1,27 @@
 import { Router } from 'express';
 import { ah, okMessage, Errors } from '../http/errors.js';
 import { makeLimiter, byUser } from '../http/rateLimits.js';
-import { clientIp, normPage, normPageSize, paginate, str, mapSeq } from '../http/helpers.js';
+import { clientIp, normPage, normPageSize, str, mapSeq } from '../http/helpers.js';
 import { currentUser, requireRole } from '../middleware/auth.js';
-import { getApplication, listApplications, cohortRanking } from '../store/applications.js';
+import { getApplication, cohortRanking } from '../store/applications.js';
 import { getDocument, listDocuments } from '../store/documents.js';
 import { getCohort } from '../store/cohorts.js';
 import { addAuditLog, actorFromReq } from '../store/audit.js';
-import { canSeeApplication, listScope, visibleDocuments } from '../access/visibility.js';
-import { adminMetadataOnly, buildDetail, buildListItem, isMineFor, slaInfo } from '../workflow/applicationView.js';
+import { canSeeApplication, visibleDocuments } from '../access/visibility.js';
+import { adminMetadataOnly, buildDetail, buildListItem } from '../workflow/applicationView.js';
 import { performAction } from '../workflow/actionService.js';
 import { createDraft, removeDocument, saveSection, uploadDocument, uploadStaffDocument } from '../workflow/applicationService.js';
 import { assignEvaluator, unassignEvaluator, declareConflict, saveEvaluation, submitEvaluation, evaluatorQueue } from '../workflow/evaluationService.js';
 import { reportMilestoneDone, reviewMilestoneDone, disburse, submitImpactReport, markStalled, fileAppeal, decideAppealOn } from '../workflow/lifecycleService.js';
 import { singlePdfUpload, sendStoredPdf } from '../http/upload.js';
-import { APPLICATION_STATES, type ApplicationState } from '../workflow/workflow.js';
 import { kickNotificationWorker } from '../jobs/notificationWorker.js';
 import { ORG_IDS } from '../domain.js';
+import { listForUser, parseStates } from '../services/applicationList.js';
 
 export const applicationsRouter = Router();
 
-/** عدد المسودات غير المُرسلة (يُعرض منفصلًا عن قائمة العمل لـ IMC والأدمن). */
-async function draftsCount(user: ReturnType<typeof currentUser>, scope: ReturnType<typeof listScope>): Promise<number | undefined> {
-  if (user.role !== 'imc_officer' && user.role !== 'system_admin') return undefined;
-  return (await listApplications({ scopeSql: scope.sql, scopeParams: scope.params, includeDrafts: true, states: ['DRAFT'] }, 1, 1)).total;
-}
-
 const actionLimiter = makeLimiter('actions', { keyGenerator: byUser });
 const uploadLimiter = makeLimiter('upload', { keyGenerator: byUser });
-
-function parseStates(raw: unknown): ApplicationState[] | undefined {
-  if (typeof raw !== 'string' || !raw) return undefined;
-  const list = raw.split(',').map((s) => s.trim()).filter((s): s is ApplicationState => (APPLICATION_STATES as readonly string[]).includes(s));
-  return list.length ? list : undefined;
-}
 
 /** يوقظ عامل الإشعارات بعد أي عملية تكتب في outbox. */
 function kicked<T>(fn: () => T): T {
@@ -41,34 +29,14 @@ function kicked<T>(fn: () => T): T {
 }
 
 applicationsRouter.get('/applications', ah(async (req, res) => {
-  const user = currentUser(req);
-  const scope = listScope(user);
-  const page = normPage(req.query.page);
-  const pageSize = normPageSize(req.query.pageSize, 20, 100);
-  const states = parseStates(req.query.state);
-  const mine = req.query.mine === '1';
-  // المسودات غير المُرسلة لا تظهر في قوائم IMC والأدمن إلا بطلب صريح (state=DRAFT).
-  const includeDrafts = scope.includeDrafts && (user.role === 'applicant' || Boolean(states?.includes('DRAFT')));
-  const computed = req.query.overdue === '1' || mine;
-  const { rows, total } = await listApplications({
-    scopeSql: scope.sql, scopeParams: scope.params, includeDrafts,
-    q: str(req.query.q).slice(0, 100) || undefined, states, oldestFirst: mine, byScore: req.query.sort === 'score',
+  return okMessage(res, 200, 'ok', await listForUser(currentUser(req), {
+    page: normPage(req.query.page), pageSize: normPageSize(req.query.pageSize, 20, 100), states: parseStates(req.query.state),
+    mine: req.query.mine === '1', overdue: req.query.overdue === '1', sort: str(req.query.sort),
+    q: str(req.query.q).slice(0, 100) || undefined,
     cohortId: str(req.query.cohortId) || undefined, sector: str(req.query.sector) || undefined,
     governorate: str(req.query.governorate) || undefined, funderOrgId: str(req.query.funderOrgId) || undefined,
     from: str(req.query.from) || undefined, to: str(req.query.to) || undefined,
-  }, page, pageSize, computed);
-  if (computed) {
-    // «بانتظاري» / «متأخر» are computed, not columns: every row in scope is filtered by the two flags (no query each — the same
-    // functions the list item uses), then the full item (cohort, funder and responsible lookups) is built for the requested
-    // page only. Building it for every row first cost ~3 queries × every application in scope: 5.7 s per IMC request under
-    // load with 900 applications (perf/ load test). Same rows, order and totals as before.
-    const overdueOnly = req.query.overdue === '1';
-    const selected = rows.filter((a) => (!overdueOnly || slaInfo(a).overdue) && (!mine || isMineFor(user, a)));
-    const items = await mapSeq(selected.slice((page - 1) * pageSize, page * pageSize), async (a) => await buildListItem(user, a));
-    return okMessage(res, 200, 'ok', { ...paginate(items, selected.length, page, pageSize), draftsCount: await draftsCount(user, scope) });
-  }
-  const items = await mapSeq(rows, async (a) => await buildListItem(user, a));
-  return okMessage(res, 200, 'ok', { ...paginate(items, total, page, pageSize), draftsCount: await draftsCount(user, scope) });
+  }));
 }));
 
 /** ترتيب الدورة للاختيار (المرحلة 05) — IMC فقط. */

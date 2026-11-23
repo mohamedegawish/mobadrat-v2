@@ -5,17 +5,11 @@ import { currentUser, requireRole } from '../middleware/auth.js';
 import { listApplications } from '../store/applications.js';
 import { addAuditLog, actorFromReq } from '../store/audit.js';
 import { listScope } from '../access/visibility.js';
-import { buildSummary, reportRows, reportSheet } from '../services/reports.js';
+import { buildSummary, reportRows, reportSheet, STAGE_LIMIT } from '../services/reports.js';
 import { buildDashboard } from '../services/dashboard.js';
 import { shamsPolicy } from '../config/shamsPolicy.js';
-import type { ApplicationState } from '../workflow/shamsWorkflow.js';
 
 export const reportsRouter = Router();
-
-const STAGE_LIMIT: Partial<Record<string, ApplicationState[]>> = {
-  imc_reviewer: ['IMC_REVIEW', 'IMC_CORRECTION', 'REJECTED'],
-  encpc_reviewer: ['ENCPC_REVIEW', 'ENCPC_CORRECTION'],
-};
 
 /** التقارير: المصنع طلبه، IMC/ENCPC بيانات مرحلتهما، البنك طلبات بنكه، PMU والأدمن الكل. */
 reportsRouter.get('/reports/summary', ah(async (req, res) => {

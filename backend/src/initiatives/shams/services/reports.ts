@@ -17,6 +17,12 @@ export const ALL_SCOPE: Scope = { sql: '1 = 1', params: [], includeDrafts: true 
 /** للجهات ذات المرحلة الواحدة: تُجمع الحالات خارج مرحلتها في بند واحد. */
 export type StageLimit = ApplicationState[] | null;
 
+/** مرحلة كل جهة ذات مرحلة واحدة (التقارير والمتابعة لا تعرض لها إلا حالات مرحلتها). */
+export const STAGE_LIMIT: Partial<Record<string, ApplicationState[]>> = {
+  imc_reviewer: ['IMC_REVIEW', 'IMC_CORRECTION', 'REJECTED'],
+  encpc_reviewer: ['ENCPC_REVIEW', 'ENCPC_CORRECTION'],
+};
+
 export async function buildSummary(scope: Scope, stageLimit: StageLimit = null) {
   const db = getDb();
   const draftFilter = scope.includeDrafts ? '' : " AND a.state <> 'DRAFT'";

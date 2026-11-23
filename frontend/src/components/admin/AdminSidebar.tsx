@@ -46,7 +46,7 @@ export const AdminSidebar: React.FC = () => {
       titleAr: 'إدارة المبادرات', titleEn: 'Initiatives',
       items: [
         ...(canEditContent(me) ? [{ id: 'admin-catalog', to: 'admin-catalog', labelAr: 'المبادرات', labelEn: 'Initiatives', icon: Layers, active: view === 'admin-catalog', badge: initiatives.length || undefined }] : []),
-        { id: 'admin', to: 'admin', labelAr: 'لوحة القيادة', labelEn: 'Dashboard', icon: TrendingUp, active: view === 'admin' },
+        ...(role !== 'catalog_manager' ? [{ id: 'admin', to: 'admin', labelAr: 'لوحة القيادة', labelEn: 'Dashboard', icon: TrendingUp, active: view === 'admin' }] : []),
       ],
     },
     {

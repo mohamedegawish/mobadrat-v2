@@ -34,6 +34,22 @@ export const VIEW_ACCESS: Record<View, Access> = {
   'admin-integration': ['system_admin'], 'admin-outbox': ['system_admin'],
 };
 
+/**
+ * The platform dashboard of each staff role (#workspace/<type>): one page per user type for every initiative. The role's
+ * old dashboard / work queue / monitoring screens redirect there (App.tsx).
+ */
+export const USER_TYPE: Partial<Record<Role, string>> = { imc_reviewer: 'imc', encpc_reviewer: 'encpc', pmu_reviewer: 'pmu', system_admin: 'system_admin' };
+
+/** The platform dashboard of the role, on this initiative (null for an applicant). */
+export function workspaceHash(role: Role, preset: { tab?: string; state?: string } = {}): string | null {
+  const type = USER_TYPE[role];
+  if (!type) return null;
+  const q = new URLSearchParams({ i: 'shams' });
+  if (preset.tab) q.set('tab', preset.tab);
+  if (preset.state) q.set('state', preset.state);
+  return `workspace/${type}?${q.toString()}`;
+}
+
 export const DEFAULT_VIEW: Record<Role, View> = {
   // bank_reviewer: دور ملغى (G-02) — لا يحصل على جلسة أصلًا؛ القيمة موجودة فقط لاكتمال النوع.
   factory_owner: 'factory-dashboard', imc_reviewer: 'dashboard', encpc_reviewer: 'dashboard', bank_reviewer: 'home',

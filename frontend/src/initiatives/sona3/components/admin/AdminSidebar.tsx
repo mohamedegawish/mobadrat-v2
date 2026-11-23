@@ -1,21 +1,17 @@
 import React, { useState } from 'react';
-import { Activity, Building2, Gauge, ChevronsLeft, ChevronsRight, FileClock, FileText, KeyRound, ListChecks, Mail, Users, Wrench } from 'lucide-react';
-import { useStore, canView, type View } from '../../store/state';
+import { LayoutDashboard, Building2, Gauge, ChevronsLeft, ChevronsRight, FileClock, FileText, KeyRound, Mail, Users, Wrench } from 'lucide-react';
+import { useStore, canView, workspaceHash, type View } from '../../store/state';
 
 interface Item { view: View; ar: string; en: string; icon: React.ReactNode }
 interface Group { ar: string; en: string; items: Item[] }
 
 const GROUPS: Group[] = [
   { ar: 'الطلبات', en: 'Applications', items: [
-    { view: 'work-queue', ar: 'قائمة العمل', en: 'Work queue', icon: <ListChecks size={17} /> },
     { view: 'ranking', ar: 'ترتيب الدورة والاختيار', en: 'Ranking & selection', icon: <Gauge size={17} /> },
-    { view: 'my-evaluations', ar: 'تقييماتي', en: 'My evaluations', icon: <ListChecks size={17} /> },
-    { view: 'monitoring', ar: 'المتابعة وقياس الأثر', en: 'Monitoring & impact', icon: <Activity size={17} /> },
     { view: 'experts', ar: 'دليل الخبراء', en: 'Experts', icon: <Wrench size={17} /> },
     { view: 'admin-cohorts', ar: 'الدورات والأوزان', en: 'Cohorts & weights', icon: <FileClock size={17} /> },
   ] },
   { ar: 'إدارة النظام', en: 'Administration', items: [
-    { view: 'admin-dashboard', ar: 'الجاهزية والتشغيل', en: 'Readiness & operations', icon: <Gauge size={17} /> },
     { view: 'admin-accounts', ar: 'الحسابات', en: 'Accounts', icon: <Users size={17} /> },
     { view: 'admin-organizations', ar: 'الجهات', en: 'Organizations', icon: <Building2 size={17} /> },
     { view: 'admin-audit', ar: 'سجل التدقيق', en: 'Audit log', icon: <FileClock size={17} /> },
@@ -41,6 +37,14 @@ export const AdminSidebar: React.FC = () => {
         <button type="button" className="admin-side-toggle" onClick={toggle} aria-label={t('طي القائمة', 'Collapse menu')}><Chevron size={16} /></button>
       </div>
       <nav className="admin-side-nav">
+        {/* The role's dashboard is the platform's: one page per user type for every initiative. */}
+        {user && workspaceHash(user.role) ? (
+          <div className="admin-side-group">
+            <a href={`#${workspaceHash(user.role)}`} className="admin-side-item" title={t('لوحتي', 'My dashboard')} data-testid="side-workspace" style={{ textDecoration: 'none' }}>
+              <LayoutDashboard size={17} />{!collapsed ? <span className="admin-side-label">{t('لوحتي', 'My dashboard')}</span> : null}
+            </a>
+          </div>
+        ) : null}
         {groups.map((g) => (
           <div key={g.en} className="admin-side-group">
             {!collapsed ? <div className="admin-side-group-title">{isAr ? g.ar : g.en}</div> : null}

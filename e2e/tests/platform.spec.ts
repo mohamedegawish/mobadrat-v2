@@ -97,9 +97,19 @@ test('platform administrator: unified dashboard of every initiative, and entry i
   await page.goto('/#admin-users');
   await expect(page.getByText('factory@shams.local')).toBeVisible();
 
+  // The operations of every initiative are tabs of the same administration dashboard (readiness, every application).
+  await page.goto('/#admin');
+  await page.getByTestId('admin-tab-readiness').click();
+  await expect(page).toHaveURL(/#admin\?tab=readiness/);
+  await expect(page.getByTestId('readiness-overall')).toHaveCount(2);
+  await page.getByTestId('admin-tab-all').click();
+  await expect(page.getByTestId('scope-shams')).toBeVisible();
+  // the module's old readiness page lands there too; its own administration screens still open inside the module
   await page.goto('/#i/sona3/admin-dashboard');
+  await expect(page).toHaveURL(/#admin\?tab=readiness/);
+  await page.goto('/#i/sona3/admin-cohorts');
   await expect(page.locator('.theme-sona3')).toBeVisible();
-  await page.goto('/#i/shams/admin-dashboard');
+  await page.goto('/#i/shams/admin-accounts');
   await expect(page.locator('.theme-shams')).toBeVisible();
   expect(errors).toEqual([]);
 });

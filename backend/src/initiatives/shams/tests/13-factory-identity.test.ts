@@ -38,7 +38,8 @@ test('I3: duplicate registry number → conflict recorded, IMC and PMU notified 
   assert.equal(rows[0].attempts, 2);
   const mails = await q<{ recipientAddress: string; body: string }>("SELECT recipientAddress, body FROM notification_outbox WHERE templateKey = 'ops.registry_conflict' AND applicationId = ?", holder);
   const to = mails.map((m) => m.recipientAddress).sort();
-  assert.deepEqual(to, ['imc1@shams.local', 'imc2@shams.local', 'pmu@shams.local'], 'once per recipient');
+  // every active IMC reviewer (including the shared IMC account of every initiative, imc@mobadrat.local) and PMU, once each
+  assert.deepEqual(to, ['imc1@shams.local', 'imc2@shams.local', 'imc@mobadrat.local', 'pmu@shams.local'], 'once per recipient');
   const holderNo = (await getApp(c.imc, holder)).number;
   assert.ok(mails[0].body.includes(holderNo) && mails[0].body.includes('مصنع تجريبي للصناعات المعدنية'));
   // IMC يرى التعارض في الطلب المفتوح

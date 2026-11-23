@@ -88,6 +88,7 @@ docker compose logs app | grep -E "secrets|seed:deploy"   # قائمة الحس�
 | | متابع الوزارة | `ministry@mobadrat.local` |
 | | مدقق | `auditor@mobadrat.local` |
 | | مدير المحتوى | `content@mobadrat.local` |
+| | مسؤول IMC في المبادرتين (لوحة IMC واحدة لشمس الصناعة وصُنّاع المستقبل) | `imc@mobadrat.local` |
 | شمس الصناعة | مدير النظام | `admin@shams.local` |
 | | مراجع IMC | `imc1@shams.local` و `imc2@shams.local` |
 | | مراجع ENCPC | `encpc@shams.local` |

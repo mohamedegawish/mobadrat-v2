@@ -58,6 +58,11 @@ cd frontend && npm install && npm run dev                                       
 | `imc1@shams.local` · `encpc@shams.local` · `pmu@shams.local` · `admin@shams.local` | فريق شمس الصناعة |
 | `applicant@sona3.local` | متقدم في صُنّاع المستقبل |
 | `imc@sona3.local` · `evaluator1@sona3.local` · `funder@sona3.local` · `admin@sona3.local` | فريق صُنّاع المستقبل |
+| `imc@mobadrat.local` | مسؤول IMC في المبادرتين معًا |
+
+كل نوع مستخدم من الجهات له لوحة واحدة على المنصة لكل المبادرات (`#workspace/<النوع>`: لوحة IMC، PMU، ENCPC، جهة التمويل، المقيّم، إدارة المبادرات)،
+فيها الأرقام الرئيسية وتبويبات «بانتظار قراري» و«كل الطلبات» و«المتأخرة» و«المتابعة والتقارير» (و«الجاهزية والتشغيل» لمدير النظام).
+القرار نفسه يُتخذ من صفحة الطلب داخل مبادرته.
 
 ## الاختبارات
 

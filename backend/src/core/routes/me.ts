@@ -23,7 +23,7 @@ import { computeRequirements } from '../profile/requirements.js';
 import { getCatalogByModule, getCatalogItem } from '../catalog/initiatives.js';
 import { listGovernorates } from '../reference/locations.js';
 import { MODULES, getModule } from '../../initiatives/registry.js';
-import type { InitiativeModule } from '../../initiatives/contract.js';
+import { WORKSPACE_TYPES, type InitiativeModule } from '../../initiatives/contract.js';
 import { dispatchCore } from '../notify/dispatch.js';
 import { kickNotificationWorker } from '../jobs/notificationWorker.js';
 import { config } from '../../config.js';
@@ -59,12 +59,14 @@ meRouter.get('/me', ah(async (req, res) => {
       initiativeId: m.initiativeId, slug: cat?.slug ?? m.initiativeId, titleAr: cat?.titleAr ?? mod.titleAr, titleEn: cat?.titleEn ?? mod.titleEn,
       themeColor: cat?.themeColor ?? '#0B2545', accentColor: cat?.accentColor ?? '#C8102E', logoImage: cat?.logoImage ?? '',
       role: m.role, roleKind: role?.kind ?? 'applicant', roleLabelAr: role?.labelAr ?? m.role, roleLabelEn: role?.labelEn ?? m.role,
+      // The platform dashboard this membership belongs to (#workspace/<userType>); null = none (applicants use «مبادراتي»).
+      userType: role?.userType && WORKSPACE_TYPES.includes(role.userType) ? role.userType : null,
       status: m.status, access, card, defaultView: mod.defaultView(m.role), unread: unread[m.initiativeId] ?? 0,
     });
   }
   // A platform super admin can open every module as its administrator, without a membership.
   const adminEntries = user.platformRole === 'super_admin'
-    ? MODULES.filter((mod) => !memberships.some((m) => m.initiativeId === mod.id)).map((mod) => ({ initiativeId: mod.id, defaultView: mod.defaultView(mod.adminRole), role: mod.adminRole, titleAr: mod.titleAr, titleEn: mod.titleEn }))
+    ? MODULES.filter((mod) => !memberships.some((m) => m.initiativeId === mod.id)).map((mod) => ({ initiativeId: mod.id, defaultView: mod.defaultView(mod.adminRole), role: mod.adminRole, titleAr: mod.titleAr, titleEn: mod.titleEn, userType: 'system_admin' as const }))
     : [];
   const person = await getPersonProfile(user.id);
   return okMessage(res, 200, 'ok', {

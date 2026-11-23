@@ -60,10 +60,12 @@ export interface MembershipItem {
   initiativeId: string; slug: string; titleAr: string; titleEn: string; themeColor: string; accentColor: string; role: string; roleKind: string;
   roleLabelAr: string; roleLabelEn: string; status: string; access: { status: string; code?: string; messageAr?: string; messageEn?: string };
   card: HubCard | null; defaultView: string; unread: number;
+  /** The platform dashboard of this membership (#workspace/<userType>); null for an applicant. */
+  userType: UserType | null;
 }
 export interface Me {
   user: CoreUser; platformRoleLabel: { ar: string; en: string } | null; memberships: MembershipItem[];
-  adminEntries: Array<{ initiativeId: string; defaultView: string; titleAr: string; titleEn: string }>; unreadTotal: number;
+  adminEntries: Array<{ initiativeId: string; defaultView: string; titleAr: string; titleEn: string; userType?: UserType }>; unreadTotal: number;
   profile: { personUpdatedAt: string | null; factories: number };
 }
 export interface Initiative {
@@ -97,6 +99,46 @@ export interface Banner {
 }
 export interface Page<T> { items: T[]; page: number; pageSize: number; total: number; totalPages: number }
 
+// ── The platform dashboard of a user type (one page for every initiative) ──
+
+export type UserType = 'imc' | 'pmu' | 'encpc' | 'funder' | 'evaluator' | 'system_admin';
+export type WorkspaceTab = 'mine' | 'all' | 'overdue' | 'monitoring' | 'readiness';
+export interface WorkspaceLink { tab?: WorkspaceTab; state?: string; view?: string }
+export type WorkspaceTone = 'pending' | 'correction' | 'approved' | 'rejected' | 'completed' | 'closed' | 'info';
+export interface WorkspaceCard { key: string; labelAr: string; labelEn: string; value: number; tone: WorkspaceTone; link: WorkspaceLink | null; hintAr?: string; hintEn?: string }
+export interface WorkspaceRow {
+  id: string; number: string | null; title: string; subtitle?: string; stateKey: string; stateLabelAr: string; stateLabelEn: string;
+  governorateAr: string; governorateEn: string; responsibleAr: string; responsibleEn: string; enteredAt: string; daysInState: number;
+  overdue: boolean; isMine: boolean; score?: number | null; view: string; initiativeId: string;
+}
+export interface WorkspaceBlock {
+  key: string; titleAr: string; titleEn: string; kind: 'bars' | 'tiles' | 'table';
+  rows: Array<{ key: string; labelAr: string; labelEn: string; value: number; unit?: 'EGP' | 'days'; link?: WorkspaceLink }>; noteAr?: string; noteEn?: string;
+}
+export interface WorkspaceCheck { key: string; ok: boolean; labelAr: string; labelEn: string; detailAr: string; detailEn: string; items?: Array<{ id: string; labelAr: string; labelEn: string; extraAr?: string; extraEn?: string }> }
+export interface ModuleWorkspace {
+  role: string; decides: boolean; awaitingMe: number; overdue: number; open: number; total: number; slaConfigured: boolean; draftsCount?: number;
+  cards: WorkspaceCard[];
+  attention: Array<{ key: string; labelAr: string; labelEn: string; count: number; link: WorkspaceLink | null }>;
+  recent: Array<{ at: string; applicationId: string; number: string | null; title: string; labelAr: string; labelEn: string; toLabelAr: string; toLabelEn: string }>;
+  states: Array<{ key: string; labelAr: string; labelEn: string }>;
+  filters: Array<{ key: string; labelAr: string; labelEn: string; options: Option[] }>;
+  panels: Array<{ key: string; titleAr: string; titleEn: string; tiles: Array<{ key: string; labelAr: string; labelEn: string; value: number }>; action?: { view: string; labelAr: string; labelEn: string }; warnAr?: string; warnEn?: string }>;
+  monitoring?: WorkspaceBlock[];
+  readiness?: { ok: boolean; checks: WorkspaceCheck[]; notifications: { failed: number; skipped: number; pending: number } };
+  tools: Array<{ view: string; labelAr: string; labelEn: string }>;
+}
+export interface WorkspaceInitiative { initiativeId: string; slug: string; titleAr: string; titleEn: string; themeColor: string; role: string; roleLabelAr: string; roleLabelEn: string; viaPlatformAdmin: boolean }
+export type WorkspacePart = WorkspaceInitiative & ({ ok: true; data: ModuleWorkspace } | { ok: false; error: { code: string; messageAr: string; messageEn: string } });
+export interface Workspace {
+  type: UserType; tab: WorkspaceTab; initiative: string; merged: boolean;
+  initiatives: WorkspaceInitiative[];
+  totals: { awaitingMe: number; overdue: number; open: number; total: number };
+  parts: WorkspacePart[];
+  queue: (Page<WorkspaceRow> & { capped: string[]; loaded?: number }) | null;
+  generatedAt: string;
+}
+
 // ── Endpoints ───────────────────────────────────────────────────────────
 
 export const api = {
@@ -116,6 +158,7 @@ export const api = {
     setAccessToken(d.accessToken);
   },
   me: () => call<Me>('/me'),
+  workspace: (type: UserType, query: Record<string, string | number | undefined>) => call<Workspace>(`/me/workspace/${type}`, { query }),
 
   initiatives: () => call<Initiative[]>('/initiatives'),
   initiative: (slug: string) => call<Initiative>(`/initiatives/${encodeURIComponent(slug)}`),
