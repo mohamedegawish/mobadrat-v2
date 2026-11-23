@@ -1,6 +1,6 @@
 /**
  * Demo data (development / demo deployments only): platform accounts + each module's own demo data.
- * Runs only on an EMPTY users table. Production requires its own SEED_PASSWORD (config.seedPasswordProblem).
+ * Runs only on an EMPTY users table. The accounts use the fixed seed password (config.ts DEFAULT_SEED_PASSWORD).
  */
 import { getDb, tx } from './db/index.js';
 import { hashPassword } from './auth/jwt.js';

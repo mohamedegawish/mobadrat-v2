@@ -1,7 +1,7 @@
 /**
  * Shams demo data (accounts per role + demo banks, factories and service providers). Explicitly fictitious names.
  * Platform accounts + Shams memberships; the factory owners also get a shared factory profile (to demonstrate reuse).
- * Run by the platform's seed (empty database only; production needs its own SEED_PASSWORD).
+ * Run by the platform's seed (empty database only; the fixed seed password, config.ts DEFAULT_SEED_PASSWORD).
  */
 import { randomUUID } from 'node:crypto';
 import { getDb, nowIso, tx } from './database.js';

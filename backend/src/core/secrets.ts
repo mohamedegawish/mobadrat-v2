@@ -1,18 +1,18 @@
 /**
- * Secrets the platform generates on its first production start when the deployment does not provide them, so a fresh
- * deployment works with no manual step (on Coolify the compose file's SERVICE_PASSWORD_* variables normally provide them):
- *   • JWT_SECRET — the session signing key;
- *   • SEED_PASSWORD — the first-sign-in password of the accounts the seeder creates (SEED_ON_DEPLOY / SEED_ON_BOOT).
- * Each is kept in SECRETS_DIR (the persistent /data volume in the image, mode 0600) so every restart and every instance
+ * The secret the platform generates on its first production start when the deployment does not provide it, so a fresh
+ * deployment works with no manual step (on Coolify the compose file's SERVICE_PASSWORD_64_JWT normally provides it):
+ *   • JWT_SECRET — the session signing key.
+ * It is kept in SECRETS_DIR (the persistent /data volume in the image, mode 0600) so every restart and every instance
  * uses the same value; created with an exclusive open, so two instances starting together agree on one value.
  * A value set in the environment always wins and is never written to disk.
+ * (The seeded accounts' password is fixed — config.ts DEFAULT_SEED_PASSWORD — so there is nothing to generate for it.)
  */
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { DEFAULT_SEED_PASSWORD, DEV_JWT_SECRET, PROD_LIMITS, SEED_PASSWORD_MIN_LENGTH } from '../config.js';
+import { DEV_JWT_SECRET, PROD_LIMITS } from '../config.js';
 
-export interface GeneratedSecret { name: 'JWT_SECRET' | 'SEED_PASSWORD'; file: string; createdNow: boolean; value: string }
+export interface GeneratedSecret { name: 'JWT_SECRET'; file: string; createdNow: boolean; value: string }
 
 function readOrCreate(file: string, make: () => string, valid: (v: string) => boolean): { value: string; createdNow: boolean } | null {
   try {
@@ -33,8 +33,8 @@ function readOrCreate(file: string, make: () => string, valid: (v: string) => bo
   }
 }
 
-/** Fills JWT_SECRET / SEED_PASSWORD from SECRETS_DIR (generating them once) when the environment leaves them empty. */
-export function ensureGeneratedSecrets(env: NodeJS.ProcessEnv = process.env, opts: { seeding?: boolean } = {}): GeneratedSecret[] {
+/** Fills JWT_SECRET from SECRETS_DIR (generating it once) when the environment leaves it empty. */
+export function ensureGeneratedSecrets(env: NodeJS.ProcessEnv = process.env): GeneratedSecret[] {
   const dir = (env.SECRETS_DIR ?? '').trim();
   if (env.NODE_ENV !== 'production' || !dir) return [];
   const out: GeneratedSecret[] = [];
@@ -43,21 +43,10 @@ export function ensureGeneratedSecrets(env: NodeJS.ProcessEnv = process.env, opt
     const r = readOrCreate(file, () => crypto.randomBytes(48).toString('hex'), (v) => v.length >= PROD_LIMITS.jwtSecretMinLength && v !== DEV_JWT_SECRET);
     if (r) { env.JWT_SECRET = r.value; out.push({ name: 'JWT_SECRET', file, ...r }); }
   }
-  const seeding = opts.seeding || env.SEED_ON_DEPLOY === '1' || env.SEED_ON_BOOT === '1';
-  if (seeding && !(env.SEED_PASSWORD ?? '').trim()) {
-    const file = path.join(dir, 'seed-password');
-    const r = readOrCreate(file, () => crypto.randomBytes(18).toString('base64url'), (v) => v.length >= SEED_PASSWORD_MIN_LENGTH && v !== DEFAULT_SEED_PASSWORD);
-    if (r) { env.SEED_PASSWORD = r.value; out.push({ name: 'SEED_PASSWORD', file, ...r }); }
-  }
   return out;
 }
 
-/** Boot log lines: where each generated secret lives; the first-sign-in password itself only on the start that created it. */
+/** Boot log lines: where each generated secret lives (never its value). */
 export function describeGeneratedSecrets(list: GeneratedSecret[]): string[] {
-  return list.map((s) => {
-    if (s.name === 'JWT_SECRET') return `[secrets] JWT_SECRET ${s.createdNow ? 'generated' : 'loaded'} (${s.file})`;
-    return s.createdNow
-      ? `[secrets] SEED_PASSWORD generated for the seeded accounts' FIRST sign-in (each account then sets its own): ${s.value}  — also in ${s.file}`
-      : `[secrets] SEED_PASSWORD loaded (${s.file})`;
-  });
+  return list.map((s) => `[secrets] ${s.name} ${s.createdNow ? 'generated' : 'loaded'} (${s.file})`);
 }

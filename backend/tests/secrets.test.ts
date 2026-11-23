@@ -1,5 +1,6 @@
-// Secrets generated on the first production start (core/secrets.ts): JWT_SECRET and the seeded accounts' SEED_PASSWORD,
-// kept in SECRETS_DIR so restarts and other instances use the same value; a value from the environment always wins.
+// Secrets generated on the first production start (core/secrets.ts): JWT_SECRET, kept in SECRETS_DIR so restarts and other
+// instances use the same value; a value from the environment always wins. The seeded accounts' password is fixed
+// (config.ts DEFAULT_SEED_PASSWORD), never generated.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -16,37 +17,29 @@ test('SC-1 outside production, or without SECRETS_DIR, nothing is generated', ()
   assert.deepEqual(fs.readdirSync(dir), []);
 });
 
-test('SC-2 production: generated once into SECRETS_DIR, then the same values on every start (and another instance)', () => {
+test('SC-2 production: generated once into SECRETS_DIR, then the same value on every start (and another instance)', () => {
   const dir = path.join(tmp(), 'secrets'); // created on demand
   const first: NodeJS.ProcessEnv = { NODE_ENV: 'production', SECRETS_DIR: dir, SEED_ON_DEPLOY: '1', JWT_SECRET: '', SEED_PASSWORD: '' };
   const g = ensureGeneratedSecrets(first);
-  assert.deepEqual(g.map((s) => [s.name, s.createdNow]), [['JWT_SECRET', true], ['SEED_PASSWORD', true]]);
+  assert.deepEqual(g.map((s) => [s.name, s.createdNow]), [['JWT_SECRET', true]]);
   assert.ok(first.JWT_SECRET!.length >= 48);
-  assert.ok(first.SEED_PASSWORD!.length >= 12 && first.SEED_PASSWORD !== 'Mobadrat@2026');
+  assert.equal(first.SEED_PASSWORD, '', 'no seed password is generated (the seeded accounts use the fixed one)');
+  assert.ok(!fs.existsSync(path.join(dir, 'seed-password')));
   if (process.platform !== 'win32') assert.equal(fs.statSync(path.join(dir, 'jwt-secret')).mode & 0o777, 0o600);
-  const lines = describeGeneratedSecrets(g);
-  assert.ok(lines.some((l) => l.includes(first.SEED_PASSWORD!)), 'the first-sign-in password is shown on the start that created it');
-  assert.ok(!lines.some((l) => l.includes(first.JWT_SECRET!)), 'the JWT secret is never printed');
+  assert.ok(!describeGeneratedSecrets(g).some((l) => l.includes(first.JWT_SECRET!)), 'the JWT secret is never printed');
 
   const again: NodeJS.ProcessEnv = { NODE_ENV: 'production', SECRETS_DIR: dir, SEED_ON_DEPLOY: '1' };
   const g2 = ensureGeneratedSecrets(again);
-  assert.deepEqual(g2.map((s) => s.createdNow), [false, false]);
+  assert.deepEqual(g2.map((s) => s.createdNow), [false]);
   assert.equal(again.JWT_SECRET, first.JWT_SECRET);
-  assert.equal(again.SEED_PASSWORD, first.SEED_PASSWORD);
-  assert.ok(!describeGeneratedSecrets(g2).some((l) => l.includes(first.SEED_PASSWORD!)), 'later starts do not print it again');
 });
 
-test('SC-3 values from the environment win and nothing is written; no seed password without seeding', () => {
+test('SC-3 a value from the environment wins and nothing is written', () => {
   const dir = tmp();
-  const env: NodeJS.ProcessEnv = { NODE_ENV: 'production', SECRETS_DIR: dir, JWT_SECRET: 'j'.repeat(64), SEED_ON_DEPLOY: '1', SEED_PASSWORD: 'Given-Seed-Pass-2026' };
+  const env: NodeJS.ProcessEnv = { NODE_ENV: 'production', SECRETS_DIR: dir, JWT_SECRET: 'j'.repeat(64), SEED_ON_DEPLOY: '1' };
   assert.deepEqual(ensureGeneratedSecrets(env), []);
-  assert.equal(env.SEED_PASSWORD, 'Given-Seed-Pass-2026');
+  assert.equal(env.JWT_SECRET, 'j'.repeat(64));
   assert.deepEqual(fs.readdirSync(dir), []);
-  const off: NodeJS.ProcessEnv = { NODE_ENV: 'production', SECRETS_DIR: dir, JWT_SECRET: 'j'.repeat(64), SEED_ON_DEPLOY: '0' };
-  assert.deepEqual(ensureGeneratedSecrets(off), []);
-  assert.equal(off.SEED_PASSWORD, undefined);
-  const cli: NodeJS.ProcessEnv = { NODE_ENV: 'production', SECRETS_DIR: dir, JWT_SECRET: 'j'.repeat(64), SEED_ON_DEPLOY: '0' };
-  assert.equal(ensureGeneratedSecrets(cli, { seeding: true }).length, 1, 'the seed CLI always gets the password');
 });
 
 test('SC-4 a damaged secret file is not used: the start is refused by the production checks instead of a weak key', () => {

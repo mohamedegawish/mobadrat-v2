@@ -1,4 +1,4 @@
-import { config, assertConfigValid, assertProductionSafe, seedPasswordProblem } from './config.js';
+import { config, assertConfigValid, assertProductionSafe } from './config.js';
 import { createApp } from './app.js';
 import { closeDb, dbDialect } from './core/db/index.js';
 import { bootPlatform } from './core/boot.js';
@@ -11,14 +11,14 @@ import { startOutboxRetention, stopOutboxRetention } from './core/jobs/outboxRet
 import { drainJobs, runningJobs } from './core/jobs/inflight.js';
 import { MODULES } from './initiatives/registry.js';
 
-// A fresh deployment works with no manual step: missing JWT_SECRET / SEED_PASSWORD are generated once into SECRETS_DIR.
+// A fresh deployment works with no manual step: a missing JWT_SECRET is generated once into SECRETS_DIR.
 for (const line of describeGeneratedSecrets(ensureGeneratedSecrets())) console.log(line);
 assertConfigValid();
 assertProductionSafe();
 // Applies the core and module migrations before serving any request (MySQL: waits for the server, migrates under a lock).
 await bootPlatform();
-// The deploy seeder first: its accounts must change the shared password at the first sign-in, so SEED_ON_BOOT (kept from an
-// older deployment) finds a database that is no longer empty and adds nothing on top.
+// The deploy seeder first, so SEED_ON_BOOT (kept from an older deployment) finds a database that is no longer empty and
+// adds nothing on top.
 if (config.seedOnDeploy) {
   // one account per role + demo data, creating only what is missing (core/seedDeploy.ts); never fatal for the server
   try {
@@ -28,7 +28,6 @@ if (config.seedOnDeploy) {
   }
 }
 if (config.seedOnBoot) {
-  if (config.isProd && seedPasswordProblem()) throw new Error(`[seed] ${seedPasswordProblem()}`);
   const seeded = await seedIfEmpty();
   if (seeded) console.log('[seed] demo accounts and data loaded (empty database)');
 }

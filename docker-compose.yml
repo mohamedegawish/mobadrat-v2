@@ -37,13 +37,12 @@ services:
       UPLOAD_DIR: /data/uploads
       DB_HOST: mysql
       DB_PORT: "3306"
-      # Secrets the app generates on its first start when the environment leaves them empty (kept in the app-data volume).
+      # The session key the app generates on its first start when the environment leaves it empty (kept in the app-data volume).
       SECRETS_DIR: /data/secrets
       # ── accounts: one for every role of the platform and of each initiative + the demo data they need, created on the
-      #    first start (any missing one on later starts); never changes an existing account. Each account signs in once
-      #    with SEED_PASSWORD (Coolify: SERVICE_PASSWORD_SEED under Environment Variables) and then sets its own password.
+      #    first start (any missing one on later starts). Their password is the fixed seed password documented in
+      #    docs/DEPLOY.md «حسابات لكل دور» — nothing to set here.
       SEED_ON_DEPLOY: ${SEED_ON_DEPLOY:-1}
-      SEED_PASSWORD: ${SEED_PASSWORD:-${SERVICE_PASSWORD_SEED}}
       SEED_EMAIL_DOMAIN: ${SEED_EMAIL_DOMAIN:-}
       SEED_ON_BOOT: ${SEED_ON_BOOT:-0}
       # ── database: MySQL 8.4, the mysql service below (same user and password on both sides) ──

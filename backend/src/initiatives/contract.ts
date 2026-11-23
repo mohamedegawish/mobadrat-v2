@@ -110,7 +110,7 @@ export interface EnrollResult {
 export interface ReadinessCheck { key: string; ok: boolean; labelAr: string; labelEn: string; detail?: string }
 
 /** One account of the deploy seeder: created now, already there (left untouched), or already there but disabled. */
-export interface DeploySeedAccount { email: string; initiativeId: string | null; role: string; status: 'created' | 'exists' | 'exists_disabled' }
+export interface DeploySeedAccount { email: string; initiativeId: string | null; role: string; status: 'created' | 'exists' | 'exists_disabled' | 'reset' }
 /** What a module's deploy seeder did: its accounts, and one line per piece of demo data (added or why it was skipped). */
 export interface DeploySeedResult { accounts: DeploySeedAccount[]; notes: string[] }
 

@@ -20,7 +20,8 @@ export interface EnsuredAccount { id: string; email: string; created: boolean; i
 
 /**
  * The seeded account of an e-mail: an existing account is returned as it is (never changed); otherwise a verified account
- * that must change its password at the first sign-in. The listed id is used only when it is free (a legacy import may hold it).
+ * with the seed password, usable as it is (the documented demo password — no forced change, so every tester can sign in
+ * with it). The listed id is used only when it is free (a legacy import may hold it).
  */
 export async function ensureSeedAccount(a: SeedAccountInput, passwordHash: string, source: string): Promise<EnsuredAccount> {
   const email = seedEmail(a.email);
@@ -29,7 +30,7 @@ export async function ensureSeedAccount(a: SeedAccountInput, passwordHash: strin
   const idFree = Boolean(a.id) && !(await getUserById(a.id!));
   const u = await createAccount({
     id: idFree ? a.id : undefined, email, nameAr: a.nameAr, nameEn: a.nameEn, phone: a.phone ?? '', passwordHash, source,
-    emailVerified: true, mustChangePassword: true, platformRole: a.platformRole ?? null,
+    emailVerified: true, mustChangePassword: false, platformRole: a.platformRole ?? null,
   });
   await savePersonProfile(u.id, { 'person.fullNameAr': a.nameAr, 'person.fullNameEn': a.nameEn, ...(a.phone ? { 'person.phone': a.phone } : {}) });
   return { id: u.id, email, created: true, isActive: true };

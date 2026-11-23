@@ -34,7 +34,7 @@ FROM ${NODE_IMAGE} AS runtime
 RUN apk add --no-cache tini
 WORKDIR /app
 # SEED_ON_DEPLOY=1: one account for every role is created on the first start (any missing one on later starts).
-# SECRETS_DIR: JWT_SECRET / SEED_PASSWORD are generated there once when the environment does not provide them.
+# SECRETS_DIR: JWT_SECRET is generated there once when the environment does not provide it.
 ENV NODE_ENV=production \
     PORT=4000 \
     HOST=0.0.0.0 \

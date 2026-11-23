@@ -192,21 +192,21 @@ export function assertConfigValid(): void {
   if (!/^[A-Za-z0-9_$-]{1,64}$/.test(m.database)) throw new Error('[config] the MySQL database name may only contain letters, digits, _, $ and -.');
 }
 
-/** The development default for the seeded accounts' password; never accepted in production. */
+/**
+ * The password of the seeded accounts (one per role, docs/DEPLOY.md «حسابات لكل دور») on every deployment: fixed and
+ * documented so the deployed site can be signed into with no deployment variable. It is public (the repository is), so a
+ * deployment holding real data changes these accounts' passwords (or disables them) from the administration.
+ */
 export const DEFAULT_SEED_PASSWORD = 'Mobadrat@2026';
-export const SEED_PASSWORD_MIN_LENGTH = 12;
 
-/** Production may seed demo data on an empty database only with its own SEED_PASSWORD. Returns the problem or null. */
-export function seedPasswordProblem(): string | null {
-  const p = process.env.SEED_PASSWORD ?? '';
-  if (!p) return 'SEED_PASSWORD is required to seed accounts in production (SEED_ON_BOOT / SEED_ON_DEPLOY: the password of the seeded accounts).';
-  if (p === DEFAULT_SEED_PASSWORD) return 'SEED_PASSWORD must not be the public development default in production.';
-  if (p.length < SEED_PASSWORD_MIN_LENGTH) return `SEED_PASSWORD is too short (min ${SEED_PASSWORD_MIN_LENGTH} chars).`;
-  return null;
+/**
+ * The seeded accounts' password: always DEFAULT_SEED_PASSWORD in production (whatever the deployment variables hold, e.g.
+ * an old SERVICE_PASSWORD_SEED); outside production SEED_PASSWORD may override it (the test suites use their own).
+ */
+export function seedPassword(): string {
+  if (process.env.NODE_ENV === 'production') return DEFAULT_SEED_PASSWORD;
+  return process.env.SEED_PASSWORD || DEFAULT_SEED_PASSWORD;
 }
-
-/** The development password of the seeded demo accounts (SEED_PASSWORD overrides it). */
-export function seedPassword(): string { return process.env.SEED_PASSWORD || DEFAULT_SEED_PASSWORD; }
 
 /** Demo deployments only: lets production run on the mock industrial registry (accepts any registry number). */
 export function mockRegistryAllowedInProd(): boolean { return process.env.ALLOW_MOCK_REGISTRY_IN_PRODUCTION === '1'; }
@@ -226,7 +226,6 @@ export function assertProductionSafe(): void {
   if ((config.registryAdapter === 'mock' || process.env.REGISTRY_ADAPTER === 'mock') && !mockRegistryAllowedInProd()) {
     problems.push('REGISTRY_ADAPTER=mock is forbidden in production (ALLOW_MOCK_REGISTRY_IN_PRODUCTION=1 only for a demo deployment).');
   }
-  if (config.seedOnBoot || config.seedOnDeploy) { const p = seedPasswordProblem(); if (p) problems.push(p); }
   if (!config.mysql.password) problems.push('The MySQL password (DB_PASSWORD or DATABASE_URL) must be set in production.');
   if (problems.length) throw new Error(`[config] unsafe production configuration:\n - ${problems.join('\n - ')}`);
 }
