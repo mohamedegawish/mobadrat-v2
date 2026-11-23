@@ -1,5 +1,5 @@
 /** تعارضات رقم السجل الصناعي، وحظره على الرقم نفسه (H3)، واعتراضات المالك (القرار 4). */
-import { getDb, nowIso } from '../db/sqlite.js';
+import { getDb, nowIso } from '../db/database.js';
 import { newId } from '../http/helpers.js';
 
 export interface RegistryConflictRow {

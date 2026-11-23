@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Production image of the National Industrial Initiatives Platform (the platform + every initiative module: Shams El-Senaa,
 # Sona'a El-Mostaqbal). The backend serves the built frontend on the same origin (no CORS, one domain); TLS ends at the
-# reverse proxy in front of the container (e.g. Coolify's). Database: MySQL 8.4 (docker-compose.yml).
+# reverse proxy in front of the container (e.g. Coolify's). Database: MySQL 8.4 only (the mysql service of docker-compose.yml).
 #
 # Build context: the repository root (the Shams module frontend imports its API contract types from the backend tree).
 # No secret is used at build time or stored in a layer: every secret is a runtime environment variable.
@@ -33,10 +33,14 @@ FROM ${NODE_IMAGE} AS runtime
 # tini: PID 1 that forwards SIGTERM to Node and reaps zombies (graceful shutdown on redeploy).
 RUN apk add --no-cache tini
 WORKDIR /app
+# SEED_ON_DEPLOY=1: one account for every role is created on the first start (any missing one on later starts).
+# SECRETS_DIR: JWT_SECRET / SEED_PASSWORD are generated there once when the environment does not provide them.
 ENV NODE_ENV=production \
     PORT=4000 \
     HOST=0.0.0.0 \
     UPLOAD_DIR=/data/uploads \
+    SECRETS_DIR=/data/secrets \
+    SEED_ON_DEPLOY=1 \
     SEED_ON_BOOT=0 \
     SERVE_FRONTEND=1 \
     FRONTEND_DIST=/app/public \
@@ -50,8 +54,8 @@ COPY --from=api /app/scripts ./scripts
 COPY backend/assets ./assets
 COPY --from=web /build/frontend/dist ./public
 # /data = persistent volume: uploaded documents of the platform (core/) and of every module (shams/, sona3/), and the
-# legacy databases copied in for a one-time import (npm run legacy:import:prod).
-RUN mkdir -p /data/uploads /data/legacy && chown -R node:node /data
+# secrets the platform generates on its first start (/data/secrets, readable by the app user only).
+RUN mkdir -p /data/uploads /data/secrets && chmod 700 /data/secrets && chown -R node:node /data
 USER node
 EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \

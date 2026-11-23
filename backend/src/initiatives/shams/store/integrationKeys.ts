@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { getDb, nowIso } from '../db/sqlite.js';
+import { getDb, nowIso } from '../db/database.js';
 import { newId, mapSeq } from '../http/helpers.js';
 import { sha256 } from '../auth/jwt.js';
 

@@ -19,7 +19,7 @@ test('SLA: null = no overdue; configured SLA → overdue flag + one notification
   const { runSlaSweep } = await import('../jobs/slaMonitor.js');
   shamsPolicy.slaDays.IMC_REVIEW = 2;
   try {
-    const { getDb } = await import('../db/sqlite.js');
+    const { getDb } = await import('../db/database.js');
     await getDb().prepare("UPDATE shams_applications SET stateEnteredAt = '2020-01-01T00:00:00.000Z' WHERE id = ?").run(id);
     v = await getApp(c.imc, id);
     assert.equal(v.overdue, true);

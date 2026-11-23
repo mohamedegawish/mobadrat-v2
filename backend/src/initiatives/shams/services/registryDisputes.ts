@@ -6,7 +6,7 @@
  *  - أثناء النزاع يبقى الرقم محظورًا/محجوزًا (registryAccess) فلا تسجيل مكرر؛ بعد القرار لا يستخدمه إلا المصنع المسمّى.
  * طلب مفتوح لمصنع آخر يحجز الرقم لا يُغلق آليًا: القرار يُبلَّغ لـIMC لتتخذ قرارها على ذلك الطلب.
  */
-import { getDb, nowIso, tx } from '../db/sqlite.js';
+import { getDb, nowIso, tx } from '../db/database.js';
 import { mapSeq } from '../http/helpers.js';
 import { AppError, Errors } from '../http/errors.js';
 import { Checker, onlyKeys, type Obj } from '../http/validate.js';

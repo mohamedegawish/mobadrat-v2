@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { isolateTestEnv, startServer, clients, act, getApp, advanceTo, q, pdfVariant, Client, BANK_A, BANK_B, PROVIDER_PENDING, PROVIDER_SUSPENDED, PROVIDER_OK, type Started } from './helpers.js';
 
 async function dbRun(sql: string, ...params: string[]) {
-  const { getDb } = await import('../db/sqlite.js');
+  const { getDb } = await import('../db/database.js');
   await getDb().prepare(sql).run(...params);
 }
 

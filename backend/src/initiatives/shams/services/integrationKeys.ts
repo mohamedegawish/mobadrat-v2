@@ -5,7 +5,7 @@
  *  - عند تفعيلها: المفتاح بها يبقى pending_approval حتى توافق PMU.
  *  - PMU تُبلَّغ بكل إنشاء وتدوير وإلغاء.
  */
-import { tx } from '../db/sqlite.js';
+import { tx } from '../db/database.js';
 import { AppError, Errors } from '../http/errors.js';
 import { Checker, onlyKeys } from '../http/validate.js';
 import { shamsPolicy } from '../config/shamsPolicy.js';

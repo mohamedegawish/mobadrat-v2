@@ -1,6 +1,6 @@
 /** إنشاء المسودة، والحفظ التلقائي، وتعديل حقول النواقص فقط، ورفع/إزالة المستندات. */
 import fs from 'node:fs';
-import { tx, getDb, nowIso } from '../db/sqlite.js';
+import { tx, getDb, nowIso } from '../db/database.js';
 import { AppError, Errors } from '../http/errors.js';
 import type { UserInternal } from '../store/users.js';
 import {

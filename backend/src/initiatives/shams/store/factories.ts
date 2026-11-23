@@ -1,4 +1,4 @@
-import { getDb, nowIso } from '../db/sqlite.js';
+import { getDb, nowIso } from '../db/database.js';
 import { newId } from '../http/helpers.js';
 
 /** قبول حساب المصنع (migration 009). */

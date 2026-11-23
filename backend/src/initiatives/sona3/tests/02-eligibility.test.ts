@@ -157,7 +157,7 @@ test('team application needs partners (max 10) with valid national IDs; individu
 });
 
 test('applications only start inside an open cohort', async () => {
-  const { getDb } = await import('../db/sqlite.js');
+  const { getDb } = await import('../db/database.js');
   await getDb().prepare('UPDATE sona3_cohorts SET opensAt = ?, closesAt = ?').run(addDays(todayIso(), -60), addDays(todayIso(), -1));
   try {
     const a = await newApplicant(srv);
@@ -173,7 +173,7 @@ test('applications only start inside an open cohort', async () => {
 test('submit is closed if the cohort closes between draft and submit', async () => {
   const a = await newApplicant(srv);
   const id = await createCompleteDraft(a);
-  const { getDb } = await import('../db/sqlite.js');
+  const { getDb } = await import('../db/database.js');
   await getDb().prepare('UPDATE sona3_cohorts SET closesAt = ? WHERE id = ?').run(addDays(todayIso(), -1), w.cohortId);
   try {
     const r = await act(a, id, 'submit');

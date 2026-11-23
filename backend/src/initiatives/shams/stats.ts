@@ -2,7 +2,7 @@
  * Shams statistics for the unified platform admin: the module's own states mapped to the platform's normalized phases,
  * plus the initiative's KPIs (roof area, contracted amount…).
  */
-import { getDb } from './db/sqlite.js';
+import { getDb } from './db/database.js';
 import type { ActivityItem, InitiativeStatsProvider, NormalizedPhase, StatsSummary } from '../contract.js';
 import { NORMALIZED_PHASES } from '../contract.js';
 import { APPLICATION_STATES, NON_TERMINAL_STATES, STATE_LABELS, type ApplicationState } from './workflow/shamsWorkflow.js';

@@ -1,6 +1,6 @@
 import { mapSeq } from '../http/helpers.js';
 /** إسناد المقيّمين، وإقرار تضارب المصالح، وتسجيل الدرجات وتسليمها (docs/SONA3_DESIGN.md §8). */
-import { tx } from '../db/sqlite.js';
+import { tx } from '../db/database.js';
 import { Errors, type ErrorDetail } from '../http/errors.js';
 import { isObj, onlyKeys } from '../http/validate.js';
 import type { UserInternal } from '../store/users.js';

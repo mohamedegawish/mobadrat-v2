@@ -177,7 +177,7 @@ test('18d) webhook: HMAC-signed, same eventId on retry, never re-sent after deli
     const first = await processWebhooks();
     assert.equal(first.retried >= 1, true);
     // تقديم موعد إعادة المحاولة ثم تشغيل العامل مجددًا
-    const { getDb } = await import('../db/sqlite.js');
+    const { getDb } = await import('../db/database.js');
     await getDb().prepare("UPDATE shams_webhook_outbox SET nextAttemptAt = '2000-01-01T00:00:00.000Z' WHERE status = 'pending'").run();
     await processWebhooks();
     const forThis = received.filter((r) => r.id === rows[0].eventId);

@@ -3,7 +3,7 @@ import { filterSeq } from '../http/helpers.js';
  * جاهزية التشغيل — مصدر واحد للوحة الأدمن و`npm run check:readiness`.
  * كل شرط غير مستوفى = طريق مغلق محتمل: طلب يصل لجهة لا يعمل فيها أحد، أو دورة غير مفتوحة، أو رسالة لم تصل.
  */
-import { getDb } from '../db/sqlite.js';
+import { getDb } from '../db/database.js';
 import { config } from '../config.js';
 import { ORG_IDS } from '../domain.js';
 import { listOrganizations, activeStaffCount, getOrganization } from '../store/organizations.js';

@@ -7,7 +7,7 @@
  *  - A platform super_admin without a membership acts as the Sona3 system administrator.
  *  - Sign-in is the platform's: there is no Sona3-specific lockout any more (the platform uses a progressive delay).
  */
-import { getDb } from '../db/sqlite.js';
+import { getDb } from '../db/database.js';
 import { likePattern, type SqlParam } from '../http/helpers.js';
 import { AppError } from '../http/errors.js';
 import { ORG_IDS, type OrgType, type Role } from '../domain.js';

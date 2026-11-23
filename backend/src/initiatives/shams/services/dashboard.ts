@@ -4,7 +4,7 @@
  * لا أرقام مختلقة: بطاقة بلا فلتر صادق في قائمة العمل تُرجَع بلا رابط (link = null) فلا يظهر زر ميت.
  * الأدمن له لوحة الجاهزية، والمصنع له «لوحتي» — لا يخدمهما هذا المسار.
  */
-import { getDb } from '../db/sqlite.js';
+import { getDb } from '../db/database.js';
 import { mapSeq } from '../http/helpers.js';
 import type { SqlParam } from '../http/helpers.js';
 import { listApplications, type AppRow } from '../store/applications.js';

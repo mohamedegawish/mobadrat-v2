@@ -8,9 +8,9 @@ import { actorFromReq, addAuditLog } from '../store/audit.js';
 import {
   cohortStatus, createCohort, getCohort, listCohorts, updateCohort, weightsLocked, type Cohort, type CohortInput,
 } from '../store/cohorts.js';
-import { getDb } from '../db/sqlite.js';
+import { getDb } from '../db/database.js';
 import { CRITERIA, CRITERION_KEYS, type CriterionKey } from '../config/initiativePolicy.js';
-import { tx } from '../db/sqlite.js';
+import { tx } from '../db/database.js';
 
 export const cohortsRouter = Router();
 

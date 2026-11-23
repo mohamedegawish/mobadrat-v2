@@ -1,4 +1,4 @@
-import { getDb, nowIso } from '../db/sqlite.js';
+import { getDb, nowIso } from '../db/database.js';
 import { newId, likePattern, type SqlParam } from '../http/helpers.js';
 
 /** دليل الخبراء ومقدمي الخدمات الداعمين لإعداد الدراسات (المقترح — سادسًا). */

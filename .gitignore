@@ -9,3 +9,7 @@ data/*.db-wal
 
 # Load test state (dataset, captured mail, uploads, results)
 perf/.state/
+
+# Real environment files and local databases never go to git (the old platform committed both)
+.env
+/data/

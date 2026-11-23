@@ -3,7 +3,7 @@ import { mapSeq } from '../http/helpers.js';
 import { Router } from 'express';
 import { ah, okMessage, Errors } from '../http/errors.js';
 import { currentUser, requireRole } from '../middleware/auth.js';
-import { getDb, nowIso } from '../db/sqlite.js';
+import { getDb, nowIso } from '../db/database.js';
 import { getApplication } from '../store/applications.js';
 import { listPendingAppeals } from '../store/lifecycle.js';
 import { buildListItem } from '../workflow/applicationView.js';

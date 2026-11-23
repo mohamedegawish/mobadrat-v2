@@ -1,5 +1,5 @@
 /** التنفيذ والمتابعة (07–08): مراحل الصرف، وتقارير الأثر، وعلامة التعثر، والتظلمات (docs/SONA3_DESIGN.md §5، §11). */
-import { tx, getDb, nowIso } from '../db/sqlite.js';
+import { tx, getDb, nowIso } from '../db/database.js';
 import { AppError, Errors, type ErrorDetail } from '../http/errors.js';
 import { isIsoDate, onlyKeys } from '../http/validate.js';
 import type { UserInternal } from '../store/users.js';

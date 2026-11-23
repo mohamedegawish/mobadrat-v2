@@ -1,4 +1,4 @@
-import { getDb, nowIso } from '../db/sqlite.js';
+import { getDb, nowIso } from '../db/database.js';
 import { newId } from '../http/helpers.js';
 import type { ApplicationState } from '../workflow/shamsWorkflow.js';
 import type { DocumentKind } from '../workflow/applicationForm.js';

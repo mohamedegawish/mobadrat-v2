@@ -17,7 +17,7 @@ import {
 import { addAuditLog, actorFromReq } from '../store/audit.js';
 import { shamsPolicy } from '../config/shamsPolicy.js';
 import { ORG_IDS, type Role } from '../domain.js';
-import { tx } from '../db/sqlite.js';
+import { tx } from '../db/database.js';
 import { dispatch, orgRecipients } from '../notifications/notify.js';
 import { kickNotificationWorker } from '../jobs/notificationWorker.js';
 import { applyProviderSuspension } from '../workflow/providerEvents.js';

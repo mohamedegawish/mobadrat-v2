@@ -6,7 +6,7 @@
  * كلمة المرور لبريد صاحب الحساب فقط (لمرة واحدة وبمدة). أول مستخدم في أي جهة بأمر CLI على السيرفر فقط.
  */
 import { randomBytes } from 'node:crypto';
-import { getDb, nowIso, tx } from '../db/sqlite.js';
+import { getDb, nowIso, tx } from '../db/database.js';
 import { AppError, Errors } from '../http/errors.js';
 import { newId, mapSeq, filterSeq } from '../http/helpers.js';
 import { Checker, isEmail, isPhone, normalizeDigits, onlyKeys, type Obj } from '../http/validate.js';

@@ -781,7 +781,7 @@ test('F-09) a stale expectedVersion from someone who could never perform the act
 });
 
 // ══ المرحلة 8 (F-10, F-11) ═══════════════════════════════════════════════════════════════════════════════════════════
-const sqlDb = async () => (await import('../db/sqlite.js')).getDb();
+const sqlDb = async () => (await import('../db/database.js')).getDb();
 
 test('F-10/1) official history cannot be edited or deleted even with direct SQL: transitions, referral history, decided deficiencies', async () => {
   const db = await sqlDb();

@@ -29,7 +29,7 @@ after(async () => { await srv.close(); await env.cleanup(); });
 
 /** Counts statements and returned rows while `fn` runs (the server runs in this process). */
 async function measure<T>(fn: () => Promise<T>): Promise<{ out: T; queries: number; rows: number }> {
-  const { getDb } = await import('../db/sqlite.js');
+  const { getDb } = await import('../db/database.js');
   const db = getDb() as unknown as Record<string, unknown> & { prepare: (sql: string) => Record<string, unknown> };
   const own = Object.prototype.hasOwnProperty.call(db, 'prepare');
   const real = db.prepare;

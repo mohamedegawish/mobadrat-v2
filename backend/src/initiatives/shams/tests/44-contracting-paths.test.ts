@@ -230,7 +230,7 @@ test('D2) the two paths can never be combined or switched (API and database)', a
   assert.equal(app.bank, null);
 
   // the database itself refuses an inconsistent row
-  const { getDb } = await import('../db/sqlite.js');
+  const { getDb } = await import('../db/database.js');
   await assert.rejects(getDb().prepare('UPDATE shams_applications SET bankOrgId = ? WHERE id = ?').run(BANK_A, id), /CHECK|constraint/i, 'no bank on the distribution path');
   await assert.rejects(getDb().prepare("UPDATE shams_applications SET contractPath = NULL WHERE id = ?").run(id), /CHECK|constraint/i, 'distribution stages require the distribution path');
   await assert.rejects(getDb().prepare("UPDATE shams_applications SET contractPath = 'other' WHERE id = ?").run(id), /CHECK|constraint/i);

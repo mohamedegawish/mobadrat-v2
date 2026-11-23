@@ -7,7 +7,7 @@
  * كل خطوة في التدقيق. لا يوجد أي مسار لهذا عبر API الربط.
  */
 import { randomBytes } from 'node:crypto';
-import { getDb, nowIso, tx, withJobLock } from '../db/sqlite.js';
+import { getDb, nowIso, tx, withJobLock } from '../db/database.js';
 import { AppError, Errors } from '../http/errors.js';
 import { newId, mapSeq } from '../http/helpers.js';
 import { Checker, isEmail, onlyKeys, type Obj } from '../http/validate.js';

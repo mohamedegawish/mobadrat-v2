@@ -7,7 +7,7 @@
  * Sign-in, refresh, password flows and verification are the platform's (core/routes/auth.ts).
  */
 import { Router } from 'express';
-import { tx } from '../db/sqlite.js';
+import { tx } from '../db/database.js';
 import { ah, okMessage } from '../http/errors.js';
 import { makeLimiter } from '../http/rateLimits.js';
 import { clientIp } from '../http/helpers.js';

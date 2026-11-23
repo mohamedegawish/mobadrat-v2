@@ -10,7 +10,7 @@ import { currentUser, requireRole } from '../middleware/auth.js';
 import { getBlock, listBlocks, releaseNumber } from '../store/registry.js';
 import { getFactory } from '../store/factories.js';
 import { addAuditLog, actorFromReq } from '../store/audit.js';
-import { tx } from '../db/sqlite.js';
+import { tx } from '../db/database.js';
 import { clientIp } from '../http/helpers.js';
 import { sendStoredPdf, singlePdfUpload } from '../http/upload.js';
 import { decideDispute, decideObjection, disputesFor, listObjectionsFor, objectionDocument, publicObjection, submitObjection } from '../services/registryDisputes.js';

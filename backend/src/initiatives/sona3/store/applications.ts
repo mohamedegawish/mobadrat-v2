@@ -1,4 +1,4 @@
-import { getDb, nowIso, parseJson } from '../db/sqlite.js';
+import { getDb, nowIso, parseJson } from '../db/database.js';
 import { newId, likePattern, type SqlParam } from '../http/helpers.js';
 import type { ApplicationState, ActionName } from '../workflow/workflow.js';
 import type { DataSection } from '../workflow/applicationForm.js';

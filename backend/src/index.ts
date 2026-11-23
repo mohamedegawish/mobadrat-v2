@@ -4,12 +4,15 @@ import { closeDb, dbDialect } from './core/db/index.js';
 import { bootPlatform } from './core/boot.js';
 import { seedIfEmpty } from './core/seed.js';
 import { describeSeedReport, seedOnDeploy } from './core/seedDeploy.js';
+import { describeGeneratedSecrets, ensureGeneratedSecrets } from './core/secrets.js';
 import { sweepStaleTmp } from './core/http/upload.js';
 import { startNotificationWorker, stopNotificationWorker } from './core/jobs/notificationWorker.js';
 import { startOutboxRetention, stopOutboxRetention } from './core/jobs/outboxRetention.js';
 import { drainJobs, runningJobs } from './core/jobs/inflight.js';
 import { MODULES } from './initiatives/registry.js';
 
+// A fresh deployment works with no manual step: missing JWT_SECRET / SEED_PASSWORD are generated once into SECRETS_DIR.
+for (const line of describeGeneratedSecrets(ensureGeneratedSecrets())) console.log(line);
 assertConfigValid();
 assertProductionSafe();
 // Applies the core and module migrations before serving any request (MySQL: waits for the server, migrates under a lock).

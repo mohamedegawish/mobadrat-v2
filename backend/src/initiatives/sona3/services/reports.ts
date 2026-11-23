@@ -1,6 +1,6 @@
 import { mapSeq } from '../http/helpers.js';
 /** التقارير ومؤشرات لوحة المتابعة (docs/SONA3_DESIGN.md §13) — دالة واحدة لـ /reports/summary و Integration GET /summary. */
-import { getDb, sqlDaysBetween } from '../db/sqlite.js';
+import { getDb, sqlDaysBetween } from '../db/database.js';
 import type { SqlParam } from '../http/helpers.js';
 import { listApplications, type AppRow } from '../store/applications.js';
 import { getCohort, openCohort, listCohorts } from '../store/cohorts.js';

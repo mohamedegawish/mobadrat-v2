@@ -1,5 +1,5 @@
 /** بيانات ما بعد الاختيار: إحالات التمويل، ومراحل الإنجاز والصرف، وتقارير الأثر، والتظلمات (docs/SONA3_DESIGN.md §5، §10–11). */
-import { getDb, nowIso } from '../db/sqlite.js';
+import { getDb, nowIso } from '../db/database.js';
 import { newId } from '../http/helpers.js';
 import type { ApplicationState } from '../workflow/workflow.js';
 

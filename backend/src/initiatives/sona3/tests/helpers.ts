@@ -69,7 +69,7 @@ export function isolateTestEnv(tag: string): TestEnv {
   return {
     dir,
     cleanup: async () => {
-      const { closeDb } = await import('../db/sqlite.js');
+      const { closeDb } = await import('../db/database.js');
       await closeDb();
       await new Promise((r) => setTimeout(r, 50));
       fs.rmSync(dir, { recursive: true, force: true });
@@ -327,7 +327,7 @@ export function ok(r: Res, step: string): Res {
 }
 
 export async function q<T = any>(sql: string, ...params: Array<string | number | null>): Promise<T[]> {
-  const { getDb } = await import('../db/sqlite.js');
+  const { getDb } = await import('../db/database.js');
   return await getDb().prepare(sql).all(...params) as T[];
 }
 

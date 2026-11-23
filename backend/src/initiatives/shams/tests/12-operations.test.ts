@@ -217,7 +217,7 @@ test('M5/I6: PMU work queue excludes drafts (counted separately) and "awaiting m
   assert.ok(all.draftsCount >= 1);
   const drafts = (await c.pmu.get('/applications?state=DRAFT')).json.data;
   assert.ok(drafts.items.length >= 1 && drafts.items.every((i: any) => i.state === 'DRAFT'));
-  const { getDb } = await import('../db/sqlite.js');
+  const { getDb } = await import('../db/database.js');
   await getDb().prepare("UPDATE shams_applications SET stateEnteredAt = '2026-01-01T00:00:00.000Z' WHERE id = ?").run(a1);
   const mine = (await c.pmu.get('/applications?mine=1')).json.data.items;
   const dates = mine.map((i: any) => i.stateEnteredAt);

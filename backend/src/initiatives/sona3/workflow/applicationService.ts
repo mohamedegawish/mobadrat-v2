@@ -1,5 +1,5 @@
 /** إنشاء المسودة، والحفظ التلقائي للاستمارة والدراسة، وتعديل حقول النواقص فقط، ورفع/إزالة المستندات. */
-import { tx } from '../db/sqlite.js';
+import { tx } from '../db/database.js';
 import { AppError, Errors } from '../http/errors.js';
 import type { UserInternal } from '../store/users.js';
 import {

@@ -3,7 +3,7 @@
  * لا رفض ولا إغلاق تلقائي — إشعار وعلامة تأخر فقط.
  */
 import { config } from '../config.js';
-import { getDb, withJobLock } from '../db/sqlite.js';
+import { getDb, withJobLock } from '../db/database.js';
 import { shamsPolicy } from '../config/shamsPolicy.js';
 import { getApplication } from '../store/applications.js';
 import { dispatch, factoryRecipients, orgRecipients } from '../notifications/notify.js';

@@ -7,7 +7,7 @@
  *   pending   IMC: open applications in a state where IMC has an action; committee: evaluations assigned to its members
  *             and not submitted yet; funder: applications referred to this funder and awaiting its decision
  */
-import { getDb } from './db/sqlite.js';
+import { getDb } from './db/database.js';
 import { MODULE_ID } from './config.js';
 import { TRANSITIONS } from './workflow/workflow.js';
 import type { BodyActivity, InitiativeBodies, ModuleBody } from '../contract.js';

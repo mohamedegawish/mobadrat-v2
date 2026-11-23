@@ -1,5 +1,5 @@
 /** محتوى الواجهة العامة القابل للتعديل من الأدمن. القيم الافتراضية في الواجهة؛ هنا فقط التجاوزات (overrides) بعد التحقق من بنيتها. */
-import { getDb, nowIso, parseJson } from '../db/sqlite.js';
+import { getDb, nowIso, parseJson } from '../db/database.js';
 import { Errors, type ErrorDetail } from '../http/errors.js';
 import { isObj } from '../http/validate.js';
 

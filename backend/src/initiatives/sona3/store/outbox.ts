@@ -1,7 +1,7 @@
 /**
  * Notifications go to the platform outbox (tagged with this initiative); webhooks stay in the module's own outbox.
  */
-import { getDb, nowIso, parseJson } from '../db/sqlite.js';
+import { getDb, nowIso, parseJson } from '../db/database.js';
 import { newId, type SqlParam } from '../http/helpers.js';
 import * as core from '../../../core/store/outbox.js';
 import { MODULE_ID } from '../config.js';

@@ -2,7 +2,7 @@
  * جاهزية التشغيل (B2) — مصدر واحد للوحة الأدمن و`npm run check:readiness`.
  * كل شرط غير مستوفى = طريق مغلق محتمل: طلب يصل لجهة لا يعمل فيها أحد، أو مصنع لا يجد ما يختاره، أو رسالة لم تصل.
  */
-import { getDb } from '../db/sqlite.js';
+import { getDb } from '../db/database.js';
 import { filterSeq } from '../http/helpers.js';
 import { config } from '../config.js';
 import { ORG_IDS } from '../domain.js';

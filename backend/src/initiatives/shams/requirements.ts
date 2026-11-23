@@ -9,7 +9,7 @@ import type { FormFieldKey } from './config/shamsPolicy.js';
 import { registryAccess } from './store/registry.js';
 import { findOpenSubmittedByRegistry } from './store/applications.js';
 import { getFactoryByProfile } from './store/factories.js';
-import { getDb } from './db/sqlite.js';
+import { getDb } from './db/database.js';
 
 /** Shams form field (section.key) ↔ shared profile key. */
 export const FIELD_MAP: Array<{ section: 'general' | 'contact' | 'company' | 'engineering'; key: FormFieldKey; profileKey: string; locked?: boolean }> = [

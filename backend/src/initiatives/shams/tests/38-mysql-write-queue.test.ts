@@ -12,9 +12,9 @@ process.env.DB_TX_LOCK_TIMEOUT_SEC = '1';
 const env = isolateTestEnv('write-queue');
 const SKIP = !onMysql && 'MySQL only (npm run test:mysql)';
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-let db: typeof import('../db/sqlite.js');
+let db: typeof import('../db/database.js');
 
-before(async () => { if (SKIP) return; db = await import('../db/sqlite.js'); await db.initDb(); });
+before(async () => { if (SKIP) return; db = await import('../db/database.js'); await db.initDb(); });
 after(async () => { await env.cleanup(); });
 
 test('Q-1 a burst of writers does not take the pool from reads', { skip: SKIP }, async () => {

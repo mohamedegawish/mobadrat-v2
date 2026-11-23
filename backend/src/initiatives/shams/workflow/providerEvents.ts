@@ -8,7 +8,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { config } from '../config.js';
-import { getDb, nowIso } from '../db/sqlite.js';
+import { getDb, nowIso } from '../db/database.js';
 import { ORG_IDS } from '../domain.js';
 import { addAuditLog, type AuditActor } from '../store/audit.js';
 import { getApplication, insertTransition } from '../store/applications.js';

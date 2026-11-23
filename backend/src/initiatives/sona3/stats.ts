@@ -2,7 +2,7 @@
  * Sona3 statistics for the unified platform admin: the initiative's 19 states mapped to the platform's normalized phases,
  * plus its funding, jobs and evaluation KPIs.
  */
-import { getDb } from './db/sqlite.js';
+import { getDb } from './db/database.js';
 import type { ActivityItem, InitiativeStatsProvider, NormalizedPhase, StatsSummary } from '../contract.js';
 import { NORMALIZED_PHASES } from '../contract.js';
 import { APPLICATION_STATES, STATE_LABELS, TERMINAL_STATES, type ApplicationState } from './workflow/workflow.js';

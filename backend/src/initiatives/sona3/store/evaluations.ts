@@ -1,4 +1,4 @@
-import { getDb, nowIso, parseJson } from '../db/sqlite.js';
+import { getDb, nowIso, parseJson } from '../db/database.js';
 import { newId } from '../http/helpers.js';
 import { CRITERION_KEYS, type CriterionKey } from '../config/initiativePolicy.js';
 

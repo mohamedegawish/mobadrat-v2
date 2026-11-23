@@ -7,7 +7,7 @@
  *  - isActive = account active AND membership active (suspending a Shams membership does not touch other initiatives).
  *  - A platform super_admin without a membership acts as the Shams system administrator.
  */
-import { getDb, nowIso } from '../db/sqlite.js';
+import { getDb, nowIso } from '../db/database.js';
 import { likePattern, type SqlParam } from '../http/helpers.js';
 import { AppError } from '../http/errors.js';
 import { ORG_IDS, type OrgType, type Role } from '../domain.js';

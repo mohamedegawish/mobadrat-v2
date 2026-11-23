@@ -19,7 +19,7 @@ after(async () => {
 
 /** Simulates the passage of time for due rows (the worker reads the real clock). */
 async function makeDue(ids: string[]) {
-  const { getDb } = await import('../db/sqlite.js');
+  const { getDb } = await import('../db/database.js');
   for (const id of ids) await getDb().prepare("UPDATE notification_outbox SET nextAttemptAt = '2000-01-01T00:00:00.000Z' WHERE id = ?").run(id);
 }
 

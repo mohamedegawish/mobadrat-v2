@@ -4,7 +4,7 @@
  * Run by the platform's seed (empty database only; production needs its own SEED_PASSWORD).
  */
 import { randomUUID } from 'node:crypto';
-import { getDb, nowIso, tx } from './sqlite.js';
+import { getDb, nowIso, tx } from './database.js';
 import { hashPassword } from '../auth/jwt.js';
 import { ORG_IDS, type Role } from '../domain.js';
 import { createCoreUser, getUserByEmail } from '../../../core/store/users.js';

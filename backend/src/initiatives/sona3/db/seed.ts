@@ -3,7 +3,7 @@
  * Platform accounts + Sona3 memberships; ids are prefixed s3- so they never collide with another initiative's demo data.
  */
 import { randomUUID } from 'node:crypto';
-import { getDb, nowIso, tx } from './sqlite.js';
+import { getDb, nowIso, tx } from './database.js';
 import { hashPassword } from '../auth/jwt.js';
 import { ORG_IDS, type Role } from '../domain.js';
 import { policy } from '../config/initiativePolicy.js';

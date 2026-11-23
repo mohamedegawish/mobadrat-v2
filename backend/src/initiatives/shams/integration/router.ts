@@ -21,7 +21,7 @@ import { createOrg, requestStaffAccount, updateOrg, updateStaffUser } from '../s
 import { cleanProviderInput, publicProvider } from '../routes/providers.js';
 import { recordProviderChange } from '../services/providerChanges.js';
 import { kickNotificationWorker } from '../jobs/notificationWorker.js';
-import { tx } from '../db/sqlite.js';
+import { tx } from '../db/database.js';
 import { sendStoredPdf } from '../http/upload.js';
 import { APPLICATION_STATES, type ApplicationState } from '../workflow/shamsWorkflow.js';
 import { ORG_TYPES, ROLES, type OrgType, type Role } from '../domain.js';

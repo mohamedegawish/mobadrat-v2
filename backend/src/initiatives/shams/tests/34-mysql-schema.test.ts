@@ -9,7 +9,7 @@ const env = isolateTestEnv('myschema');
 before(async () => {
   const { registerModuleMigrations } = await import('../../../core/boot.js');
   registerModuleMigrations();
-  await (await import('../db/sqlite.js')).initDb();
+  await (await import('../db/database.js')).initDb();
 });
 after(async () => { await env.cleanup(); });
 
@@ -39,7 +39,7 @@ test('S-3 the partial-unique keys and the history triggers exist (constraint and
 });
 
 test('S-4 the partial unique rules hold on MySQL: one open application per factory and per submitted registry number', async () => {
-  const { getDb } = await import('../db/sqlite.js');
+  const { getDb } = await import('../db/database.js');
   const db = getDb();
   const now = new Date().toISOString();
   const ins = (id: string, fac: string, state: string, reg: string | null) => db.prepare(`INSERT INTO shams_applications (id, factoryId, state, industrialRegistryNumber, stateEnteredAt, createdAt, updatedAt)
@@ -58,7 +58,7 @@ test('S-4 the partial unique rules hold on MySQL: one open application per facto
 });
 
 test('S-5 CHECK constraints, character lengths, binary ids and case-insensitive e-mail behave as in SQLite', async () => {
-  const { getDb } = await import('../db/sqlite.js');
+  const { getDb } = await import('../db/database.js');
   const db = getDb();
   const now = new Date().toISOString();
   await assert.rejects(db.prepare("INSERT INTO shams_organizations (id, type, nameAr, nameEn, createdAt, updatedAt) VALUES ('o-x', 'bogus', 'x', 'x', ?, ?)").run(now, now),
@@ -88,7 +88,7 @@ test('S-5 CHECK constraints, character lengths, binary ids and case-insensitive 
 });
 
 test('S-6 migration 011: new states, the distribution document kind and the two-path constraints are enforced on MySQL', async () => {
-  const { getDb } = await import('../db/sqlite.js');
+  const { getDb } = await import('../db/database.js');
   const db = getDb();
   const now = new Date().toISOString();
   await db.prepare("INSERT INTO shams_organizations (id, type, nameAr, nameEn, createdAt, updatedAt) VALUES ('org-f11', 'factory', 'مصنع 11', 'F11', ?, ?)").run(now, now);

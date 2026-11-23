@@ -13,7 +13,7 @@
 **حساب واحد لكل شخص.** من يسجّل في مبادرة ثم يقدّم على أخرى يرى فقط البيانات والمستندات الناقصة لها. بياناته المحفوظة تُعبّأ تلقائيًا. ومن له أكثر من مبادرة يختار لوحة أيها يدخل.
 
 - المعمارية وطريقة إضافة مبادرة جديدة: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- النشر وترحيل البيانات القديمة: [docs/DEPLOY.md](docs/DEPLOY.md)
+- النشر على Coolify (Docker Compose: التطبيق + MySQL 8.4) من غير أي إعداد، مع حساب لكل دور من أول نشر: [docs/DEPLOY.md](docs/DEPLOY.md)
 
 ## المكونات
 
@@ -22,7 +22,7 @@ backend/     Node 22 + Express + TypeScript + MySQL 8.4
   src/core/                 المنصة: الحسابات، العضويات، الملفات المشتركة، الكتالوج، الإدارة، الإشعارات، التدقيق
   src/initiatives/shams/    وحدة شمس الصناعة (كودها، جداولها shams_*، اختباراتها)
   src/initiatives/sona3/    وحدة صُنّاع المستقبل (كودها، جداولها sona3_*، اختباراتها)
-  src/cli/                  migrate · seed · createSuperAdmin · checkReadiness · legacy-import
+  src/cli/                  migrate · seed · seedDeploy · createSuperAdmin · checkReadiness · legacy-import (اختياري)
 frontend/    React 18 + Vite
   src/platform/             الموقع العام، الدخول، اختيار المبادرة، الملف الشخصي، التقديم، لوحة الإدارة
   src/initiatives/<id>/     واجهة كل مبادرة (تُحمَّل عند الحاجة تحت #i/<id>/…)

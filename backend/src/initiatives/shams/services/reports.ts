@@ -1,5 +1,5 @@
 /** التقارير والملخصات — دالة واحدة لـ /reports/summary و Integration GET /summary. */
-import { getDb, sqlDaysBetween } from '../db/sqlite.js';
+import { getDb, sqlDaysBetween } from '../db/database.js';
 import { mapSeq } from '../http/helpers.js';
 import type { SqlParam } from '../http/helpers.js';
 import { listApplications, listTransitionsFor, getBankReferralsFor, getDistributionContractsFor, type AppRow } from '../store/applications.js';

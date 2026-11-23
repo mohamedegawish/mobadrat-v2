@@ -44,13 +44,13 @@ test('Z-2 the boot seed fills the table once; running it again changes nothing',
   const { seedIndustrialZones } = await import('../../../core/reference/referenceSeed.js');
   assert.deepEqual(await seedIndustrialZones(), { inserted: 0, updated: 0, deactivated: 0 });
   // initDb (the production boot path) runs it too, still a no-op.
-  const { initDb } = await import('../db/sqlite.js');
+  const { initDb } = await import('../db/database.js');
   await initDb();
   assert.equal((await q<{ n: number }>('SELECT COUNT(*) AS n FROM industrial_zones'))[0].n, 158);
 });
 
 test('Z-3 re-seeding repairs edited seed rows, deactivates removed ones (never deletes), and leaves non-seed rows alone', async () => {
-  const { getDb } = await import('../db/sqlite.js');
+  const { getDb } = await import('../db/database.js');
   const { seedIndustrialZones, loadZoneCache } = await import('../../../core/reference/referenceSeed.js');
   const { isValidZone, findGovernorate, zoneLabel } = await import('../config/locations.js');
   const db = getDb();

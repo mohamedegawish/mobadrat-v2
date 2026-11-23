@@ -3,7 +3,7 @@
  * + outbox الإشعارات + outbox الـwebhook) مع expectedVersion. لا انتقال خارج TRANSITIONS.
  */
 import { randomUUID } from 'node:crypto';
-import { tx, nowIso, getDb } from '../db/sqlite.js';
+import { tx, nowIso, getDb } from '../db/database.js';
 import { AppError, Errors, type ErrorDetail } from '../http/errors.js';
 import { isIsoDate, isObj, onlyKeys, type Obj } from '../http/validate.js';
 import type { UserInternal } from '../store/users.js';

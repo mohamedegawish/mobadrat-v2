@@ -1,6 +1,6 @@
 /** إدارة الجهات والحسابات — مشتركة بين شاشات الأدمن وAPI الربط (manage_users). */
 import { randomBytes } from 'node:crypto';
-import { getDb, tx } from '../db/sqlite.js';
+import { getDb, tx } from '../db/database.js';
 import { AppError, Errors } from '../http/errors.js';
 import { Checker, isEmail, isPhone, normalizeDigits, onlyKeys, type Obj } from '../http/validate.js';
 import { hashPassword, sha256 } from '../auth/jwt.js';

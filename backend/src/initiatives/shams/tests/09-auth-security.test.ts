@@ -82,7 +82,7 @@ test('M3: escalating delay per (email, IP) instead of locking the account', asyn
   assert.equal((await q<{ lockedUntil: string | null }>('SELECT lockedUntil FROM users WHERE email = ?', DEV.encpc))[0].lockedUntil, null);
   assert.equal((await c.post('/auth/login', { email: DEV.pmu, password: 'Shams@2026' })).status, 200, 'other accounts unaffected');
   // بعد انقضاء مهلة الانتظار يعمل الدخول الصحيح ويمسح العداد.
-  const { getDb } = await import('../db/sqlite.js');
+  const { getDb } = await import('../db/database.js');
   await getDb().prepare("UPDATE login_throttle SET nextAllowedAt = '2000-01-01T00:00:00.000Z'").run();
   assert.equal((await c.post('/auth/login', { email: DEV.encpc, password: 'Shams@2026' })).status, 200);
   assert.equal((await c.post('/auth/login', { email: 'nobody@test.local', password: 'x' })).status, 401, 'unknown email: same response as a wrong password');
@@ -186,7 +186,7 @@ test('forgot/reset password: generic response, single-use link, sessions revoked
 });
 
 test('audit log is append-only and never stores secrets', async () => {
-  const { getDb } = await import('../db/sqlite.js');
+  const { getDb } = await import('../db/database.js');
   await assert.rejects(async () => await getDb().prepare("UPDATE audit_logs SET action = 'x'").run(), /append-only/);
   await assert.rejects(async () => await getDb().prepare('DELETE FROM audit_logs').run(), /append-only/);
   const rows = await q<{ details: string }>('SELECT details FROM audit_logs');
@@ -210,7 +210,7 @@ test('health endpoints', async () => {
 });
 
 test('L4: outbox rows stuck in "sending" after a crash are reclaimed and delivered, fresh claims are left alone', async () => {
-  const { getDb } = await import('../db/sqlite.js');
+  const { getDb } = await import('../db/database.js');
   const { reclaimStaleSending } = await import('../store/outbox.js');
   const db = getDb();
   const row = await db.prepare("SELECT id FROM notification_outbox LIMIT 1").get() as { id: string } | undefined;

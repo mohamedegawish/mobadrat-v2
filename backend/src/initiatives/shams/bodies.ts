@@ -5,7 +5,7 @@
  *   decisions workflow transitions taken by its staff (shams_application_transitions.actorOrgId)
  *   pending   open applications in a state where its role has an action (IMC, ENCPC, PMU; banks have no account — G-02)
  */
-import { getDb } from './db/sqlite.js';
+import { getDb } from './db/database.js';
 import { MODULE_ID } from './config.js';
 import { TRANSITIONS } from './workflow/shamsWorkflow.js';
 import type { BodyActivity, InitiativeBodies, ModuleBody } from '../contract.js';

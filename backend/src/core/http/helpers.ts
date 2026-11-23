@@ -5,7 +5,7 @@ export function newId(prefix: string): string {
   return `${prefix}-${randomUUID()}`;
 }
 
-/** Params accepted by node:sqlite prepared statements. */
+/** Params accepted by the database layer's prepared statements (MySQL). */
 export type SqlParam = string | number | bigint | null | NodeJS.ArrayBufferView;
 
 /**

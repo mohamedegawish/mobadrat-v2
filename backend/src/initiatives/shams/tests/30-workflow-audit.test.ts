@@ -29,7 +29,7 @@ const history = (id: string) => q<{ fromState: string; toState: string; action: 
   'SELECT fromState, toState, action, actorRole, actorUserId, reason, attempt, payload FROM shams_application_transitions WHERE applicationId = ? ORDER BY createdAt, rowid', id);
 const actionsOf = async (cl: Client, id: string) => (await getApp(cl, id)).allowedActions.map((a: { action: string }) => a.action).sort();
 async function dbRun(sql: string, ...params: Array<string | number | null>) {
-  const { getDb } = await import('../db/sqlite.js');
+  const { getDb } = await import('../db/database.js');
   await getDb().prepare(sql).run(...params);
 }
 async function upload(cl: Client, id: string, kind: string, tag: string) {

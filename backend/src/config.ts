@@ -85,7 +85,8 @@ export const config = {
   /** Root of all uploaded files. Each module stores under <uploadDir>/<moduleId>/…, the core under <uploadDir>/core/…. */
   get uploadDir(): string { return process.env.UPLOAD_DIR ?? path.join(rootDir, 'data', 'uploads'); },
   get corsOrigin(): string[] {
-    return (process.env.CORS_ORIGIN ?? 'http://localhost:5173,http://127.0.0.1:5173').split(',').map((s) => s.trim()).filter(Boolean);
+    // an origin never has a trailing slash (a URL copied from the browser or a generated SERVICE_URL may have one)
+    return (process.env.CORS_ORIGIN ?? 'http://localhost:5173,http://127.0.0.1:5173').split(',').map((s) => s.trim().replace(/\/+$/, '')).filter(Boolean);
   },
   jsonLimit: process.env.JSON_LIMIT ?? '1mb',
   rateWindowMs: num('RATE_WINDOW_MS', 60_000),
@@ -202,7 +203,7 @@ export function mockRegistryAllowedInProd(): boolean { return process.env.ALLOW_
 export function assertProductionSafe(): void {
   if (!config.isProd) return;
   const problems: string[] = [];
-  if (!process.env.JWT_SECRET || config.jwtSecret === DEV_JWT_SECRET) problems.push('JWT_SECRET must be set to a strong random value.');
+  if (!process.env.JWT_SECRET || config.jwtSecret === DEV_JWT_SECRET) problems.push('JWT_SECRET must be set to a strong random value (or SECRETS_DIR must be a writable directory, where the platform generates it).');
   else if (config.jwtSecret.length < PROD_LIMITS.jwtSecretMinLength) problems.push(`JWT_SECRET is too short (min ${PROD_LIMITS.jwtSecretMinLength} chars).`);
   if (config.jwtAccessTtlSec > PROD_LIMITS.accessTtlMaxSec) problems.push(`JWT_ACCESS_TTL_SEC must be at most ${PROD_LIMITS.accessTtlMaxSec}.`);
   if (config.jwtRefreshTtlSec > PROD_LIMITS.refreshTtlMaxSec) problems.push(`JWT_REFRESH_TTL_SEC must be at most ${PROD_LIMITS.refreshTtlMaxSec}.`);

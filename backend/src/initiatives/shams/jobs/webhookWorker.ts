@@ -4,7 +4,7 @@
  */
 import { createHmac } from 'node:crypto';
 import { config } from '../config.js';
-import { nowIso } from '../db/sqlite.js';
+import { nowIso } from '../db/database.js';
 import { claimWebhook, listDueWebhooks, markWebhookDelivered, markWebhookRetry, reclaimStaleSending } from '../store/outbox.js';
 import { trackJob } from './inflight.js';
 

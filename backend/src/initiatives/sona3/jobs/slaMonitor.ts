@@ -3,7 +3,7 @@
  * لا رفض ولا إغلاق تلقائي — إشعار وعلامة تأخر فقط.
  */
 import { config } from '../config.js';
-import { getDb } from '../db/sqlite.js';
+import { getDb } from '../db/database.js';
 import { policy } from '../config/initiativePolicy.js';
 import { getApplication } from '../store/applications.js';
 import { dispatch, applicantRecipients, orgRecipients, imcRecipients } from '../notifications/notify.js';

@@ -15,7 +15,7 @@ test('likePattern escapes %, _ and backslash so they match literally', async () 
   assert.equal(likePattern('a%b_c'), '%a\\%b\\_c%');
   assert.equal(likePattern('x\\y'), '%x\\\\y%');
   assert.equal(likePattern('plain'), '%plain%');
-  const { getDb } = await import('../db/sqlite.js');
+  const { getDb } = await import('../db/database.js');
   const db = getDb();
   if (onMysql) {
     // MySQL: a TEMPORARY table is per connection (the pool would not see it) — a plain table in this file's test database;

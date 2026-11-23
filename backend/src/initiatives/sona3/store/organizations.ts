@@ -1,4 +1,4 @@
-import { getDb, nowIso } from '../db/sqlite.js';
+import { getDb, nowIso } from '../db/database.js';
 import { newId, likePattern, type SqlParam, filterSeq } from '../http/helpers.js';
 import { ORG_IDS, type OrgType } from '../domain.js';
 
