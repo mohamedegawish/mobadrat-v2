@@ -71,7 +71,8 @@ function mysqlSettings(): MysqlSettings {
   };
 }
 
-export type RegistryAdapterName = 'mock' | 'http';
+/** http = the registry API; manual = IMC checks the uploaded certificate (until the API is connected); mock = development. */
+export type RegistryAdapterName = 'mock' | 'http' | 'manual';
 
 export const config = {
   get env(): string { return process.env.NODE_ENV ?? 'development'; },
@@ -139,7 +140,7 @@ export const config = {
   // ── Industrial registry (used by the Shams El-Senaa module and the factory profile) ──
   get registryAdapter(): RegistryAdapterName {
     const v = (process.env.REGISTRY_ADAPTER ?? (this.isProd ? 'http' : 'mock')).trim();
-    return v === 'http' ? 'http' : 'mock';
+    return v === 'http' || v === 'manual' ? v : 'mock';
   },
   get registryApiUrl(): string { return (process.env.REGISTRY_API_URL ?? '').trim().replace(/\/$/, ''); },
   get registryApiKey(): string { return process.env.REGISTRY_API_KEY ?? ''; },

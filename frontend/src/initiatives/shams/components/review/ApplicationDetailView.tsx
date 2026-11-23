@@ -88,7 +88,8 @@ export const ApplicationDetailView: React.FC = () => {
             <div className="card">
               <h3 style={{ marginTop: 0, fontSize: '0.98rem' }}><BadgeCheck size={16} style={{ verticalAlign: '-3px' }} /> {t('نتيجة التحقق من السجل الصناعي', 'Industrial registry verification')}</h3>
               <dl className="kv">
-                <dt>{t('النتيجة', 'Result')}</dt><dd>{app.registry.result === 'valid' ? t('صحيح ومسجل', 'Valid') : app.registry.result === 'invalid' ? t('غير صحيح', 'Invalid') : t('تعذر التحقق', 'Unavailable')}</dd>
+                <dt>{t('النتيجة', 'Result')}</dt><dd>{app.registry.result === 'valid' ? t('صحيح ومسجل', 'Valid') : app.registry.result === 'invalid' ? t('غير صحيح', 'Invalid')
+                  : app.registry.result === 'manual' ? t('مراجعة يدوية — لم يُتحقق منه آليًا', 'Manual check — not verified automatically') : t('تعذر التحقق', 'Unavailable')}</dd>
                 <dt>{t('رقم السجل', 'Registry number')}</dt><dd className="num-ltr">{app.registry.registryNumber}</dd>
                 <dt>{t('وقت التحقق', 'Checked at')}</dt><dd>{formatDate(app.registry.checkedAt, isAr, true)}</dd>
                 {/* M1: بيانات السجل بتسميات عربية، بجانب بيانات الطلب */}
@@ -97,6 +98,7 @@ export const ApplicationDetailView: React.FC = () => {
                 ))}
                 {app.registry.nameCheck ? <><dt>{t('اسم الشركة في الطلب', 'Company name in the application')}</dt><dd>{app.registry.nameCheck.applicationName}</dd></> : null}
               </dl>
+              {app.registry.result === 'manual' ? <RegistryManualNotice /> : null}
               {/* I3: تمييز عدم تطابق الاسم — للمراجع، دون منع آلي */}
               {app.registry.nameCheck && !app.registry.nameCheck.matches ? (
                 <div className="error-box" style={{ marginTop: '0.6rem' }} data-testid="name-mismatch">
@@ -271,6 +273,18 @@ const DistributionPanel: React.FC<{ app: ApplicationDetail }> = ({ app }) => {
 };
 
 /** أزرار القرار من allowedActions + نموذج القرار (سبب / نواقص) + تأكيد. لا قرارات بنكية (G-02). */
+/** The registry API is not connected yet (REGISTRY_ADAPTER=manual): the number was not verified — IMC checks it by hand. */
+const RegistryManualNotice: React.FC = () => {
+  const { t } = useStore();
+  return (
+    <div className="error-box" style={{ marginTop: '0.6rem' }} data-testid="registry-manual">
+      <ShieldAlert size={15} style={{ verticalAlign: '-3px' }} /> {t(
+        'خدمة السجل الصناعي غير مربوطة بعد، فلم يُتحقق من الرقم آليًا. قبل القرار: افتح «شهادة السجل الصناعي» في المستندات وتأكد أن رقم السجل واسم المنشأة فيها يطابقان الطلب.',
+        'The industrial registry service is not connected yet, so the number was not verified automatically. Before deciding, open the industrial registry certificate in the documents and check that its number and facility name match the application.')}
+    </div>
+  );
+};
+
 const DecisionPanel: React.FC<{ app: ApplicationDetail; actions: AllowedAction[]; onDone: () => Promise<void> }> = ({ app, actions, onDone }) => {
   const { isAr, t, meta } = useStore();
   const { toast } = useToast();
@@ -325,6 +339,7 @@ const DecisionPanel: React.FC<{ app: ApplicationDetail; actions: AllowedAction[]
   return (
     <div className="decision-panel" data-testid="decision-panel">
       <h3 style={{ marginTop: 0, fontSize: '1rem' }}><Gavel size={16} style={{ verticalAlign: '-3px' }} /> {t('القرار', 'Decision')}</h3>
+      {app.registry?.result === 'manual' && app.state === 'IMC_REVIEW' ? <RegistryManualNotice /> : null}
       <div className="decision-actions">
         {actions.map((a) => (
           <button key={a.action} type="button" data-testid={`action-${a.action}`}

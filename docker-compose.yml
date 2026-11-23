@@ -61,9 +61,11 @@ services:
       JWT_SECRET: ${JWT_SECRET:-${SERVICE_PASSWORD_64_JWT}}
       JWT_ACCESS_TTL_SEC: ${JWT_ACCESS_TTL_SEC:-900}
       JWT_REFRESH_TTL_SEC: ${JWT_REFRESH_TTL_SEC:-604800}
-      # ── Shams El-Senaa: industrial registry (production refuses the mock adapter) ──
-      # http in a real deployment; mock (+ ALLOW_MOCK_REGISTRY_IN_PRODUCTION=1) only for a demo deployment.
-      REGISTRY_ADAPTER: ${REGISTRY_ADAPTER:-http}
+      # ── Shams El-Senaa: industrial registry ──
+      # manual (default until the registry API is connected): factories register normally and upload their industrial
+      # registry certificate; IMC checks the number against it. http + REGISTRY_API_URL/KEY: automatic verification.
+      # mock is for development only (refused in production unless ALLOW_MOCK_REGISTRY_IN_PRODUCTION=1).
+      REGISTRY_ADAPTER: ${REGISTRY_ADAPTER:-manual}
       ALLOW_MOCK_REGISTRY_IN_PRODUCTION: ${ALLOW_MOCK_REGISTRY_IN_PRODUCTION:-0}
       REGISTRY_API_URL: ${REGISTRY_API_URL:-}
       REGISTRY_API_KEY: ${REGISTRY_API_KEY:-}

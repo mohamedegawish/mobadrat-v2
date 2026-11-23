@@ -273,7 +273,8 @@ export const ApplicationWizard: React.FC = () => {
         </div>
       ) : null}
 
-      {app.registry && app.registry.result !== 'valid' ? (
+      {/* manual = no registry API yet: nothing failed, IMC checks the certificate — no message to the factory */}
+      {app.registry && app.registry.result !== 'valid' && app.registry.result !== 'manual' ? (
         <ErrorBox style={{ marginBottom: '1rem' }} message={app.registry.result === 'invalid'
           ? t('آخر تحقق: رقم السجل الصناعي غير صحيح أو غير مسجل. صحّح الرقم في «أوراق الشركة» ثم أعد الإرسال — بياناتك محفوظة.', 'Last check: the industrial registry number is invalid. Correct it under “Company papers” and submit again — your data is saved.')
           : t('آخر تحقق: تعذر الوصول لخدمة السجل الصناعي. طلبك محفوظ — أعد المحاولة لاحقًا.', 'Last check: the industrial registry service was unavailable. Your application is saved — retry later.')} />

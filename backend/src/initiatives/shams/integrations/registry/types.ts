@@ -1,4 +1,4 @@
-/** واجهة التحقق من السجل الصناعي — adapter حقيقي (http) وadapter للتطوير (mock). */
+/** واجهة التحقق من السجل الصناعي — adapter حقيقي (http)، وتحقق يدوي من IMC (manual)، وadapter للتطوير (mock). */
 export interface FacilityData {
   registryNumber: string;
   facilityName?: string;
@@ -12,7 +12,9 @@ export interface FacilityData {
 export type RegistryResult =
   | { result: 'valid'; facility: FacilityData }
   | { result: 'invalid'; errorCode?: string }
-  | { result: 'unavailable'; errorCode: string };
+  | { result: 'unavailable'; errorCode: string }
+  /** Manual verification (no registry API yet): IMC checks the number against the uploaded certificate. */
+  | { result: 'manual' };
 
 /**
  * H3 (القرار 5): بيانات مقدم الطلب التي قد تُطابق ببيانات المالك/المفوض في السجل عند توفرها.
@@ -35,7 +37,7 @@ export type OwnershipResult =
   | { status: 'not_available' };
 
 export interface IndustrialRegistryClient {
-  readonly name: 'mock' | 'http';
+  readonly name: 'mock' | 'http' | 'manual';
   verify(registryNumber: string): Promise<RegistryResult>;
   /**
    * اختيارية: مطابقة المالك/المفوض. غيابها = not_available. النتيجة تُسجَّل وتُعرض لـ IMC وPMU فقط — لا منع آلي

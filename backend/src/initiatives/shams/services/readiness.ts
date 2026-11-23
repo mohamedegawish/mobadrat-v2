@@ -100,6 +100,17 @@ export async function readinessReport() {
     detailAr: failed ? `${failed} رسالة فشل إرسالها بعد كل المحاولات — راجع «سجل الإشعارات».` : 'لا توجد رسائل فاشلة.',
     detailEn: failed ? `${failed} message(s) failed after all retries.` : 'No failed messages.',
   });
+  const registryApi = config.registryAdapter === 'http' && Boolean(config.registryApiUrl);
+  checks.push({
+    key: 'registry_api', ok: registryApi,
+    labelAr: 'خدمة السجل الصناعي مربوطة', labelEn: 'Industrial registry service connected',
+    detailAr: registryApi ? 'رقم السجل يُتحقق منه آليًا عند الإرسال.'
+      : config.registryAdapter === 'manual' ? 'تحقق يدوي (REGISTRY_ADAPTER=manual): IMC تراجع رقم السجل على «شهادة السجل الصناعي» المرفوعة مع كل طلب، حتى يُربط API السجل.'
+        : 'REGISTRY_API_URL غير مضبوط — لا يمكن التحقق من السجل ولا تسجيل المصانع (اضبطه، أو REGISTRY_ADAPTER=manual للتحقق اليدوي).',
+    detailEn: registryApi ? 'Registry numbers are verified automatically on submission.'
+      : config.registryAdapter === 'manual' ? 'Manual verification: IMC checks each number against the uploaded certificate until the registry API is connected.'
+        : 'REGISTRY_API_URL is not set — factories cannot register (set it, or REGISTRY_ADAPTER=manual).',
+  });
   const support = Boolean(config.supportEmail && config.supportPhone);
   checks.push({
     key: 'support_contact', ok: support,

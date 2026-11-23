@@ -45,7 +45,7 @@ ENV NODE_ENV=production \
     SERVE_FRONTEND=1 \
     FRONTEND_DIST=/app/public \
     TRUST_PROXY=1 \
-    REGISTRY_ADAPTER=http
+    REGISTRY_ADAPTER=manual
 COPY backend/package.json ./
 COPY --from=api /app/node_modules ./node_modules
 COPY --from=api /app/dist ./dist

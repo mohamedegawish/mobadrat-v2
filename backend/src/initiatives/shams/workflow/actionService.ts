@@ -263,7 +263,7 @@ export async function performAction(user: UserInternal, appId: string, actionRaw
   const primary = owned[0];
 
   // ── فحوص ما قبل المعاملة ──
-  let registry: { number: string; result: RegistryResult; adapter: 'mock' | 'http' } | null = null;
+  let registry: { number: string; result: RegistryResult; adapter: 'mock' | 'http' | 'manual' } | null = null;
   let formData: FormData | null = null;
   let snapshotFp: string | null = null;
   let regNumber = '';
@@ -312,7 +312,9 @@ export async function performAction(user: UserInternal, appId: string, actionRaw
     }
   }
 
-  const registryValid = registry ? registry.result.result === 'valid' : true;
+  // 'manual' (REGISTRY_ADAPTER=manual, no registry API yet) lets the submission through like 'valid', recorded as 'manual':
+  // IMC checks the number against the uploaded industrial registry certificate before its decision.
+  const registryValid = registry ? registry.result.result === 'valid' || registry.result.result === 'manual' : true;
   const def = pickTransition(owned, registryValid ? 'valid' : 'not_valid');
   const now = nowIso();
   const actor = { actorUserId: user.id, actorRole: user.role, actorOrgId: user.organizationId, actorName: user.nameAr };
@@ -340,7 +342,7 @@ export async function performAction(user: UserInternal, appId: string, actionRaw
     if (registry && !registryValid) {
       const ver = await insertRegistryVerification({
         applicationId: cur.id, registryNumber: registry.number, result: registry.result.result as 'invalid' | 'unavailable', facilityData: null,
-        adapter: registry.adapter, errorCode: registry.result.result === 'valid' ? null : (registry.result.errorCode ?? null),
+        adapter: registry.adapter, errorCode: 'errorCode' in registry.result ? (registry.result.errorCode ?? null) : null,
       }, user.id);
       const t = await insertTransition({
         applicationId: cur.id, fromState: cur.state, toState: cur.state, action, ...actor, reason: '', attempt: cur.attempt,
@@ -359,10 +361,12 @@ export async function performAction(user: UserInternal, appId: string, actionRaw
     if (isTerminal(def.to)) { sets.push('closedAt = ?'); vals.push(now); }
 
     let verificationId: string | null = null;
+    let verifiedAs: 'valid' | 'manual' = 'valid';
     if (registry && registryValid) {
       const facility = registry.result.result === 'valid' ? registry.result.facility : null;
+      verifiedAs = registry.result.result === 'manual' ? 'manual' : 'valid';
       verificationId = (await insertRegistryVerification({
-        applicationId: cur.id, registryNumber: registry.number, result: 'valid', facilityData: facility as unknown as Record<string, unknown>,
+        applicationId: cur.id, registryNumber: registry.number, result: verifiedAs, facilityData: facility as unknown as Record<string, unknown>,
         adapter: registry.adapter, errorCode: null,
       }, user.id)).id;
       sets.push('registryVerificationId = ?', 'verifiedRegistryNumber = ?'); vals.push(verificationId, registry.number);
@@ -412,7 +416,7 @@ export async function performAction(user: UserInternal, appId: string, actionRaw
         ...(distributionDecision ? { contractPath: 'distribution', decision: action === 'accept' ? 'approved' : 'rejected' } : {}),
         ...(action === 'select_provider' && cur.providerId ? { previousProviderId: cur.providerId } : {}),
         ...(discardedOffers.length ? { discardedUnsentOfferIds: discardedOffers } : {}),
-        ...(verificationId ? { registryResult: 'valid', registryVerificationId: verificationId } : {}),
+        ...(verificationId ? { registryResult: verifiedAs, registryVerificationId: verificationId } : {}),
       },
     });
 

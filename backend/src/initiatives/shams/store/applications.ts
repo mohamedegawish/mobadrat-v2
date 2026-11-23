@@ -181,7 +181,7 @@ export async function nextApplicationNumber(): Promise<string> {
 // ── التحقق من السجل ─────────────────────────────────────────────────────────
 
 export interface RegistryVerificationRow {
-  id: string; applicationId: string; registryNumber: string; result: 'valid' | 'invalid' | 'unavailable';
+  id: string; applicationId: string; registryNumber: string; result: 'valid' | 'invalid' | 'unavailable' | 'manual';
   facilityData: Record<string, unknown> | null; adapter: string; errorCode: string | null; checkedAt: string;
   /** H3 (القرار 5): نتيجة مطابقة المالك/المفوض — not_available حتى يوفرها API السجل. لا منع آلي. */
   ownershipCheck?: OwnershipCheck | null;

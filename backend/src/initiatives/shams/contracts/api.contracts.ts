@@ -107,7 +107,8 @@ export interface ApplicationDetail extends ApplicationListItem {
   factoryId?: string;
   data: Partial<Record<FormSection | 'provider' | 'electricity' | 'bank_result' | 'contract', Record<string, unknown>>>;
   registry: {
-    result: 'valid' | 'invalid' | 'unavailable'; registryNumber: string; checkedAt: string; facility: Record<string, unknown> | null; errorCode: string | null;
+    /** manual = no registry API yet: IMC checks the number against the uploaded industrial registry certificate. */
+    result: 'valid' | 'invalid' | 'unavailable' | 'manual'; registryNumber: string; checkedAt: string; facility: Record<string, unknown> | null; errorCode: string | null;
     /** بيانات السجل بتسميات عربية/إنجليزية (M1). */
     fields: { key: string; labelAr: string; labelEn: string; valueAr: string; valueEn: string }[];
     /** مقارنة اسم المنشأة في السجل باسم الشركة في الطلب — تمييز فقط، لا منع (I3). */
