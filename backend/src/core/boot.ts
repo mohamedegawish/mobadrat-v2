@@ -4,7 +4,7 @@
  */
 import { initDb, setMigrationSets } from './db/index.js';
 import { seedReferenceData } from './reference/referenceSeed.js';
-import { createCatalogItem, getCatalogByModule } from './catalog/initiatives.js';
+import { createCatalogItem, getCatalogByModule, syncUneditedCatalogRow } from './catalog/initiatives.js';
 import { MODULES } from '../initiatives/registry.js';
 
 let mailRegistered = false;
@@ -22,6 +22,8 @@ export async function bootPlatform(): Promise<void> {
     if (!(await getCatalogByModule(m.id))) {
       await createCatalogItem({ ...m.catalogDefaults, id: m.id, moduleId: m.id, titleAr: m.catalogDefaults.titleAr, slug: m.catalogDefaults.slug });
       console.log(`[catalog] created the catalog page of module ${m.id}`);
+    } else if (await syncUneditedCatalogRow(m.id, m.catalogDefaults)) {
+      console.log(`[catalog] updated the (never edited) catalog page of module ${m.id} to its built-in content`);
     }
     await m.onBoot?.();
   }

@@ -3,7 +3,7 @@
 // El-Senaa (facility data once, company documents reused, the wizard, IMC review, acceptance); the administration
 // suspending a membership / disabling an account with immediate effect; the unified notifications; the platform on a phone.
 import { test, expect, devices, type Page, type APIRequestContext } from '@playwright/test';
-import { PASSWORD, apiToken, latestMailFor, login, mailMatching, pdfFile, submitPlatformLogin } from './support/platform';
+import { PASSWORD, apiToken, latestMailFor, login, mailCountFor, mailMatching, pdfFile, submitPlatformLogin } from './support/platform';
 import { apiAct, apiFindApplication, expectShamsLocked } from './shams/helpers';
 import { apiSession, newApplicant, submittedApplication } from './sona3/helpers';
 
@@ -43,16 +43,16 @@ test('a new person: platform sign-up, unverified sign-in refused with a resend, 
   const errors = trackErrors(page);
   const email = `e2e.signup.${stamp()}@test.local`;
   await page.goto('/#register');
-  await field(page, 'الاسم الكامل').locator('input').fill('سارة محمود عبد الله');
-  await field(page, 'البريد الإلكتروني').locator('input').fill(email);
-  await field(page, 'رقم الموبايل').locator('input').fill('01012341234');
-  await field(page, 'كلمة المرور').locator('input').fill(NEW_PW);
-  await field(page, 'تأكيد كلمة المرور').locator('input').fill('Different2026x');
-  await page.getByRole('button', { name: 'إنشاء الحساب' }).click();
-  await expect(page.locator('.pf-field .err').first()).toBeVisible(); // passwords do not match: nothing is sent
-  await field(page, 'تأكيد كلمة المرور').locator('input').fill(NEW_PW);
-  await page.getByRole('button', { name: 'إنشاء الحساب' }).click();
-  await expect(page.locator('.pf-alert.ok')).toContainText(email);
+  await page.locator('#reg-name').fill('سارة محمود عبد الله');
+  await page.locator('#reg-email').fill(email);
+  await page.locator('#reg-phone').fill('01012341234');
+  await page.locator('#reg-pass').fill(NEW_PW);
+  await page.locator('#reg-confirm').fill('Different2026x');
+  await page.getByRole('button', { name: 'إنشاء حساب المنشأة وتفعيل البوابة' }).click();
+  await expect(page.locator('.error-box')).toContainText('تأكيد كلمة المرور غير متطابق'); // passwords do not match: nothing is sent
+  await page.locator('#reg-confirm').fill(NEW_PW);
+  await page.getByRole('button', { name: 'إنشاء حساب المنشأة وتفعيل البوابة' }).click();
+  await expect(page.getByTestId('register-ok')).toContainText(email);
 
   // Not activated yet: a clear refusal and a new link on request.
   await submitPlatformLogin(page, email, NEW_PW);
@@ -60,6 +60,8 @@ test('a new person: platform sign-up, unverified sign-in refused with a resend, 
   await expect(page).toHaveURL(/#login$/);
   await page.getByRole('button', { name: 'إعادة إرسال رابط التفعيل' }).click();
   await expect(page.getByText('أُرسل رابط تفعيل جديد إلى بريدك.')).toBeVisible();
+  // The new link replaces the first one: wait until the background worker has written it (registration mail + this one).
+  await expect.poll(() => mailCountFor(email)).toBe(2);
 
   const token = /#verify-email\/([a-f0-9]{64})/.exec(await latestMailFor(email))?.[1];
   expect(token).toBeTruthy();
@@ -75,7 +77,7 @@ test('a new person: platform sign-up, unverified sign-in refused with a resend, 
   await login(page, email, NEW_PW);
   await expect(page).toHaveURL(/#initiatives$/);
   await page.goto('/#hub');
-  await expect(page.getByText('لم تقدّم على أي مبادرة بعد.')).toBeVisible();
+  await expect(page.getByText('لا توجد مبادرات مرتبطة بحسابك بعد.')).toBeVisible();
 
   // «بياناتي»: saved once, still there after a reload; the name came from the sign-up.
   await page.goto('/#profile');
@@ -132,7 +134,7 @@ test('a platform account applies to Shams El-Senaa: facility data once, document
   const company = `مصنع المنصة للأجهزة ${stamp()}`;
   await login(page, email, NEW_PW);
   await page.goto('/#initiative/shams');
-  await page.getByText('قدّم على المبادرة').first().click();
+  await page.getByTestId('initiative-apply').first().click();
   await expect(page).toHaveURL(/#apply\/shams/);
   await expect(page.getByText('لا توجد منشأة في ملفك بعد')).toBeVisible();
 
@@ -234,7 +236,7 @@ test('the administration suspends a membership and disables an account: the open
   await row.getByRole('button', { name: 'إيقاف الحساب' }).click();
   await expect(row.getByText('موقوف')).toBeVisible();
   await page.reload();
-  await expect(page.getByText('لم تقدّم على أي مبادرة بعد.')).toHaveCount(0);
+  await expect(page.getByText('لا توجد مبادرات مرتبطة بحسابك بعد.')).toHaveCount(0);
   await expect(page.locator('.pf-hub-card')).toHaveCount(0);
   await submitPlatformLogin(page, a.email, a.password);
   await expect(page.locator('.pf-alert.err').first()).toBeVisible();
@@ -260,12 +262,13 @@ test('unified notifications: a decision in an initiative reaches the platform be
 
   await login(page, a.email, a.password);
   await page.goto('/#hub');
-  const bell = page.locator('.pf-bell .pf-count');
+  const bell = page.getByTestId('header-unread');
   await expect(bell).toBeVisible();
   await expect(bell).toHaveText('2');
   const before = 2;
 
-  await page.locator('.pf-bell').click();
+  await page.getByTestId('account-menu').click();
+  await page.getByTestId('header-notifications').click();
   await expect(page).toHaveURL(/#notifications/);
   const item = page.locator('button.pf-box', { hasText: 'صُنّاع المستقبل' }).first();
   await expect(item).toBeVisible();
@@ -277,15 +280,16 @@ test('unified notifications: a decision in an initiative reaches the platform be
   await expect(page).toHaveURL(/#hub/);
   if (before > 1) await expect(bell).toHaveText(String(before - 1));
   else await expect(bell).toHaveCount(0);
-  await page.locator('.pf-bell').click();
+  await page.getByTestId('account-menu').click();
+  await page.getByTestId('header-notifications').click();
   await expect(page).toHaveURL(/#notifications/);
   await expect(page.locator('button.pf-box').first()).toBeVisible();
   if (before > 1) await page.getByRole('button', { name: 'تعليم الكل كمقروء' }).click();
   await expect(page.getByRole('button', { name: 'تعليم الكل كمقروء' })).toHaveCount(0);
-  await expect(page.locator('.pf-bell .pf-count')).toHaveCount(0);
+  await expect(page.getByTestId('header-unread')).toHaveCount(0);
   await page.reload();
   await expect(page.locator('button.pf-box').first()).toBeVisible();
-  await expect(page.locator('.pf-bell .pf-count')).toHaveCount(0);
+  await expect(page.getByTestId('header-unread')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 
@@ -308,7 +312,7 @@ test.describe('on a phone', () => {
     await expect(page).toHaveURL(/#initiatives$/);
     await noHorizontalScroll(page);
     await page.goto('/#hub');
-    await expect(page.getByText('لم تقدّم على أي مبادرة بعد.')).toBeVisible();
+    await expect(page.getByText('لا توجد مبادرات مرتبطة بحسابك بعد.')).toBeVisible();
     await noHorizontalScroll(page);
     await page.goto('/#profile');
     await expect(field(page, 'الاسم الرباعي').locator('input')).toHaveValue('مستخدم الموبايل');

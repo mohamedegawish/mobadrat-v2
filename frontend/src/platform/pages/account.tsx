@@ -1,5 +1,5 @@
 /**
- * The signed-in person: the initiative chooser (hub), the shared profile (person, factories, reusable documents), the
+ * The signed-in person: the shared profile (person, factories, reusable documents), the
  * "apply to an initiative" step that shows only the missing data, and the unified notifications.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -8,7 +8,6 @@ import { api, errText, fieldErrors, type Governorate, type ProfileDoc, type Prof
 import { usePlatform, store } from '../store';
 import { Alert, Loading } from '../layout';
 import { issueText } from './auth';
-import { clearPlatformFlash, peekPlatformFlash, type PlatformFlash } from '../../core/session';
 
 // ── profile field input (driven by the platform's field catalog) ──────────
 
@@ -112,74 +111,6 @@ const DocRow: React.FC<{ kind: string; label: string; doc: ProfileDoc | null; ow
           <input type="file" accept="application/pdf,.pdf" hidden onChange={(e) => void upload(e.target.files?.[0])} />
         </label>
       </div>
-    </div>
-  );
-};
-
-// ── hub (initiative chooser) ────────────────────────────────────────────
-
-const TONE: Record<string, string> = { success: 'ok', warning: 'warn', danger: 'bad', info: 'info', neutral: '' };
-
-export const HubPage: React.FC = () => {
-  const { t, isAr, me } = usePlatform();
-  const [flash] = useState<PlatformFlash | null>(() => peekPlatformFlash());
-  useEffect(() => { clearPlatformFlash(); void store.reloadMe(); }, []);
-  if (!me) return <Loading />;
-  const ms = me.memberships;
-  return (
-    <div className="pf-container pf-page pf-gap">
-      <div className="pf-section-head">
-        <div><h2>{t('مبادراتي', 'My initiatives')}</h2><p>{t('اختر المبادرة التي تريد الدخول على لوحتها.', 'Choose the initiative whose dashboard you want to open.')}</p></div>
-        <a className="btn btn-outline" href="#initiatives"><Plus size={16} /> {t('التقديم على مبادرة أخرى', 'Apply to another initiative')}</a>
-      </div>
-      {flash ? (
-        <div data-testid={flash.testId} role="status">
-          <Alert tone={flash.tone}><b>{isAr ? flash.titleAr : flash.titleEn}</b>{flash.textAr ? <div>{isAr ? flash.textAr : flash.textEn}</div> : null}</Alert>
-        </div>
-      ) : null}
-      {me.user.platformRole ? (
-        <div className="pf-box" style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-          <div><b><ShieldCheck size={18} style={{ verticalAlign: 'middle' }} /> {isAr ? me.platformRoleLabel?.ar : me.platformRoleLabel?.en}</b><div className="pf-muted">{t('لوحة الإدارة الموحدة لكل المبادرات', 'The unified administration of every initiative')}</div></div>
-          <a className="btn btn-primary" href="#admin">{t('لوحة الإدارة', 'Administration')}</a>
-        </div>
-      ) : null}
-      {ms.length === 0 && !me.adminEntries.length ? (
-        <div className="pf-box pf-empty">
-          <p>{t('لم تقدّم على أي مبادرة بعد.', 'You have not applied to any initiative yet.')}</p>
-          <a className="btn btn-primary" href="#initiatives" style={{ marginTop: 12 }}>{t('تصفح المبادرات', 'Browse initiatives')}</a>
-        </div>
-      ) : (
-        <div className="pf-hub-grid">
-          {ms.map((m) => (
-            <div key={m.initiativeId} className="pf-hub-card">
-              <div className="pf-hub-head" style={{ background: `linear-gradient(135deg, ${m.themeColor}, ${m.accentColor})` }}>
-                <div style={{ fontSize: 12.5, opacity: 0.9 }}>{isAr ? m.roleLabelAr : m.roleLabelEn}</div>
-                <h3>{isAr ? m.titleAr : m.titleEn}</h3>
-              </div>
-              <div className="pf-hub-body">
-                {m.status !== 'active' ? <Alert tone="err">{t('عضويتك في هذه المبادرة موقوفة.', 'Your membership in this initiative is suspended.')}</Alert> : null}
-                {m.card ? (
-                  <>
-                    <div><span className={`pf-chip ${TONE[m.card.tone ?? ''] ?? ''}`}>{isAr ? m.card.statusAr : m.card.statusEn}</span>{m.card.applicationNumber ? <span className="pf-muted" style={{ marginInlineStart: 8, fontSize: 13 }}>{m.card.applicationNumber}</span> : null}</div>
-                    {m.card.nextActionAr ? <div className="pf-card-text">{t('المطلوب الآن', 'Next step')}: <b>{isAr ? m.card.nextActionAr : m.card.nextActionEn}</b></div> : null}
-                  </>
-                ) : null}
-                {m.access.status !== 'full' && m.access.messageAr ? <Alert tone={m.access.status === 'blocked' ? 'warn' : 'info'}>{isAr ? m.access.messageAr : m.access.messageEn}</Alert> : null}
-                {m.unread ? <div className="pf-muted" style={{ fontSize: 13 }}>{t(`${m.unread} إشعار غير مقروء`, `${m.unread} unread notification(s)`)}</div> : null}
-                <div style={{ marginTop: 'auto' }}>
-                  {m.status === 'active' && m.access.status !== 'blocked' ? <a className="btn btn-primary" href={`#i/${m.initiativeId}/${m.card?.view ?? m.defaultView}`}><LayoutDashboard size={16} /> {t('ادخل لوحة المبادرة', 'Open the dashboard')}</a> : null}
-                </div>
-              </div>
-            </div>
-          ))}
-          {me.adminEntries.map((a) => (
-            <div key={a.initiativeId} className="pf-hub-card">
-              <div className="pf-hub-head" style={{ background: '#334155' }}><div style={{ fontSize: 12.5, opacity: 0.9 }}>{t('مدير المنصة', 'Platform administrator')}</div><h3>{isAr ? a.titleAr : a.titleEn}</h3></div>
-              <div className="pf-hub-body"><a className="btn btn-outline" href={`#i/${a.initiativeId}/${a.defaultView}`}>{t('إدارة المبادرة', 'Manage the initiative')}</a></div>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 };

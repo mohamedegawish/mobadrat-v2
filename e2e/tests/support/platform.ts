@@ -25,6 +25,12 @@ export async function latestMailFor(email: string): Promise<string> {
   throw new Error(`no email for ${email} in ${MAIL_DIR}`);
 }
 
+/** عدد الرسائل المرسلة لعنوان معين حتى الآن (تُكتب في الخلفية — انتظر عددها قبل قراءة آخرها). */
+export function mailCountFor(email: string): number {
+  const safe = email.replace(/[^\w.@-]/g, '_');
+  return fs.existsSync(MAIL_DIR) ? fs.readdirSync(MAIL_DIR).filter((f) => f.includes(safe)).length : 0;
+}
+
 /** آخر بريد للعنوان يطابق نصًا (إيميلات القرار). */
 export async function mailMatching(email: string, re: RegExp): Promise<string> {
   const safe = email.replace(/[^\w.@-]/g, '_');

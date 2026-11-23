@@ -1,24 +1,38 @@
 /**
  * The platform router. #i/<id>/… belongs to an initiative module (lazy chunk with its own screens, header and styles);
- * every other route is a platform screen inside the platform shell.
+ * every other route is a platform screen inside the platform shell: the official header, the page, the official footer.
  */
 import React, { Suspense, useEffect, useSyncExternalStore } from 'react';
-import { usePlatform, store, AUTH_VIEWS, ADMIN_VIEWS, type View } from './store';
-import { Header, Footer, Loading, SignInRequired } from './layout';
-import { HomePage, InitiativesPage, InitiativePage, ImpactPage } from './pages/public';
-import { LoginPage, RegisterPage, VerifyEmailPage, ForgotPasswordPage, ResetPasswordPage, ChangePasswordPage } from './pages/auth';
-import { HubPage, ProfilePage, ApplyPage, NotificationsPage } from './pages/account';
-import { AdminLayout, AdminDashboard, AdminInitiative, AdminUsers, AdminCatalog, AdminBanners, AdminAudit, AdminOutbox, AdminReadiness } from './pages/admin';
+import { usePlatform, store, isAdmin, AUTH_VIEWS, ADMIN_VIEWS, type View } from './store';
+import { Loading, SignInRequired, Forbidden } from './layout';
+import { VerifyEmailPage, ForgotPasswordPage, ResetPasswordPage, ChangePasswordPage } from './pages/auth';
+import { ProfilePage, ApplyPage, NotificationsPage } from './pages/account';
+import { AdminDashboard, AdminInitiative, AdminUsers, AdminCatalog, AdminBanners, AdminAudit, AdminOutbox, AdminReadiness } from './pages/admin';
 import { AdminBodies, AdminBody } from './pages/bodies';
 import { moduleOf } from '../initiatives/registry';
+import { ToastProvider, useToast } from '../components/common/ToastSystem';
+import { HeaderNavbar } from '../components/layout/HeaderNavbar';
+import { Footer } from '../components/layout/Footer';
+import { HomeView } from '../components/showcase/HomeView';
+import { InitiativesView } from '../components/showcase/InitiativesView';
+import { InitiativeDetailPage } from '../components/showcase/InitiativeDetailPage';
+import { CompareView } from '../components/showcase/CompareView';
+import { ImpactView } from '../components/showcase/ImpactView';
+import { LoginView } from '../components/auth/LoginView';
+import { MyInitiativesView } from '../components/factory/MyInitiativesView';
+import { AdminLayout } from '../components/admin/AdminLayout';
+import { ChatWidget } from '../components/chatbot/ChatWidget';
 
 const SCREENS: Record<View, React.FC> = {
-  home: HomePage, initiatives: InitiativesPage, initiative: InitiativePage, impact: ImpactPage,
-  login: LoginPage, register: RegisterPage, 'verify-email': VerifyEmailPage, 'forgot-password': ForgotPasswordPage, 'reset-password': ResetPasswordPage,
-  'change-password': ChangePasswordPage, hub: HubPage, profile: ProfilePage, apply: ApplyPage, notifications: NotificationsPage,
+  home: HomeView, initiatives: InitiativesView, initiative: InitiativeDetailPage, compare: CompareView, impact: ImpactView,
+  login: LoginView, register: LoginView, 'verify-email': VerifyEmailPage, 'forgot-password': ForgotPasswordPage, 'reset-password': ResetPasswordPage,
+  'change-password': ChangePasswordPage, hub: MyInitiativesView, profile: ProfilePage, apply: ApplyPage, notifications: NotificationsPage,
   admin: AdminDashboard, 'admin-initiative': AdminInitiative, 'admin-users': AdminUsers, 'admin-catalog': AdminCatalog, 'admin-banners': AdminBanners,
   'admin-audit': AdminAudit, 'admin-outbox': AdminOutbox, 'admin-readiness': AdminReadiness, 'admin-bodies': AdminBodies, 'admin-body': AdminBody,
 };
+
+/** «الإنجازات» (الأثر الوطني) — صفحة سيادية للإدارة فقط. */
+const STAFF_VIEWS: View[] = ['impact'];
 
 function useHash(): string {
   return useSyncExternalStore((cb) => { window.addEventListener('hashchange', cb); return () => window.removeEventListener('hashchange', cb); }, () => window.location.hash);
@@ -26,20 +40,42 @@ function useHash(): string {
 
 const PlatformShell: React.FC = () => {
   const { view, booting, me, isAr } = usePlatform();
-  useEffect(() => { document.title = isAr ? 'المنصة الوطنية للمبادرات الصناعية | وزارة الصناعة' : 'National Industrial Initiatives Platform | Ministry of Industry'; }, [isAr, view]);
+  const { toast } = useToast();
+  useEffect(() => { document.title = isAr ? 'المنصة الوطنية للتمويل والمبادرات الصناعية | جمهورية مصر العربية' : 'National Platform for Industrial Financing & Initiatives | Arab Republic of Egypt'; }, [isAr, view]);
+
+  // Show a welcome toast on first load
+  useEffect(() => {
+    let welcomed = true;
+    try { welcomed = Boolean(localStorage.getItem('egypt_ind_welcomed')); if (!welcomed) localStorage.setItem('egypt_ind_welcomed', '1'); } catch { /* private mode */ }
+    if (welcomed) return;
+    const id = window.setTimeout(() => {
+      toast('info', isAr ? 'مرحباً بك في المنصة الوطنية للتمويل والمبادرات الصناعية — جمهورية مصر العربية' : 'Welcome to the National Platform for Industrial Financing & Initiatives — Arab Republic of Egypt');
+    }, 800);
+    return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const Screen = SCREENS[view];
-  const needsAuth = AUTH_VIEWS.includes(view) || ADMIN_VIEWS.includes(view);
+  const isAdminView = ADMIN_VIEWS.includes(view);
+  const needsAuth = AUTH_VIEWS.includes(view) || isAdminView || STAFF_VIEWS.includes(view);
   let body: React.ReactNode;
   if (booting && needsAuth) body = <Loading />;
+  else if (view === 'hub' && !me) body = <MyInitiativesView />; // its own «sign in» card
   else if (needsAuth && !me) body = <SignInRequired />;
   else if (me?.user.mustChangePassword && view !== 'change-password') body = <ChangePasswordPage />;
-  else if (ADMIN_VIEWS.includes(view)) body = <AdminLayout><Screen /></AdminLayout>;
-  else body = <Screen />;
+  else if ((isAdminView || STAFF_VIEWS.includes(view)) && !isAdmin(me)) body = <Forbidden />;
+  else if (isAdminView) body = <AdminLayout><Screen /></AdminLayout>;
+  else body = <Screen key={view} />;
   return (
-    <div className="platform-root">
-      <Header />
-      <main className="pf-main" id="main">{body}</main>
-      {ADMIN_VIEWS.includes(view) ? null : <Footer />}
+    <div className={`app-container${isAdminView ? ' admin-mode' : ''}`}>
+        {/* 1. Official Government Header */}
+        <HeaderNavbar />
+        {/* 2. Main View Router with Access Control Guard */}
+        <main className="main-content" id="main">{body}</main>
+        {/* 3. Official Government Footer — مخفي في وضع الإدارة لتوفير المساحة */}
+        {isAdminView ? null : <Footer />}
+        {/* 4. Floating platform assistant */}
+        <ChatWidget />
     </div>
   );
 };
@@ -52,5 +88,6 @@ export const App: React.FC = () => {
     const Module = mod.load;
     return <Suspense fallback={<div style={{ padding: 40, textAlign: 'center' }}>…</div>}><Module /></Suspense>;
   }
-  return <PlatformShell />;
+  // The toasts render next to the page, so they sit inside .platform-root too (the platform's stylesheet is scoped to it).
+  return <div className="platform-root"><ToastProvider><PlatformShell /></ToastProvider></div>;
 };

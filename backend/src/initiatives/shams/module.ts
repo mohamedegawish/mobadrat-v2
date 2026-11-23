@@ -7,6 +7,7 @@
 import { Router } from 'express';
 import type { InitiativeModule, HubCard } from '../contract.js';
 import { migrationsDirFor } from '../../core/db/index.js';
+import { SHAMS_PUBLIC_CONTENT } from './catalogContent.js';
 import { makeLimiter } from './http/rateLimits.js';
 import { shamsActorGuard } from './middleware/auth.js';
 import { restrictUnapprovedFactory } from './middleware/factoryAccess.js';
@@ -69,12 +70,8 @@ export const shamsModule: InitiativeModule = {
   requirements,
   catalogDefaults: {
     slug: 'shams', titleAr: 'شمس الصناعة', titleEn: 'Shams El-Senaa', status: 'active', registrationOpen: true,
-    taglineAr: 'طاقة شمسية على أسطح المصانع — تمويل ومتابعة من التسجيل حتى التعاقد',
-    taglineEn: 'Solar power on factory roofs — financing and follow-up from registration to contract',
-    descriptionAr: 'مبادرة وزارة الصناعة لتركيب محطات الطاقة الشمسية على أسطح المنشآت الصناعية: تسجيل المصنع ومراجعة مركز تحديث الصناعة (IMC) ومطابقة ENCPC واختيار مقدم الخدمة والعرض الفني وموافقة شركة الكهرباء ثم التعاقد عبر البنك أو شركة التوزيع.',
-    descriptionEn: 'A Ministry of Industry initiative to install solar plants on industrial roofs: factory registration, IMC review, ENCPC compliance, provider selection and technical offer, electricity approval, then contracting through a bank or the distribution company.',
-    category: 'طاقة متجددة', categoryEn: 'Renewable energy', coverImage: '/covers/solar-2026.jpg', themeColor: '#142A4A', accentColor: '#C8102E',
-    badgeTextAr: 'التسجيل متاح', badgeTextEn: 'Open for registration', sortOrder: 1,
+    ...SHAMS_PUBLIC_CONTENT,
+    coverImage: '/covers/solar-2026.jpg', themeColor: '#142A4A', accentColor: '#C8102E', sortOrder: 1,
   },
 
   publicRouter() {

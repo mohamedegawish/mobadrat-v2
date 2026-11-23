@@ -3,15 +3,15 @@
  * own stores; routes under #i/<id>/ belong to them (App.tsx mounts the module).
  */
 import { useSyncExternalStore } from 'react';
-import { api, type Initiative, type Lang, type Me } from './api';
+import { api, type Banner, type Initiative, type Lang, type Me } from './api';
 import { onTokenChange, refreshSession, getAccessToken } from '../core/session';
 
 export type View =
-  | 'home' | 'initiatives' | 'initiative' | 'impact' | 'login' | 'register' | 'verify-email' | 'forgot-password' | 'reset-password'
+  | 'home' | 'initiatives' | 'initiative' | 'compare' | 'impact' | 'login' | 'register' | 'verify-email' | 'forgot-password' | 'reset-password'
   | 'hub' | 'profile' | 'apply' | 'notifications' | 'change-password'
   | 'admin' | 'admin-initiative' | 'admin-users' | 'admin-catalog' | 'admin-banners' | 'admin-audit' | 'admin-outbox' | 'admin-readiness' | 'admin-bodies' | 'admin-body';
 
-const VIEWS: View[] = ['home', 'initiatives', 'initiative', 'impact', 'login', 'register', 'verify-email', 'forgot-password', 'reset-password',
+const VIEWS: View[] = ['home', 'initiatives', 'initiative', 'compare', 'impact', 'login', 'register', 'verify-email', 'forgot-password', 'reset-password',
   'hub', 'profile', 'apply', 'notifications', 'change-password', 'admin', 'admin-initiative', 'admin-users', 'admin-catalog', 'admin-banners', 'admin-audit', 'admin-outbox', 'admin-readiness', 'admin-bodies', 'admin-body'];
 
 export const AUTH_VIEWS: View[] = ['hub', 'profile', 'apply', 'notifications', 'change-password'];
@@ -19,7 +19,7 @@ export const ADMIN_VIEWS: View[] = ['admin', 'admin-initiative', 'admin-users', 
 
 interface Snapshot {
   lang: Lang; hash: string; view: View; param: string | null; query: URLSearchParams;
-  me: Me | null; booting: boolean; initiatives: Initiative[] | null; tick: number;
+  me: Me | null; booting: boolean; initiatives: Initiative[] | null; banners: Banner[]; tick: number;
 }
 
 const LANG_KEY = 'mobadrat_lang_v2';
@@ -40,7 +40,7 @@ class Store {
   private s: Snapshot;
 
   constructor() {
-    this.s = { lang: readLang(), ...parse(), me: null, booting: true, initiatives: null, tick: 0 };
+    this.s = { lang: readLang(), ...parse(), me: null, booting: true, initiatives: null, banners: [], tick: 0 };
     this.applyLang(this.s.lang);
     window.addEventListener('hashchange', () => { this.set(parse()); });
     // A module may sign out or refresh the session: keep /me in step with the shared token.
@@ -67,11 +67,15 @@ class Store {
 
   async boot() {
     void this.loadInitiatives();
+    void this.loadBanners();
     try { if (getAccessToken() || await refreshSession()) await this.reloadMe(); } catch { /* guest */ }
     this.set({ booting: false });
   }
 
   async loadInitiatives() { try { this.set({ initiatives: await api.initiatives() }); } catch { this.set({ initiatives: [] }); } }
+
+  /** The home page banners (managed from «بانرات الرئيسية»); reloaded after the admin edits them. */
+  async loadBanners() { try { this.set({ banners: await api.banners() }); } catch { this.set({ banners: [] }); } }
 
   async reloadMe(): Promise<Me | null> {
     try { const me = await api.me(); this.set({ me }); return me; } catch { this.set({ me: null }); return null; }
@@ -87,9 +91,10 @@ class Store {
     return me;
   }
 
-  /** Where a signed-in person lands: one initiative → its dashboard; several (or staff) → the chooser. */
+  /** Where a signed-in person lands: staff → the administration; one initiative → its dashboard; several → «مبادراتي». */
   goHome(me = this.s.me) {
     if (!me) { this.go('home'); return; }
+    if (me.user.platformRole) { this.go('admin'); return; }
     if (!me.user.platformRole && me.memberships.length === 1 && me.memberships[0].status === 'active' && me.memberships[0].access?.status !== 'blocked') {
       const m = me.memberships[0];
       this.go(`i/${m.initiativeId}/${m.card?.view ?? m.defaultView}`);

@@ -20,7 +20,7 @@ test('factory and reviewers complete the full journey to CONTRACTED', async ({ p
   await shot(page, 'shams-02-registered');
 
   // ── قبل التفعيل ثم بعده: لا دخول قبل قبول الحساب ──
-  await expectLoginRefused(page, FACTORY_EMAIL, FACTORY_PASSWORD, /تفعيل البريد/);
+  await expectLoginRefused(page, FACTORY_EMAIL, FACTORY_PASSWORD, /البريد غير مؤكد/);
   await activate(page, FACTORY_EMAIL);
   await shot(page, 'shams-03-verified');
   await expectShamsLocked(page, FACTORY_EMAIL, FACTORY_PASSWORD, /قيد مراجعة/);

@@ -29,10 +29,12 @@ test('guest: the catalog lists both initiatives, each with its page and its own 
   await expect(page.getByText('شمس الصناعة').first()).toBeVisible();
   await expect(page.getByText('صُنّاع المستقبل').first()).toBeVisible();
 
-  // A guest chooses: first-time registration in the initiative, or sign in with an existing platform account.
+  // A guest applying is sent to the sign-in page, which also offers the initiative's own first-time registration form.
   await page.goto('/#initiative/sona3');
-  await expect(page.getByText('لدي حساب على المنصة — دخول')).toBeVisible();
-  await page.getByText('سجّل وقدّم (أول مرة)').click();
+  await page.getByTestId('initiative-apply').last().click();
+  await expect(page).toHaveURL(/#login$/);
+  await page.getByRole('button', { name: 'تسجيل منشأة جديدة (حساب جديد)' }).click();
+  await page.getByRole('link', { name: 'التسجيل في صُنّاع المستقبل' }).click();
   await expect(page).toHaveURL(/#i\/sona3\/register/);
   await expect(page.locator('.theme-sona3')).toBeVisible();
 
@@ -50,7 +52,7 @@ test('a registered user applies to a second initiative: only the missing data is
   await expect(page).toHaveURL(/#i\/shams\//);
 
   await page.goto('/#initiative/sona3');
-  await page.getByText('قدّم على المبادرة').first().click();
+  await page.getByTestId('initiative-apply').first().click();
   await expect(page).toHaveURL(/#apply\/sona3/);
 
   const fill = async (label: string, value: string) => {

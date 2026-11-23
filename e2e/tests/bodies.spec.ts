@@ -114,8 +114,8 @@ test('ministry viewer reads the directory and the body pages without any managem
   const content = await (await browser.newContext()).newPage();
   await login(content, 'content@mobadrat.local');
   await content.goto('/#admin');
-  await expect(content.locator('.pf-side')).toBeVisible();
-  await expect(content.locator('.pf-side').getByText('دليل الجهات')).toHaveCount(0);
+  await expect(content.locator('.admin-sidebar')).toBeVisible();
+  await expect(content.locator('.admin-sidebar').getByText('الجهات المسؤولة')).toHaveCount(0);
   await content.goto('/#admin-bodies');
   await expect(content.locator('.pf-alert.err')).toBeVisible();
 });

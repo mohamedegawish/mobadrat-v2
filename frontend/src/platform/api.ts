@@ -41,6 +41,16 @@ export async function download(path: string): Promise<Blob> {
   return res.blob();
 }
 
+/** Cover images live in the frontend's public folder (/covers/…) or are absolute URLs. */
+export function resolveCoverUrl(path: string): string {
+  return path;
+}
+
+/** Files the API serves itself (e.g. banner images /api/v1/highlights/:id/image) need API_BASE on split hosting. */
+export function resolveApiAssetUrl(path: string): string {
+  return path.startsWith('/api/') ? `${API_BASE}${path}` : path;
+}
+
 // ── Types ───────────────────────────────────────────────────────────────
 
 export type Lang = 'ar' | 'en';

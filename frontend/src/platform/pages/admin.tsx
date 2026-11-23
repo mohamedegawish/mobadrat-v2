@@ -23,32 +23,6 @@ const PHASES: Array<{ key: string; ar: string; en: string; color: string }> = [
 
 const num = (n: number | undefined, isAr: boolean) => (n ?? 0).toLocaleString(isAr ? 'ar-EG' : 'en-US');
 
-export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { t, isAr, me, view, param } = usePlatform();
-  const [mods, setMods] = useState<Awaited<ReturnType<typeof api.adminModules>> | null>(null);
-  useEffect(() => { api.adminModules().then(setMods).catch(() => undefined); }, []);
-  if (!me?.user.platformRole) return <Forbidden />;
-  const link = (to: string, label: string, icon: React.ReactNode, active: boolean) => <a href={`#${to}`} className={active ? 'active' : ''}>{icon} {label}</a>;
-  return (
-    <div className="pf-admin">
-      <nav className="pf-side">
-        {link('admin', t('النظرة العامة', 'Overview'), <BarChart3 size={15} />, view === 'admin')}
-        <div className="grp">{t('المبادرات', 'Initiatives')}</div>
-        {(mods?.items ?? []).map((m) => <React.Fragment key={m.id}>{link(`admin-initiative/${m.id}`, isAr ? m.titleAr : m.titleEn, <span>●</span>, view === 'admin-initiative' && param === m.id)}</React.Fragment>)}
-        <div className="grp">{t('الإدارة', 'Administration')}</div>
-        {link('admin-users', t('الحسابات والصلاحيات', 'Accounts & roles'), <Users size={15} />, view === 'admin-users')}
-        {me.user.platformRole !== 'catalog_manager' ? link('admin-bodies', t('دليل الجهات', 'Directory of bodies'), <Building size={15} />, view === 'admin-bodies' || view === 'admin-body') : null}
-        {canEditContent(me) ? link('admin-catalog', t('محتوى المبادرات', 'Initiatives content'), <BookOpen size={15} />, view === 'admin-catalog') : null}
-        {canEditContent(me) ? link('admin-banners', t('بانرات الرئيسية', 'Home banners'), <Image size={15} />, view === 'admin-banners') : null}
-        {me.user.platformRole === 'super_admin' || me.user.platformRole === 'auditor' ? link('admin-audit', t('سجل التدقيق', 'Audit log'), <ScrollText size={15} />, view === 'admin-audit') : null}
-        {canManage(me) ? link('admin-outbox', t('سجل الرسائل', 'Messages log'), <Mail size={15} />, view === 'admin-outbox') : null}
-        {canManage(me) ? link('admin-readiness', t('جاهزية التشغيل', 'Readiness'), <ClipboardCheck size={15} />, view === 'admin-readiness') : null}
-      </nav>
-      <div className="pf-admin-body">{children}</div>
-    </div>
-  );
-};
-
 const PhaseBars: React.FC<{ byPhase: Record<string, number> }> = ({ byPhase }) => {
   const { isAr } = usePlatform();
   const max = Math.max(1, ...Object.values(byPhase));

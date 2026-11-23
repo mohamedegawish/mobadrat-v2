@@ -10,7 +10,7 @@ export type CatalogStatus = (typeof CATALOG_STATUSES)[number];
 
 const JSON_ARRAY_FIELDS = ['targetSectors', 'targetSectorsEn', 'targetGovernorates', 'participatingOrgs', 'benefits', 'faqs', 'preEligibilityQuestions',
   'requiredDocsList', 'objectives', 'eligibilityRequirements', 'selectionCriteria', 'kpis'] as const;
-const JSON_OBJECT_FIELDS = ['impactMetrics', 'financialTerms'] as const;
+const JSON_OBJECT_FIELDS = ['impactMetrics', 'financialTerms', 'customization'] as const;
 const TEXT_FIELDS = ['slug', 'titleAr', 'titleEn', 'taglineAr', 'taglineEn', 'descriptionAr', 'descriptionEn', 'category', 'categoryEn', 'startDate', 'endDate',
   'coverImage', 'logoImage', 'themeColor', 'accentColor', 'badgeTextAr', 'badgeTextEn', 'executionNotesAr', 'executionNotesEn'] as const;
 const NUMBER_FIELDS = ['budgetTotalEGP', 'budgetAllocatedEGP', 'sortOrder'] as const;
@@ -80,6 +80,20 @@ export async function updateCatalogItem(id: string, patch: Record<string, unknow
       .run(...Object.values(fields), nowIso(), id);
   }
   return getCatalogItem(id, { includeHidden: true, includeAdmin: true });
+}
+
+/**
+ * A module's catalog row that no administrator has edited yet (createdAt = updatedAt: every edit moves updatedAt) keeps
+ * showing the module's built-in public content, so improvements to that content reach existing databases. Once the page
+ * is edited from the administration, the row is the administrator's and is never touched again. Returns true on a change.
+ */
+export async function syncUneditedCatalogRow(id: string, defaults: Record<string, unknown>): Promise<boolean> {
+  const fields = serialise(Object.fromEntries(Object.entries(defaults).filter(([k]) => k !== 'slug')));
+  const keys = Object.keys(fields);
+  if (!keys.length) return false;
+  const r = await getDb().prepare(`UPDATE initiatives SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ? AND createdAt = updatedAt AND NOT (${keys.map((k) => `${k} <=> ?`).join(' AND ')})`)
+    .run(...Object.values(fields), id, ...Object.values(fields));
+  return Number(r.changes) > 0;
 }
 
 export async function deleteCatalogItem(id: string): Promise<boolean> {
