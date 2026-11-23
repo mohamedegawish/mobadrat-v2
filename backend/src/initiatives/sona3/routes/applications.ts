@@ -8,7 +8,7 @@ import { getDocument, listDocuments } from '../store/documents.js';
 import { getCohort } from '../store/cohorts.js';
 import { addAuditLog, actorFromReq } from '../store/audit.js';
 import { canSeeApplication, listScope, visibleDocuments } from '../access/visibility.js';
-import { adminMetadataOnly, buildDetail, buildListItem } from '../workflow/applicationView.js';
+import { adminMetadataOnly, buildDetail, buildListItem, isMineFor, slaInfo } from '../workflow/applicationView.js';
 import { performAction } from '../workflow/actionService.js';
 import { createDraft, removeDocument, saveSection, uploadDocument, uploadStaffDocument } from '../workflow/applicationService.js';
 import { assignEvaluator, unassignEvaluator, declareConflict, saveEvaluation, submitEvaluation, evaluatorQueue } from '../workflow/evaluationService.js';
@@ -57,14 +57,17 @@ applicationsRouter.get('/applications', ah(async (req, res) => {
     governorate: str(req.query.governorate) || undefined, funderOrgId: str(req.query.funderOrgId) || undefined,
     from: str(req.query.from) || undefined, to: str(req.query.to) || undefined,
   }, page, pageSize, computed);
-  let items = await mapSeq(rows, async (a) => await buildListItem(user, a));
   if (computed) {
-    if (req.query.overdue === '1') items = items.filter((i) => i.overdue);
-    if (mine) items = items.filter((i) => i.isMine);
-    const t = items.length;
-    items = items.slice((page - 1) * pageSize, page * pageSize);
-    return okMessage(res, 200, 'ok', { ...paginate(items, t, page, pageSize), draftsCount: await draftsCount(user, scope) });
+    // «بانتظاري» / «متأخر» are computed, not columns: every row in scope is filtered by the two flags (no query each — the same
+    // functions the list item uses), then the full item (cohort, funder and responsible lookups) is built for the requested
+    // page only. Building it for every row first cost ~3 queries × every application in scope: 5.7 s per IMC request under
+    // load with 900 applications (perf/ load test). Same rows, order and totals as before.
+    const overdueOnly = req.query.overdue === '1';
+    const selected = rows.filter((a) => (!overdueOnly || slaInfo(a).overdue) && (!mine || isMineFor(user, a)));
+    const items = await mapSeq(selected.slice((page - 1) * pageSize, page * pageSize), async (a) => await buildListItem(user, a));
+    return okMessage(res, 200, 'ok', { ...paginate(items, selected.length, page, pageSize), draftsCount: await draftsCount(user, scope) });
   }
+  const items = await mapSeq(rows, async (a) => await buildListItem(user, a));
   return okMessage(res, 200, 'ok', { ...paginate(items, total, page, pageSize), draftsCount: await draftsCount(user, scope) });
 }));
 

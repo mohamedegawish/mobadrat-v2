@@ -151,9 +151,13 @@ async function eligibilityChecks(app: AppRow, data: FormData) {
   return { referenceDate: refDate, checks };
 }
 
+/** «بانتظاري»: the person has a decision or a step to take on this application (withdrawing alone does not count). No query. */
+export function isMineFor(user: UserInternal, app: AppRow): boolean {
+  return effectiveActions(user, app).some((a) => a.action !== 'withdraw');
+}
+
 export async function buildListItem(user: UserInternal, app: AppRow) {
   const sla = slaInfo(app);
-  const actions = effectiveActions(user, app);
   const cohort = await getCohort(app.cohortId);
   const showScore = seesScore(user, app);
   const funder = user.role === 'evaluator' ? null : await orgLabel(app.funderOrgId);
@@ -168,7 +172,7 @@ export async function buildListItem(user: UserInternal, app: AppRow) {
     score: showScore ? app.score : null, passedMinimums: showScore ? app.passedMinimums : null, isStalled: user.role === 'evaluator' ? false : app.isStalled,
     attempt: app.attempt, version: app.version,
     submittedAt: app.submittedAt, stateEnteredAt: app.stateEnteredAt, closedAt: app.closedAt, createdAt: app.createdAt, updatedAt: app.updatedAt,
-    responsible: await responsibleInfo(app), isMine: actions.some((a) => a.action !== 'withdraw'), overdue: sla.overdue, dueAt: sla.dueAt,
+    responsible: await responsibleInfo(app), isMine: isMineFor(user, app), overdue: sla.overdue, dueAt: sla.dueAt,
     daysInState: sla.daysInState, funder: funder ? { id: funder.id, nameAr: funder.nameAr, nameEn: funder.nameEn } : null,
   };
 }
