@@ -66,4 +66,8 @@ docker compose -f docker-compose.dev.yml --profile test up -d mysql-test
 cd backend && npm test          # المنصة + شمس + صُنّاع المستقبل
 cd backend && npm run typecheck && npm run lint:async
 cd frontend && npm run build
+cd e2e && npx playwright test   # رحلات المستخدم من المتصفح
+node perf/run.mjs prepare && node perf/run.mjs load   # اختبار الحمل (محلي فقط)
 ```
+
+التفاصيل (الـ hard tests، رحلات الـ e2e، اختبار الحمل ونتائجه): [docs/TESTING.md](docs/TESTING.md) · [docs/PERFORMANCE.md](docs/PERFORMANCE.md).

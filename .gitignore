@@ -6,3 +6,6 @@ e2e/playwright-report/
 data/*.db-shm
 data/*.db-wal
 /uploads/
+
+# Load test state (dataset, captured mail, uploads, results)
+perf/.state/
