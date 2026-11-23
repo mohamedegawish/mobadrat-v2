@@ -27,7 +27,16 @@ parentPort.on('message', (m) => {
 });`;
 
 interface Slot { worker: Worker; busy: number }
-const POOL_SIZE = Math.max(1, Math.min(4, (os.availableParallelism?.() ?? os.cpus().length) - 1));
+/**
+ * Password workers. Default: one per core minus one, at most 4 (≈ 40 sign-ins/s at 10 bcrypt rounds on an 8-core class
+ * machine — the load test's limit for a burst of sign-ins). PASSWORD_POOL_SIZE (1–32) sets it for a server with more cores.
+ */
+export function passwordPoolSizeFor(raw: string | undefined, cores: number): number {
+  const n = raw === undefined || raw.trim() === '' ? NaN : Number(raw);
+  if (Number.isInteger(n) && n >= 1 && n <= 32) return n;
+  return Math.max(1, Math.min(4, cores - 1));
+}
+const POOL_SIZE = passwordPoolSizeFor(process.env.PASSWORD_POOL_SIZE, os.availableParallelism?.() ?? os.cpus().length);
 const slots: Slot[] = [];
 /** A job in a worker: `settle` takes the worker's reply; `fallback` recomputes it on the main thread if the worker dies. */
 interface Pending { slot: Slot; settle: (m: { ok?: boolean; hash?: string | null }) => void; fallback: () => void }

@@ -41,6 +41,8 @@ services:
       DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
       DB_CONNECT_TIMEOUT_MS: ${DB_CONNECT_TIMEOUT_MS:-120000}
       DB_TX_LOCK_TIMEOUT_SEC: ${DB_TX_LOCK_TIMEOUT_SEC:-10}
+      # password-check workers (empty = cores − 1, at most 4 ≈ 40 sign-ins/s); raise on a server with more cores
+      PASSWORD_POOL_SIZE: ${PASSWORD_POOL_SIZE:-}
       # ── public URL and secrets ──
       APP_URL: ${APP_URL:?}
       CORS_ORIGIN: ${CORS_ORIGIN:?}
