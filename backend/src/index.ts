@@ -17,11 +17,8 @@ assertConfigValid();
 assertProductionSafe();
 // Applies the core and module migrations before serving any request (MySQL: waits for the server, migrates under a lock).
 await bootPlatform();
-if (config.seedOnBoot) {
-  if (config.isProd && seedPasswordProblem()) throw new Error(`[seed] ${seedPasswordProblem()}`);
-  const seeded = await seedIfEmpty();
-  if (seeded) console.log('[seed] demo accounts and data loaded (empty database)');
-}
+// The deploy seeder first: its accounts must change the shared password at the first sign-in, so SEED_ON_BOOT (kept from an
+// older deployment) finds a database that is no longer empty and adds nothing on top.
 if (config.seedOnDeploy) {
   // one account per role + demo data, creating only what is missing (core/seedDeploy.ts); never fatal for the server
   try {
@@ -29,6 +26,11 @@ if (config.seedOnDeploy) {
   } catch (e) {
     console.error(`[seed:deploy] FAILED — nothing was created: ${(e as Error).message}`);
   }
+}
+if (config.seedOnBoot) {
+  if (config.isProd && seedPasswordProblem()) throw new Error(`[seed] ${seedPasswordProblem()}`);
+  const seeded = await seedIfEmpty();
+  if (seeded) console.log('[seed] demo accounts and data loaded (empty database)');
 }
 
 const swept = sweepStaleTmp();

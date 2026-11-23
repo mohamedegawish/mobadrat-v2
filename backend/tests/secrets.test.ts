@@ -56,3 +56,15 @@ test('SC-4 a damaged secret file is not used: the start is refused by the produc
   assert.deepEqual(ensureGeneratedSecrets(env), []);
   assert.equal(env.JWT_SECRET, undefined);
 });
+
+test('SC-5 a secret published in the repository history is recognised (by hash only) so production refuses it', async () => {
+  const { isPublishedSecret, PUBLISHED_SECRET_SHA256 } = await import('../src/config.js');
+  const crypto = await import('node:crypto');
+  const sample = 'a-value-that-was-committed-once';
+  const hash = crypto.createHash('sha256').update(sample).digest('hex');
+  assert.equal(isPublishedSecret(sample, [hash]), true);
+  assert.equal(isPublishedSecret('a-fresh-random-value', [hash]), false);
+  assert.equal(isPublishedSecret('', [hash]), false);
+  assert.ok(PUBLISHED_SECRET_SHA256.length >= 1 && PUBLISHED_SECRET_SHA256.every((h) => /^[0-9a-f]{64}$/.test(h)), 'only hashes are kept');
+  assert.equal(isPublishedSecret('x'.repeat(64)), false);
+});

@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 
 /**
@@ -164,6 +165,16 @@ export const config = {
   get outboxRetentionSweepMs(): number { return num('OUTBOX_RETENTION_SWEEP_MS', 60 * 60_000); },
 };
 
+/**
+ * SHA-256 of secrets that were published in this repository's history (the old platform committed its .env). A deployment
+ * that still carries one of them (e.g. a JWT_SECRET kept in Coolify from the old app) would sign sessions with a key anyone
+ * can read, so production refuses it. Only the hashes are here, never the values.
+ */
+export const PUBLISHED_SECRET_SHA256: readonly string[] = ['8e3800f8481b22f3cc4fdd73d4e91a7dc13bb41c25fc0c36ceb40361273c58c1'];
+export function isPublishedSecret(value: string, hashes: readonly string[] = PUBLISHED_SECRET_SHA256): boolean {
+  return Boolean(value) && hashes.includes(createHash('sha256').update(value).digest('hex'));
+}
+
 /** Production secret and lifetime limits — same values in check:prod. */
 export const PROD_LIMITS = { jwtSecretMinLength: 48, accessTtlMaxSec: 3600, refreshTtlMaxSec: 30 * 24 * 3600 } as const;
 
@@ -205,6 +216,7 @@ export function assertProductionSafe(): void {
   const problems: string[] = [];
   if (!process.env.JWT_SECRET || config.jwtSecret === DEV_JWT_SECRET) problems.push('JWT_SECRET must be set to a strong random value (or SECRETS_DIR must be a writable directory, where the platform generates it).');
   else if (config.jwtSecret.length < PROD_LIMITS.jwtSecretMinLength) problems.push(`JWT_SECRET is too short (min ${PROD_LIMITS.jwtSecretMinLength} chars).`);
+  if (isPublishedSecret(config.jwtSecret)) problems.push('JWT_SECRET is the old value published in the repository history: delete JWT_SECRET from the deployment variables (Coolify then provides SERVICE_PASSWORD_64_JWT, elsewhere the app generates one) or set a new random value.');
   if (config.jwtAccessTtlSec > PROD_LIMITS.accessTtlMaxSec) problems.push(`JWT_ACCESS_TTL_SEC must be at most ${PROD_LIMITS.accessTtlMaxSec}.`);
   if (config.jwtRefreshTtlSec > PROD_LIMITS.refreshTtlMaxSec) problems.push(`JWT_REFRESH_TTL_SEC must be at most ${PROD_LIMITS.refreshTtlMaxSec}.`);
   const scale = process.env.RATE_LIMIT_SCALE;
