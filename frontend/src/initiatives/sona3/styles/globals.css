@@ -107,7 +107,7 @@ html[lang="en"] .gov-brand-title { font-family: var(--font-display-en); }
   white-space: nowrap;
   flex-shrink: 0;
 }
-.nav-item:hover { background: var(--egypt-red-soft); color: var(--egypt-red); border-color: rgba(27,79,156,0.08); transform: translateY(-0.5px); }
+.nav-item:hover { background: var(--egypt-red-soft); color: var(--egypt-red); border-color: rgba(200,16,46,0.08); transform: translateY(-0.5px); }
 .nav-item.active { background: var(--egypt-red); color: var(--text-inverse); box-shadow: var(--shadow-glow-red); border-color: var(--egypt-red); }
 .nav-item.active:hover { background: var(--egypt-red-dark); color: var(--text-inverse); transform: translateY(-0.5px); }
 .nav-item svg { transition: transform var(--transition-fast); }
@@ -138,7 +138,7 @@ html[lang="en"] .gov-brand-title { font-family: var(--font-display-en); }
   background: var(--brand);
   color: var(--text-inverse);
   border-color: var(--egypt-red);
-  box-shadow: 0 2px 8px rgba(27,79,156,0.18), 0 1px 2px rgba(27,79,156,0.12);
+  box-shadow: 0 2px 8px rgba(200,16,46,0.18), 0 1px 2px rgba(200,16,46,0.12);
 }
 .btn-primary::after {
   content: '';
@@ -149,7 +149,7 @@ html[lang="en"] .gov-brand-title { font-family: var(--font-display-en); }
   transition: opacity var(--transition-fast);
   pointer-events: none;
 }
-.btn-primary:hover { background: var(--brand-deep); border-color: var(--egypt-red-dark); box-shadow: var(--shadow-glow-red), 0 4px 14px rgba(27,79,156,0.16); transform: translateY(-1px); }
+.btn-primary:hover { background: var(--brand-deep); border-color: var(--egypt-red-dark); box-shadow: var(--shadow-glow-red), 0 4px 14px rgba(200,16,46,0.16); transform: translateY(-1px); }
 .btn-primary:hover::after { opacity: 1; }
 .btn-secondary { background: var(--bg-surface); color: var(--text-secondary); border-color: var(--border-subtle); box-shadow: var(--shadow-xs); }
 .btn-secondary:hover { background: var(--bg-surface); border-color: var(--border-medium); color: var(--text-main); box-shadow: var(--shadow-sm); transform: translateY(-1px); }
@@ -173,7 +173,7 @@ html[lang="en"] .gov-brand-title { font-family: var(--font-display-en); }
 .card:hover { border-color: var(--border-medium); box-shadow: var(--shadow-sm); }
 .card-elevated { box-shadow: var(--shadow-sm); }
 .card-interactive { cursor: pointer; }
-.card-interactive:hover { box-shadow: var(--shadow-card-hover); transform: translateY(-3px); border-color: rgba(27,79,156,0.08); }
+.card-interactive:hover { box-shadow: var(--shadow-card-hover); transform: translateY(-3px); border-color: rgba(200,16,46,0.08); }
 .card-interactive:active { transform: translateY(-1px) scale(0.99); }
 
 .badge {
@@ -397,7 +397,7 @@ html[dir="rtl"] .mobile-nav-panel { right: auto; left: 0; border-left: none; bor
   content: '';
   position: absolute;
   inset: 0;
-  background: radial-gradient(800px 400px at 85% -5%, rgba(27,79,156,0.06) 0%, transparent 60%), radial-gradient(600px 360px at -5% 30%, rgba(46,134,222,0.04) 0%, transparent 65%);
+  background: radial-gradient(800px 400px at 85% -5%, rgba(200,16,46,0.06) 0%, transparent 60%), radial-gradient(600px 360px at -5% 30%, rgba(46,134,222,0.04) 0%, transparent 65%);
   pointer-events: none;
   z-index: 0;
 }
@@ -408,7 +408,7 @@ html[dir="rtl"] .mobile-nav-panel { right: auto; left: 0; border-left: none; bor
   height: 420px;
   right: -80px;
   top: -80px;
-  background: radial-gradient(circle at 35% 35%, rgba(27,79,156,0.07) 0%, rgba(27,79,156,0.03) 35%, transparent 72%);
+  background: radial-gradient(circle at 35% 35%, rgba(200,16,46,0.07) 0%, rgba(200,16,46,0.03) 35%, transparent 72%);
   filter: blur(18px);
   pointer-events: none;
   border-radius: 50%;
@@ -476,7 +476,7 @@ html[dir="rtl"] .btn-primary:hover .btn-arrow { transform: translateX(-3px); }
 
 /* مصفوفة المقاييس — bento جذاب */
 .metric-bento { position: relative; overflow: hidden; border-radius: var(--radius-lg); background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%); transition: transform var(--transition-normal), box-shadow var(--transition-normal), border-color var(--transition-normal); }
-.metric-bento:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: rgba(27,79,156,0.08); }
+.metric-bento:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: rgba(200,16,46,0.08); }
 
 
 
@@ -570,7 +570,7 @@ html[dir="rtl"] .btn-primary:hover .btn-arrow { transform: translateX(-3px); }
   background: linear-gradient(135deg, var(--egypt-red) 0%, #0F3470 100%);
   color: #FFFFFF; display: inline-flex; align-items: center; justify-content: center;
   font-size: 0.72rem; font-weight: 800; flex-shrink: 0;
-  box-shadow: 0 2px 6px rgba(27,79,156,0.2);
+  box-shadow: 0 2px 6px rgba(200,16,46,0.2);
 }
 .admin-side-user-meta { display: flex; flex-direction: column; min-width: 0; }
 .admin-side-user-meta strong { font-size: 0.8rem; font-weight: 750; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -598,8 +598,8 @@ html[dir="rtl"] .btn-primary:hover .btn-arrow { transform: translateX(-3px); }
 .admin-side-item.active {
   background: var(--egypt-red-soft); color: var(--egypt-red);
   border-inline-start-color: var(--egypt-red); font-weight: 750;
-  border-color: rgba(27,79,156,0.12);
-  box-shadow: 0 1px 4px rgba(27,79,156,0.06);
+  border-color: rgba(200,16,46,0.12);
+  box-shadow: 0 1px 4px rgba(200,16,46,0.06);
 }
 .admin-side-item.active svg { color: var(--egypt-red); }
 .admin-sidebar.collapsed .admin-side-item { justify-content: center; padding: 0.55rem; }
@@ -738,7 +738,7 @@ html[dir="rtl"] .btn-primary:hover .btn-arrow { transform: translateX(-3px); }
   transition: transform var(--transition-normal);
 }
 html[dir="ltr"] .home-card::after { transform-origin: left; }
-.home-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); border-color: rgba(27,79,156,0.14); }
+.home-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); border-color: rgba(200,16,46,0.14); }
 .home-card:hover::after { transform: scaleX(1); }
 button.home-card { cursor: pointer; }
 button.home-card:focus-visible { outline: 2px solid var(--egypt-red); outline-offset: 2px; }
@@ -748,7 +748,7 @@ button.home-card:focus-visible { outline: 2px solid var(--egypt-red); outline-of
   height: 44px;
   border-radius: 12px;
   background: var(--egypt-red-soft);
-  border: 1px solid rgba(27,79,156,0.12);
+  border: 1px solid rgba(200,16,46,0.12);
   color: var(--egypt-red);
   display: inline-flex;
   align-items: center;
@@ -777,9 +777,9 @@ html[dir="ltr"] .home-card:hover .home-card-link svg { transform: translateX(4px
 .home-stakeholder { display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 0.7rem; background: var(--bg-surface); border: 1px solid #E2E8F0; border-radius: 10px; font-size: 0.8rem; font-weight: 700; color: #334155; line-height: 1.45; }
 .home-stakeholder svg { color: var(--egypt-red); flex-shrink: 0; }
 .home-journey { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; margin-top: 1.4rem; }
-.home-journey::before { content: ''; position: absolute; top: 21px; inset-inline: 16.66%; height: 2px; background: rgba(27,79,156,0.2); }
+.home-journey::before { content: ''; position: absolute; top: 21px; inset-inline: 16.66%; height: 2px; background: rgba(200,16,46,0.2); }
 .home-journey-step { position: relative; display: flex; flex-direction: column; align-items: center; gap: 0.45rem; text-align: center; font-size: 0.8rem; font-weight: 700; color: #334155; line-height: 1.5; }
-.home-journey-dot { width: 44px; height: 44px; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; background: var(--bg-surface); border: 2px solid rgba(27,79,156,0.25); color: var(--egypt-red); }
-.home-journey-step:last-child .home-journey-dot { background: var(--egypt-red); border-color: var(--egypt-red); color: #fff; box-shadow: 0 6px 16px rgba(27,79,156,0.22); }
+.home-journey-dot { width: 44px; height: 44px; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; background: var(--bg-surface); border: 2px solid rgba(200,16,46,0.25); color: var(--egypt-red); }
+.home-journey-step:last-child .home-journey-dot { background: var(--egypt-red); border-color: var(--egypt-red); color: #fff; box-shadow: 0 6px 16px rgba(200,16,46,0.22); }
 .home-journey-step:last-child { color: var(--egypt-red); }
 

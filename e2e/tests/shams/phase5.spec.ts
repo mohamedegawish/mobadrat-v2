@@ -71,10 +71,9 @@ test('every role has a bell, and a signed-out visitor is sent to sign in', async
 
 test.describe('phone width', () => {
   test.use({ viewport: { width: 390, height: 800 } });
-  test('the bell is reachable from the mobile menu and the page has no horizontal scroll', async ({ page }) => {
+  test('the bell is reachable on a phone (in the initiative bar) and the page has no horizontal scroll', async ({ page }) => {
     await login(page, 'factory2@shams.local');
-    await page.getByRole('button', { name: 'القائمة' }).click();
-    await page.getByRole('dialog').getByTestId('bell').click();
+    await page.getByTestId('initiative-bar').getByTestId('bell').click();
     await expect(page).toHaveURL(/#i\/shams\/notifications/);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(1);

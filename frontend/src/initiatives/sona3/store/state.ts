@@ -6,6 +6,7 @@
 import { useSyncExternalStore } from 'react';
 import { api, ApiException, refreshSession, clearTokens, type Meta, type Role, type User } from '../api';
 import { getAccessToken } from '../../../core/session';
+import { getShellLang, onShellLang, setShellLang } from '../../../core/shell';
 import { validationMessage } from '../utils/validation';
 
 export type Language = 'ar' | 'en';
@@ -66,7 +67,6 @@ interface Snapshot {
   tick: number;
 }
 
-const LANG_KEY = 'sona3_lang_v1';
 const RETURN_KEY = 'sona3_return_to_v1';
 const SAFE_PARAM = /^[A-Za-z0-9_-]{1,80}$/;
 
@@ -88,7 +88,7 @@ export function safeReturnTarget(raw: unknown, user: User | null): { view: View;
 }
 
 function readLang(): Language {
-  try { return localStorage.getItem(LANG_KEY) === 'en' ? 'en' : 'ar'; } catch { return 'ar'; }
+  return getShellLang(); // the platform's language (one page, one language)
 }
 
 /** The module lives under #i/sona3/ on the platform (see initiatives/registry.ts). */
@@ -112,6 +112,7 @@ class Store {
     const { view, param } = parseHash();
     this.s = { language: readLang(), user: null, meta: null, view, param, booting: true, tick: 0 };
     this.applyLanguage(this.s.language);
+    onShellLang((language) => { if (language !== this.s.language) this.set({ language }); });
     window.addEventListener('hashchange', () => {
       if (!decodeURIComponent(window.location.hash).replace(/^#\/?/, '').startsWith(MODULE_PREFIX)) return;
       const r = parseHash();
@@ -132,11 +133,8 @@ class Store {
     document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
   }
 
-  setLanguage = (language: Language) => {
-    try { localStorage.setItem(LANG_KEY, language); } catch { /* private mode */ }
-    this.applyLanguage(language);
-    this.set({ language });
-  };
+  /** The language is the platform's (core/shell.ts): switching it here switches the whole page. */
+  setLanguage = (language: Language) => setShellLang(language);
 
   navigate = (view: View, param?: string | null) => {
     if (PLATFORM_VIEWS[view]) {

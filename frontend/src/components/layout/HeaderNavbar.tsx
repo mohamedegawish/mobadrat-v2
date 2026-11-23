@@ -93,6 +93,7 @@ export const HeaderNavbar: React.FC = () => {
               <button 
                 onClick={() => setLanguage(isAr ? 'en' : 'ar')}
                 className="btn btn-secondary btn-sm"
+                aria-label={isAr ? 'تبديل اللغة إلى الإنجليزية' : 'Switch language to Arabic'}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.2rem 0.6rem' }}
               >
                 <Globe size={13} />
@@ -527,6 +528,9 @@ export const HeaderNavbar: React.FC = () => {
         <div className={`mobile-nav-overlay ${showMobileNav ? 'open' : ''}`} onClick={() => setShowMobileNav(false)}>
           <div
             className={`mobile-nav-panel ${showMobileNav ? 'open' : ''}`}
+            role="dialog"
+            aria-modal="true"
+            aria-label={isAr ? 'القائمة الرئيسية' : 'Main Menu'}
             onClick={e => e.stopPropagation()}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>

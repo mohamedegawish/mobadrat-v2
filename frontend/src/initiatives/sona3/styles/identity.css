@@ -1,0 +1,40 @@
+/*
+ * One platform: the screens of صُنّاع المستقبل use the platform's identity (red · navy · gold, the same fonts and flag
+ * ribbon — visual-tokens.css is the platform's). The initiative's own variables are kept as aliases of the platform's,
+ * so its screens keep their layout and only take the platform's colours. Imported last (index.tsx).
+ */
+:root {
+  /* visual identity aliases used by the initiative's screens */
+  --brand: var(--egypt-red);
+  --brand-deep: var(--egypt-red-dark);
+  --brand-ink: var(--text-main);
+  --sky: var(--egypt-red-bright);
+  --sky-soft: var(--egypt-red-soft);
+  --accent: var(--gold-bright);
+  --accent-deep: var(--gold-text);
+  --accent-soft: #FBF6EA;
+
+  /* sona3.css */
+  --gov-primary: var(--gov-primary-950);
+  --gov-primary-600: #2563EB;
+  --gov-primary-700: #1D4ED8;
+  --gov-primary-950: #142A4A;
+  --gov-gold: var(--egypt-red);
+  --brand-blue: var(--egypt-red);
+  --brand-orange: var(--gold-bright);
+  --brand-sky: var(--egypt-red-bright);
+
+  /* design.css */
+  --ink: #0F172A;
+  --text: var(--text-main);
+  --muted: var(--text-muted);
+  --bg: var(--bg-app);
+  --surface: var(--bg-surface);
+  --line: var(--border-subtle);
+  --line-strong: var(--border-medium);
+  --blue: var(--egypt-red);
+  --blue-soft: var(--egypt-red-soft);
+  --orange: var(--gold-text);
+  --orange-soft: #FBF6EA;
+  --font-display-ar: 'Alexandria', 'Cairo', system-ui, sans-serif;
+}

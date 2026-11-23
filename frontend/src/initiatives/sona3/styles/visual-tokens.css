@@ -1,14 +1,4 @@
 :root {
-  /* هوية صُنّاع المستقبل (من اللوجو) */
-  --brand: #1B4F9C;
-  --brand-deep: #123A78;
-  --brand-ink: #0D2347;
-  --sky: #2E86DE;
-  --sky-soft: #EAF1FB;
-  --accent: #F7941D;
-  --accent-deep: #C26F06;
-  --accent-soft: #FFF3E0;
-
   /* ================================================= */
   /* Egyptian Government Platform — Clean × Attractive   */
   /* Professional white + subtle mesh + OKLCH tints       */
@@ -16,46 +6,49 @@
   /* ================================================= */
 
   /* العلم المصري — OKLCH-tuned for harmony */
-  --egypt-red:        #1B4F9C; /* legacy name — الآن الأزرق الأساسي للهوية (صُنّاع المستقبل) */
-  --egypt-red-dark:   #123A78;
-  --egypt-red-soft:   #EAF1FB;
-  --egypt-red-bright: #2E86DE;
-  --egypt-red-ring:   rgba(27,79,156,0.12);
-  --egypt-red-glow:   rgba(27,79,156,0.08);
+  --egypt-red:        #C8102E;
+  --egypt-red-dark:   #A00D24;
+  --egypt-red-soft:   #FEF2F2;
+  --egypt-red-bright: #E8384F;
+  --egypt-red-ring:   rgba(200,16,46,0.12);
+  --egypt-red-glow:   rgba(200,16,46,0.08);
   --egypt-black:      #0F172A;
   --egypt-white:      #FFFFFF;
 
   /* النصوص — سلم تباين محكم */
-  --text-main:       #0D2347;
-  --text-secondary:  #33445F;
+  --text-main:       #0F172A;
+  --text-secondary:  #334155;
   --text-muted:      #64748B;
   --text-light:      #94A3B8;
   --text-inverse:    #FFFFFF;
 
   /* الأسطح — أبيض نقي مع عمق خفيف */
-  --bg-app:         #F4F7FB;
+  --bg-app:         #F8FAFC;
   --bg-surface:     #FFFFFF;
   --bg-hover:       #F8FAFC;
   --bg-muted:       #F1F5F9;
-  --bg-mesh:        var(--bg-app);
+  --bg-mesh:        radial-gradient(1200px 600px at 85% -10%, rgba(200,16,46,0.04) 0%, transparent 55%), radial-gradient(900px 500px at -10% 25%, rgba(14,107,101,0.03) 0%, transparent 60%), linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%);
 
   /* الحدود — أنعم */
   --border-subtle:  #E2E8F0;
   --border-medium:  #CBD5E1;
   --border-strong:  #94A3B8;
-  --border-glow:    rgba(27,79,156,0.15);
+  --border-glow:    rgba(200,16,46,0.15);
 
   /* خطوط — أزواج جذابة */
-  --font-display-ar: 'Readex Pro', 'IBM Plex Sans Arabic', system-ui, sans-serif;
+  --font-display-ar: 'Alexandria', 'Cairo', system-ui, sans-serif;
   --font-body-ar: 'IBM Plex Sans Arabic', 'Cairo', system-ui, sans-serif;
-  --font-display-en: 'Readex Pro', 'Inter', system-ui, sans-serif;
+  --font-display-en: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
   --font-body-en: 'Inter', system-ui, sans-serif;
   --font-ar: var(--font-body-ar);
   --font-en: var(--font-body-en);
   --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
 
   /* شريط العلم — أنحف وأكثر دقة */
-  --egypt-flag-ribbon: linear-gradient(90deg, #1B4F9C 0%, #1B4F9C 60%, #2E86DE 60%, #2E86DE 85%, #F7941D 85%, #F7941D 100%);
+  --egypt-flag-ribbon: linear-gradient(90deg,
+    #C8102E 0%, #C8102E 33.33%,
+    #FFFFFF 33.33%, #FFFFFF 66.66%,
+    #0F172A 66.66%, #0F172A 100%);
 
   /* حالات — ألوان رسمية هادئة */
   --status-approved:    #059669;
@@ -80,7 +73,7 @@
   --shadow-md: 0 4px 12px rgba(15,23,42,0.06), 0 2px 6px rgba(15,23,42,0.04);
   --shadow-lg: 0 12px 24px rgba(15,23,42,0.07), 0 4px 12px rgba(15,23,42,0.05);
   --shadow-xl: 0 24px 40px rgba(15,23,42,0.10), 0 12px 20px rgba(15,23,42,0.06);
-  --shadow-glow-red: 0 8px 24px rgba(27,79,156,0.12);
+  --shadow-glow-red: 0 8px 24px rgba(200,16,46,0.12);
   --shadow-card-hover: 0 16px 32px rgba(15,23,42,0.09), 0 8px 16px rgba(15,23,42,0.05);
 
   /* المسافات */
@@ -124,12 +117,12 @@
   --gov-primary-600: #2563EB;
   --gov-primary-700: #1D4ED8;
   --gov-primary-800: #1E40AF;
-  --gov-primary-900: #123A78;
-  --gov-primary-950: #0D2347;
+  --gov-primary-900: #1E3A5F;
+  --gov-primary-950: #142A4A;
 
   /* توكنات ذهبية موروثة → يُعاد توجيهها للأحمر (الخلفيات الذهبية ملغاة) */
   /* النص الذهبي محجوز الآن للشارات الرسمية فقط — راجع توكنات --gold-* أدناه */
-  --gov-gold:         #F7941D;
+  --gov-gold:         var(--egypt-red);
   --gov-gold-light:   var(--egypt-red-soft);
   --gov-gold-dark:    var(--egypt-red-dark);
   --gov-gold-bright:  var(--egypt-red-bright);
@@ -170,11 +163,11 @@
 
   /* مراحل سير العمل (الباقة الرسمية) */
   --stage-1: #64748B;
-  --stage-2: #2E86DE;
+  --stage-2: #0E6B65;
   --stage-3: #2563EB;
   --stage-4: #059669;
   --stage-5: #D97706;
-  --stage-6: #F7941D;
+  --stage-6: #C8102E;
   --stage-fallback: #94A3B8;
 
   /* لغة التصميم الهندسي (Engineering Language) */

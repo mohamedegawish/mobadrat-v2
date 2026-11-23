@@ -146,3 +146,24 @@ button.pf-box { width: 100%; font: inherit; color: inherit; display: block; }
 
 /* directory of bodies: suggested merges */
 .pf-suggestion { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.75rem 1rem; border: 1px dashed var(--border-medium); border-radius: var(--radius-md); background: var(--bg-muted); }
+
+/* the initiative bar under the header on an initiative's screens (initiatives/InitiativeBar.tsx): breadcrumb, role, tabs */
+.ini-bar { background: var(--bg-surface); border-bottom: 1px solid var(--border-subtle); box-shadow: var(--shadow-xs); position: relative; z-index: 5; }
+.ini-bar .ini-bar-row { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem 1rem; flex-wrap: wrap; padding-top: 0.55rem; padding-bottom: 0.55rem; }
+.ini-bar .ini-crumbs { display: flex; align-items: center; gap: 0.45rem; font-size: 0.82rem; color: var(--text-muted); min-width: 0; flex-wrap: wrap; }
+.ini-bar .ini-crumbs a { color: var(--text-muted); text-decoration: none; font-weight: 600; }
+.ini-bar .ini-crumbs a:hover { color: var(--egypt-red); }
+.ini-bar .ini-crumbs .ini-crumb-title { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--text-main); font-weight: 800; font-size: 0.95rem; }
+.ini-bar .ini-crumbs .ini-crumb-title svg { color: var(--egypt-red); }
+.ini-bar .ini-role { font-size: 0.7rem; font-weight: 700; padding: 0.18rem 0.55rem; border-radius: 9999px; background: #EFF6FF; color: #1D4ED8; border: 1px solid #DBEAFE; white-space: nowrap; }
+.ini-bar .ini-tabs { display: flex; align-items: center; gap: 0.3rem; overflow-x: auto; max-width: 100%; scrollbar-width: none; }
+.ini-bar .ini-tabs::-webkit-scrollbar { display: none; }
+.ini-bar .ini-tab {
+  display: inline-flex; align-items: center; gap: 0.4rem; white-space: nowrap; flex-shrink: 0;
+  padding: 0.42rem 0.85rem; border-radius: 9999px; border: 1px solid transparent; background: transparent;
+  color: var(--text-secondary); font: inherit; font-size: 0.82rem; font-weight: 600; text-decoration: none; cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+}
+.ini-bar .ini-tab:hover { background: var(--egypt-red-soft); color: var(--egypt-red); border-color: rgba(200,16,46,0.08); }
+.ini-bar .ini-tab.active { background: var(--egypt-red); color: #FFFFFF; border-color: var(--egypt-red); box-shadow: 0 4px 12px rgba(200,16,46,0.16); }
+@media (max-width: 640px) { .ini-bar .ini-bar-row { flex-direction: column; align-items: stretch; } }

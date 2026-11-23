@@ -275,8 +275,8 @@ test('unified notifications: a decision in an initiative reaches the platform be
   await item.click();
   await expect(page).toHaveURL(/#i\/sona3\//);
 
-  // Back to the platform from the initiative's bar: the opened notification is read (one fewer), the rest on request.
-  await page.getByRole('link', { name: 'مبادراتي' }).click();
+  // Back to «مبادراتي» from the platform header: the opened notification is read (one fewer), the rest on request.
+  await page.locator('.gov-header .nav-links').getByRole('button', { name: 'مبادراتي', exact: true }).click();
   await expect(page).toHaveURL(/#hub/);
   if (before > 1) await expect(bell).toHaveText(String(before - 1));
   else await expect(bell).toHaveCount(0);

@@ -1,12 +1,12 @@
 import React, { useEffect } from 'react';
-import { Lock } from 'lucide-react';
-import { canView, isLockedFactory, store, useStore, VIEW_ACCESS, WORKSPACE_VIEWS, type View } from './store/state';
-import { HeaderNavbar } from './components/layout/HeaderNavbar';
-import { Footer } from './components/layout/Footer';
+import { Activity, Home, LayoutDashboard, ListChecks, Lock, Sun, UserPlus } from 'lucide-react';
+import { canView, isLockedFactory, isRestrictedFactory, store, useStore, VIEW_ACCESS, WORKSPACE_VIEWS, DEFAULT_VIEW, type View } from './store/state';
+import { InitiativeBar, type InitiativeBarItem } from '../InitiativeBar';
+import { setShellWorkspace } from '../../core/shell';
+import { NotificationBell } from './components/common/NotificationBell';
 import { AdminLayout } from './components/admin/AdminLayout';
 import { ToastProvider } from './components/common/ToastSystem';
 import { Loading } from './components/common/StateViews';
-import { HomeView } from './components/public/HomeView';
 import { LoginView, RegisterView, VerifyEmailView, ForgotPasswordView, ResetPasswordView, CancelRecoveryView } from './components/auth/AuthViews';
 import { FactoryDashboardView } from './components/factory/FactoryDashboardView';
 import { ApplicationWizard } from './components/factory/ApplicationWizard';
@@ -22,8 +22,11 @@ import { AccountsView, OrganizationsView } from './components/admin/AccountsView
 import { AuditLogsView, IntegrationKeysView, OutboxView } from './components/admin/SystemViews';
 import { AdminDashboardView } from './components/admin/AdminDashboardView';
 
+/** «عن المبادرة» is the initiative's page on the platform (App redirects there). */
+const PlatformPageRedirect: React.FC = () => null;
+
 const SCREENS: Record<View, React.FC> = {
-  home: HomeView, login: LoginView, register: RegisterView, 'verify-email': VerifyEmailView, 'forgot-password': ForgotPasswordView, 'reset-password': ResetPasswordView, 'cancel-recovery': CancelRecoveryView, notifications: NotificationsView,
+  home: PlatformPageRedirect, login: LoginView, register: RegisterView, 'verify-email': VerifyEmailView, 'forgot-password': ForgotPasswordView, 'reset-password': ResetPasswordView, 'cancel-recovery': CancelRecoveryView, notifications: NotificationsView,
   'factory-dashboard': FactoryDashboardView, apply: ApplicationWizard, task: FactoryTaskView, application: ApplicationDetailView,
   dashboard: RoleDashboardView, 'work-queue': WorkQueueView, 'pmu-monitor': MonitoringView, providers: ProvidersView, approvals: ApprovalsView,
   'admin-dashboard': AdminDashboardView, 'admin-accounts': AccountsView, 'admin-organizations': OrganizationsView, 'admin-audit': AuditLogsView, 'admin-integration': IntegrationKeysView, 'admin-outbox': OutboxView,
@@ -44,11 +47,23 @@ const Restricted: React.FC = () => {
   );
 };
 
+/** The initiative's page on the platform: its public details (the former «عن المبادرة» page) live there. */
+const PLATFORM_PAGE = '#initiative/shams';
+
+/** The initiative's tabs in the bar under the platform header (the account menu, language and sign-out are the platform's). */
+const TABS: Array<{ view: View; ar: string; en: string; icon: React.ReactNode }> = [
+  { view: 'factory-dashboard', ar: 'لوحتي', en: 'My dashboard', icon: <LayoutDashboard size={15} /> },
+  { view: 'pmu-monitor', ar: 'المتابعة', en: 'Monitoring', icon: <Activity size={15} /> },
+  { view: 'dashboard', ar: 'اللوحة', en: 'Dashboard', icon: <LayoutDashboard size={15} /> },
+  { view: 'work-queue', ar: 'قائمة العمل', en: 'Work queue', icon: <ListChecks size={15} /> },
+  { view: 'register', ar: 'تسجيل مصنع', en: 'Register a factory', icon: <UserPlus size={15} /> },
+];
+
 export const App: React.FC = () => {
-  const { view, user, booting, isAr } = useStore();
+  const { view, user, booting, isAr, t, meta } = useStore();
   useEffect(() => { void store.boot(); }, []);
   useEffect(() => {
-    document.title = isAr ? 'مبادرة شمس الصناعة | وزارة الصناعة' : 'Shams El-Senaa Initiative | Ministry of Industry';
+    document.title = isAr ? 'مبادرة شمس الصناعة | المنصة الوطنية للتمويل والمبادرات الصناعية' : 'Shams El-Senaa | National Platform for Industrial Financing & Initiatives';
   }, [isAr]);
 
   // A factory under IMC review (or not accepted) has no Shams screen: back to the platform chooser, which says why.
@@ -56,20 +71,33 @@ export const App: React.FC = () => {
     if (!booting && isLockedFactory(user) && VIEW_ACCESS[view] !== 'public') window.location.hash = '#hub';
   }, [booting, user, view]);
 
+  // «عن المبادرة» is the initiative's page on the platform; a signed-in person's home is their workspace.
+  const toPlatformPage = !booting && view === 'home' && (!user || DEFAULT_VIEW[user.role] === 'home');
+  useEffect(() => { if (toPlatformPage) window.location.replace(PLATFORM_PAGE); }, [toPlatformPage]);
+
   const Screen = SCREENS[view];
   const allowed = canView(view, user);
   const workspace = Boolean(user) && allowed && (WORKSPACE_VIEWS.includes(view) || (view === 'application' && user?.role !== 'factory_owner'));
-  const body = booting ? <div className="container-custom page"><Loading /></div> : !allowed ? <Restricted /> : <Screen />;
+  useEffect(() => { setShellWorkspace(workspace); }, [workspace]);
+  useEffect(() => () => setShellWorkspace(false), []);
+  const body = booting || toPlatformPage ? <div className="container-custom page"><Loading /></div> : !allowed ? <Restricted /> : <Screen />;
+
+  const items: InitiativeBarItem[] = [
+    { key: 'about', label: t('عن المبادرة', 'About'), icon: <Home size={15} />, href: PLATFORM_PAGE },
+    ...TABS.filter((n) => canView(n.view, user)).map((n) => ({
+      key: n.view, label: isAr ? n.ar : n.en, icon: n.icon, active: view === n.view, onClick: () => store.navigate(n.view),
+    })),
+  ];
+  const roleLabel = user && meta ? (isAr ? meta.roles[user.role].ar : meta.roles[user.role].en) : '';
 
   return (
     <ToastProvider>
-      <div className={`app-container${workspace ? ' admin-mode' : ''}`}>
-        <HeaderNavbar />
-        <main className="main-content" id="main">
-          {workspace ? <AdminLayout>{body}</AdminLayout> : body}
-        </main>
-        {!workspace ? <Footer /> : null}
-      </div>
+      <InitiativeBar
+        isAr={isAr} slug="shams" titleAr="شمس الصناعة" titleEn="Shams El-Senaa" icon={<Sun size={15} aria-hidden />}
+        roleLabel={roleLabel} items={items} workspace={workspace}
+        extra={user && !isRestrictedFactory(user) ? <NotificationBell className="ini-tab" /> : null}
+      />
+      {workspace ? <AdminLayout>{body}</AdminLayout> : body}
     </ToastProvider>
   );
 };

@@ -16,10 +16,10 @@ const BIRTH = '1998-04-12';
 const NID = nationalIdFor(BIRTH, STAMP);
 
 test('a new founder and every reviewer complete the Sona3 journey to COMPLETED', async ({ page, browser, request }) => {
-  // ── الزائر: صفحة المبادرة → «سجّل وقدّم (أول مرة)» → نموذج التسجيل الخاص بالمبادرة ──
+  // ── الزائر: صفحة المبادرة (بتفاصيلها الكاملة) → «التقديم الآن» → نموذج التسجيل الخاص بالمبادرة ──
   await page.goto('/#initiative/sona3');
   await shot(page, 'sona3-01-initiative-page');
-  await page.getByText('سجّل وقدّم (أول مرة)').click();
+  await page.getByTestId('initiative-apply').last().click();
   await expect(page).toHaveURL(/#i\/sona3\/register/);
   await page.locator('#fullName').fill(NAME);
   await page.locator('#regEmail').fill(EMAIL);

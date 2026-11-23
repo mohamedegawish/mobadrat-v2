@@ -29,12 +29,10 @@ test('guest: the catalog lists both initiatives, each with its page and its own 
   await expect(page.getByText('شمس الصناعة').first()).toBeVisible();
   await expect(page.getByText('صُنّاع المستقبل').first()).toBeVisible();
 
-  // A guest applying is sent to the sign-in page, which also offers the initiative's own first-time registration form.
+  // The initiative's page carries its full details; a guest applying goes to the initiative's own registration form.
   await page.goto('/#initiative/sona3');
+  await expect(page.getByText('رحلة مشروعك: من الفكرة إلى التشغيل')).toBeVisible();
   await page.getByTestId('initiative-apply').last().click();
-  await expect(page).toHaveURL(/#login$/);
-  await page.getByRole('button', { name: 'تسجيل منشأة جديدة (حساب جديد)' }).click();
-  await page.getByRole('link', { name: 'التسجيل في صُنّاع المستقبل' }).click();
   await expect(page).toHaveURL(/#i\/sona3\/register/);
   await expect(page.locator('.theme-sona3')).toBeVisible();
 

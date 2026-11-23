@@ -227,15 +227,19 @@ export const InitiativesView: React.FC = () => {
                     </div>
                   )}
                   <div style={{ position: 'absolute', bottom: '0.75rem', right: isAr ? '0.75rem' : 'auto', left: isAr ? 'auto' : '0.75rem', display: 'flex', alignItems: 'end', gap: '0.6rem' }}>
+                    {initiative.budgetTotalEGP > 0 && (
                     <div style={{ color: '#fff' }}>
                       <div style={{ fontSize: '0.66rem', fontWeight: 700, opacity: 0.9, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{isAr ? 'المخصصات' : 'Allocation'}</div>
                       <div style={{ fontSize: '1.05rem', fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums', textShadow: '0 1px 10px rgba(0,0,0,0.22)' }}>
                         {formatBillions(initiative.budgetTotalEGP, isAr)} <span style={{ fontSize: '0.72rem', fontWeight: 700, opacity: 0.92 }}>{isAr ? 'مليار ج.م' : 'B EGP'}</span>
                       </div>
                     </div>
+                    )}
+                    {(initiative.impactMetrics?.targetFactories ?? 0) > 0 && (
                     <span style={{ fontSize: '0.66rem', fontWeight: 700, background: 'rgba(255,255,255,0.14)', backdropFilter: 'blur(6px)', border: '1px solid rgba(255,255,255,0.22)', color: '#fff', padding: '0.22rem 0.45rem', borderRadius: '9999px' }}>
                       {isAr ? `${(initiative.impactMetrics?.targetFactories ?? 0).toLocaleString('ar-EG')} مصنع مستهدف` : `${(initiative.impactMetrics?.targetFactories ?? 0).toLocaleString('en-US')} factories`}
                     </span>
+                    )}
                   </div>
                 </div>
 

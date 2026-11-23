@@ -22,19 +22,11 @@ export interface SiteContent {
 export type ContentKey = keyof SiteContent;
 
 export const DEFAULTS: SiteContent = {
-  // المصدر: مبادرة صُنّاع المستقبل.pdf — «ثانيًا: الرؤية والرسالة والأهداف».
-  vision: {
-    ar: 'بناء جيل جديد من رواد الأعمال الصناعيين القادرين على إنشاء مشروعات إنتاجية مبتكرة ومستدامة، تسهم في تعزيز تنافسية الصناعة المصرية.',
-    en: 'Building a new generation of industrial entrepreneurs able to create innovative, sustainable productive projects that help strengthen the competitiveness of Egyptian industry.',
-  },
-  mission: {
-    ar: 'توفير مسار رقمي متكامل يربط الشباب بالخبرة الفنية ودراسات الجدوى والتمويل ومقدمي الخدمات، ويحوّل الأفكار الواعدة إلى مشروعات حقيقية.',
-    en: 'Providing an integrated digital pathway that connects young people with technical expertise, feasibility studies, funding and service providers, and turns promising ideas into real projects.',
-  },
+  vision: D.VISION, mission: D.MISSION,
   siteName: D.SITE_NAME, siteTagline: D.SITE_TAGLINE, ministry: D.MINISTRY,
   topBar: { ar: 'وزارة الصناعة · مركز تحديث الصناعة', en: 'Ministry of Industry · Industrial Modernisation Centre' },
   brandSub: { ar: 'تقديم · تقييم · تمويل · متابعة', en: 'Apply · Evaluate · Fund · Monitor' },
-  heroEyebrow: { ar: 'مركز تحديث الصناعة — الدورة الأولى', en: 'Industrial Modernization Center — Cohort 1' },
+  heroEyebrow: D.HERO_EYEBROW,
   footerRights: { ar: 'مركز تحديث الصناعة (IMC) — جميع الحقوق محفوظة', en: 'Industrial Modernization Center (IMC) — All rights reserved' },
   figures: D.FIGURES, journey: D.JOURNEY,
   eligibility: D.ELIGIBILITY, criteria: D.CRITERIA_TEXT, financing: D.FINANCING_TERMS,

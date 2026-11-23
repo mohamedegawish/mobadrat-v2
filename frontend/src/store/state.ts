@@ -209,7 +209,8 @@ export function applyStateOf(i: Pick<Initiative, 'id' | 'moduleId'>, me: Me | nu
 
 /**
  * «التقديم» on an initiative: an enrolled person opens its dashboard; a signed-in person goes to the apply step (only the
- * missing data); a visitor signs in first (the login page offers the initiative's own registration form) and comes back.
+ * missing data); a visitor goes to the initiative's own registration form (account + application data in one form, as on
+ * the initiative's original site — an existing platform account signs in from the header), or signs in first.
  */
 export function startApplication(initiativeId: string): void {
   const c = catalogItem(initiativeId);
@@ -217,7 +218,12 @@ export function startApplication(initiativeId: string): void {
   const me = platform.get().me;
   const m = c.moduleId ? me?.memberships.find((x) => x.initiativeId === c.moduleId) : undefined;
   if (m) { platform.go(`i/${m.initiativeId}/${m.card?.view ?? m.defaultView}`); return; }
-  if (!me) { platform.rememberReturn(`apply/${c.slug}`); platform.go('login'); return; }
+  if (!me) {
+    if (c.registerView) { platform.go(c.registerView); return; }
+    platform.rememberReturn(`apply/${c.slug}`);
+    platform.go('login');
+    return;
+  }
   platform.go(`apply/${c.slug}`);
 }
 
@@ -255,7 +261,8 @@ export function usePlatformStore() {
     initiativesLoaded: s.initiatives !== null,
     homeBanners: s.banners as Banner[],
     heroSliderInterval: 3000,
-    activeView: legacyView(s.view),
+    // Inside an initiative's screens (#i/<id>/…): «مبادراتي» for a signed-in person, «المبادرات» for a visitor.
+    activeView: s.hash.startsWith('i/') ? (s.me ? 'my-initiatives' : 'initiatives') : legacyView(s.view),
     view: s.view,
     selectedInitiativeId: s.view === 'initiative' ? (catalogItem(s.param)?.id ?? s.param) : null,
     isViewAllowed,

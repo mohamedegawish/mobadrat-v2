@@ -11,10 +11,12 @@ const COMPANY = `مصنع اختبار الواجهة ${Date.now() % 100000}`;
 
 test('factory and reviewers complete the full journey to CONTRACTED', async ({ page, browser, request }) => {
   // ── التسجيل: كل نموذج التسجيل ومستنداته من صفحة التسجيل ──
+  // «عن المبادرة» of the initiative is its page on the platform (#initiative/shams).
   await page.goto('/#i/shams/home');
+  await expect(page).toHaveURL(/#initiative\/shams/);
   await expect(page.getByRole('heading', { level: 1 })).toContainText('شمس الصناعة');
   await shot(page, 'shams-01-home');
-  await page.getByTestId('hero-apply').click();
+  await page.getByTestId('initiative-apply').first().click();
   await expect(page).toHaveURL(/#i\/shams\/register/);
   await registerViaPage(page, { companyName: COMPANY, contactName: 'م. اختبار الواجهة', email: FACTORY_EMAIL, mobile: '01011112222', password: FACTORY_PASSWORD });
   await shot(page, 'shams-02-registered');

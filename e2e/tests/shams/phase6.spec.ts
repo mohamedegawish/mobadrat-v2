@@ -30,10 +30,10 @@ test('a correction request is confirmed first: the dialog says it returns to the
 test('home: a signed-in reviewer reaches the page from the header and gets a working button to the workspace, with no "start application" call to action', async ({ page }) => {
   await login(page, 'imc1@shams.local');
   await expect(page).toHaveURL(/#i\/shams\/dashboard/);
-  await page.locator('.nav-desktop').getByRole('button', { name: 'عن المبادرة' }).click();
-  await expect(page).toHaveURL(/#i\/shams\/home/);
-  const hero = page.getByTestId('hero-apply');
-  await expect(hero).toContainText('مساحة العمل');
+  await page.getByTestId('initiative-bar').getByRole('link', { name: 'عن المبادرة' }).click();
+  await expect(page).toHaveURL(/#initiative\/shams/);
+  const hero = page.getByTestId('initiative-apply').first();
+  await expect(hero).toContainText('ادخل لوحة المبادرة');
   await expect(page.getByTestId('cta-bottom')).toHaveCount(0);
   await hero.click();
   await expect(page).toHaveURL(/#i\/shams\/dashboard/);

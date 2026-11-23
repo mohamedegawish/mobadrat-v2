@@ -27,6 +27,7 @@ import { benefitIcon } from '../ui/benefitIcons';
 import type { BilingualItem, FinancingType } from '../../types';
 import { PreEligibilityModal } from './PreEligibilityModal';
 import { formatBillions, formatEGP } from '../../utils/format';
+import { INITIATIVE_DETAILS } from './InitiativeDetails';
 
 const FINANCING_LABELS: Record<FinancingType, [string, string]> = {
   bank_loans: ['قروض من الجهاز المصرفي', 'Bank loans'],
@@ -258,7 +259,12 @@ export const InitiativeDetailPage: React.FC = () => {
   const custom = { ...DEFAULT_CUSTOMIZATION, ...(initiative.customization || {}) };
   const page = readPageConfig(initiative);
   // مقطع «مسار العمل والمراحل» (timeline) لم يعد يُعرض للعامة — يبقى في الإعدادات المحفوظة فقط لضبط ترتيب المقاطع الأخرى
-  const visibleSections = page.sections.filter(s => s.visible && s.id !== 'timeline').sort((a, b) => a.order - b.order);
+  // التفاصيل الكاملة للمبادرة من موقعها الأصلي (المبادرات التي تعمل بنظامها على المنصة) — قبل قسم التقديم
+  const details = initiative.moduleId ? INITIATIVE_DETAILS[initiative.moduleId] : undefined;
+  const visibleSections = page.sections.filter(s => s.visible && s.id !== 'timeline' && !details?.replaces.includes(s.id)).sort((a, b) => a.order - b.order);
+  const applyAt = visibleSections.findIndex(s => s.id === 'apply');
+  const beforeApply = applyAt < 0 ? visibleSections : visibleSections.slice(0, applyAt);
+  const fromApply = applyAt < 0 ? [] : visibleSections.slice(applyAt);
   const applyState = applyStateOf(initiative, me);
   // قريباً / مغلقة / صفحة تعريفية (التقديم عبر الجهة المسؤولة) = زر التقديم غير متاح
   const isComingSoon = initiative.status === 'coming_soon' || applyState === 'closed' || applyState === 'info';
@@ -346,20 +352,27 @@ export const InitiativeDetailPage: React.FC = () => {
       <p style={{ color: 'var(--text-body)', fontSize: '0.9rem', lineHeight: 1.75, margin: 0 }}>
         {isAr ? initiative.descriptionAr : initiative.descriptionEn}
       </p>
+      {/* المخصصات والقطاعات — تظهر حين تُحدَّد للمبادرة */}
+      {(initiative.budgetTotalEGP > 0 || (initiative.targetSectors ?? []).length > 0) && (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.8rem', marginTop: '1rem' }}>
+        {initiative.budgetTotalEGP > 0 && (
         <div style={{ background: 'var(--bg-app)', padding: '0.9rem 1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
           <div className="emblem-accent" style={{ marginBottom: '0.3rem' }}><Percent size={12} /><span>{isAr ? 'إجمالي المخصصات' : 'Total Budget'}</span></div>
           <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--gov-gold-bright)', fontVariantNumeric: 'tabular-nums' }}>
             {formatBillions(initiative.budgetTotalEGP, isAr)} {isAr ? 'مليار جنيه' : 'Billion EGP'}
           </div>
         </div>
+        )}
+        {(initiative.targetSectors ?? []).length > 0 && (
         <div style={{ background: 'var(--bg-app)', padding: '0.9rem 1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700 }}>{isAr ? 'القطاعات المستهدفة' : 'Target Sectors'}</div>
           <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--gov-primary-800)', marginTop: '0.25rem', lineHeight: 1.6 }}>
             {isAr ? (initiative.targetSectors ?? []).join('، ') : (initiative.targetSectorsEn ?? []).join(', ')}
           </div>
         </div>
+        )}
       </div>
+      )}
     </div>
   );
 
@@ -461,7 +474,8 @@ export const InitiativeDetailPage: React.FC = () => {
       }
       case 'stats': {
         const m = initiative.impactMetrics;
-        if (!m) return null;
+        // لا أرقام منشورة لهذه المبادرة = لا قسم (بدل بطاقة بصفر)
+        if (!m || !(m.targetFactories || m.targetCapacityMW || m.jobsCreated || m.savedEnergyGWh)) return null;
         const cards = [
           { icon: BarChart3, ar: 'مصانع مستهدفة', en: 'Target Factories', v: (m.targetFactories ?? 0).toLocaleString(isAr ? 'ar-EG' : 'en-US') },
           ...(m.targetCapacityMW ? [{ icon: Zap, ar: 'القدرة المستهدفة (ميجاوات)', en: 'Target Capacity (MW)', v: m.targetCapacityMW.toLocaleString(isAr ? 'ar-EG' : 'en-US') }] : []),
@@ -650,7 +664,9 @@ export const InitiativeDetailPage: React.FC = () => {
       <div>{BackBtn}</div>
       {page.layout === 'spotlight' ? heroSpotlight : page.layout === 'compact' ? heroCompact : heroStandard}
       {aboutBlock}
-      {visibleSections.map(renderSection)}
+      {beforeApply.map(renderSection)}
+      {details && <details.Details isAr={isAr} />}
+      {fromApply.map(renderSection)}
       {eligibilityOpen && (
         <PreEligibilityModal
           initiative={initiative}

@@ -9,7 +9,8 @@ import { VerifyEmailPage, ForgotPasswordPage, ResetPasswordPage, ChangePasswordP
 import { ProfilePage, ApplyPage, NotificationsPage } from './pages/account';
 import { AdminDashboard, AdminInitiative, AdminUsers, AdminCatalog, AdminBanners, AdminAudit, AdminOutbox, AdminReadiness } from './pages/admin';
 import { AdminBodies, AdminBody } from './pages/bodies';
-import { moduleOf } from '../initiatives/registry';
+import { moduleOf, type ModuleEntry } from '../initiatives/registry';
+import { getShellWorkspace, onShellWorkspace } from '../core/shell';
 import { ToastProvider, useToast } from '../components/common/ToastSystem';
 import { HeaderNavbar } from '../components/layout/HeaderNavbar';
 import { Footer } from '../components/layout/Footer';
@@ -38,10 +39,16 @@ function useHash(): string {
   return useSyncExternalStore((cb) => { window.addEventListener('hashchange', cb); return () => window.removeEventListener('hashchange', cb); }, () => window.location.hash);
 }
 
-const PlatformShell: React.FC = () => {
+function useWorkspace(): boolean {
+  return useSyncExternalStore(onShellWorkspace, getShellWorkspace);
+}
+
+/** One page for the platform and every initiative: the official header, the page (a platform screen or an initiative's), the footer. */
+const PlatformShell: React.FC<{ module: ModuleEntry | null }> = ({ module }) => {
   const { view, booting, me, isAr } = usePlatform();
+  const moduleWorkspace = useWorkspace();
   const { toast } = useToast();
-  useEffect(() => { document.title = isAr ? 'المنصة الوطنية للتمويل والمبادرات الصناعية | جمهورية مصر العربية' : 'National Platform for Industrial Financing & Initiatives | Arab Republic of Egypt'; }, [isAr, view]);
+  useEffect(() => { if (!module) document.title = isAr ? 'المنصة الوطنية للتمويل والمبادرات الصناعية | جمهورية مصر العربية' : 'National Platform for Industrial Financing & Initiatives | Arab Republic of Egypt'; }, [isAr, view, module]);
 
   // Show a welcome toast on first load
   useEffect(() => {
@@ -56,10 +63,14 @@ const PlatformShell: React.FC = () => {
   }, []);
 
   const Screen = SCREENS[view];
-  const isAdminView = ADMIN_VIEWS.includes(view);
+  const isAdminView = module ? moduleWorkspace : ADMIN_VIEWS.includes(view);
   const needsAuth = AUTH_VIEWS.includes(view) || isAdminView || STAFF_VIEWS.includes(view);
   let body: React.ReactNode;
-  if (booting && needsAuth) body = <Loading />;
+  if (module) {
+    // An initiative's screens (its own routes, guards and stylesheet) inside the platform page.
+    const Module = module.load;
+    body = me?.user.mustChangePassword ? <ChangePasswordPage /> : <Suspense fallback={<Loading />}><Module /></Suspense>;
+  } else if (booting && needsAuth) body = <Loading />;
   else if (view === 'hub' && !me) body = <MyInitiativesView />; // its own «sign in» card
   else if (needsAuth && !me) body = <SignInRequired />;
   else if (me?.user.mustChangePassword && view !== 'change-password') body = <ChangePasswordPage />;
@@ -84,10 +95,6 @@ export const App: React.FC = () => {
   const hash = useHash();
   useEffect(() => { void store.boot(); }, []);
   const mod = moduleOf(hash);
-  if (mod) {
-    const Module = mod.load;
-    return <Suspense fallback={<div style={{ padding: 40, textAlign: 'center' }}>…</div>}><Module /></Suspense>;
-  }
   // The toasts render next to the page, so they sit inside .platform-root too (the platform's stylesheet is scoped to it).
-  return <div className="platform-root"><ToastProvider><PlatformShell /></ToastProvider></div>;
+  return <div className="platform-root"><ToastProvider><PlatformShell module={mod} /></ToastProvider></div>;
 };

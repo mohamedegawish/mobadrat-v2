@@ -167,8 +167,8 @@ test('L5: hash values that are JavaScript prototype keys do not crash the app (t
   for (const key of ['constructor', 'toString', '__proto__', 'hasOwnProperty', 'valueOf']) {
     await page.goto(`/#i/shams/${key}`);
     await page.reload();
-    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();          // الصفحة الرئيسية تظهر
-    await expect(page.getByTestId('hero-apply')).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();          // صفحة المبادرة على المنصة تظهر
+    await expect(page.getByTestId('initiative-apply').first()).toBeVisible();
   }
   expect(errors, errors.join(' | ')).toEqual([]);
   // نفس الشيء بعد تسجيل الدخول: مسار مجهول لا يكسر الجلسة

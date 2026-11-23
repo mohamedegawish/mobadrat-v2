@@ -5,6 +5,7 @@
 import { useSyncExternalStore } from 'react';
 import { api, type Banner, type Initiative, type Lang, type Me } from './api';
 import { onTokenChange, refreshSession, getAccessToken } from '../core/session';
+import { getShellLang, onShellLang, setShellLang } from '../core/shell';
 
 export type View =
   | 'home' | 'initiatives' | 'initiative' | 'compare' | 'impact' | 'login' | 'register' | 'verify-email' | 'forgot-password' | 'reset-password'
@@ -22,10 +23,7 @@ interface Snapshot {
   me: Me | null; booting: boolean; initiatives: Initiative[] | null; banners: Banner[]; tick: number;
 }
 
-const LANG_KEY = 'mobadrat_lang_v2';
 const RETURN_KEY = 'platform_return_to';
-
-function readLang(): Lang { try { return localStorage.getItem(LANG_KEY) === 'en' ? 'en' : 'ar'; } catch { return 'ar'; } }
 
 function parse(): { hash: string; view: View; param: string | null; query: URLSearchParams } {
   const raw = decodeURIComponent(window.location.hash.replace(/^#\/?/, ''));
@@ -40,8 +38,9 @@ class Store {
   private s: Snapshot;
 
   constructor() {
-    this.s = { lang: readLang(), ...parse(), me: null, booting: true, initiatives: null, banners: [], tick: 0 };
-    this.applyLang(this.s.lang);
+    this.s = { lang: getShellLang(), ...parse(), me: null, booting: true, initiatives: null, banners: [], tick: 0 };
+    setShellLang(this.s.lang);
+    onShellLang((lang) => { if (lang !== this.s.lang) this.set({ lang }); });
     window.addEventListener('hashchange', () => { this.set(parse()); });
     // A module may sign out or refresh the session: keep /me in step with the shared token.
     onTokenChange((t) => { if (!t && this.s.me) this.set({ me: null }); });
@@ -51,8 +50,8 @@ class Store {
   get = () => this.s;
   private set(p: Partial<Snapshot>) { this.s = { ...this.s, ...p, tick: this.s.tick + 1 }; this.listeners.forEach((l) => l()); }
 
-  private applyLang(l: Lang) { document.documentElement.lang = l; document.documentElement.dir = l === 'ar' ? 'rtl' : 'ltr'; }
-  setLang = (lang: Lang) => { try { localStorage.setItem(LANG_KEY, lang); } catch { /* private mode */ } this.applyLang(lang); this.set({ lang }); };
+  /** The page language — the initiative modules follow it (core/shell.ts). */
+  setLang = (lang: Lang) => setShellLang(lang);
 
   go = (target: string) => {
     const h = target.startsWith('#') ? target : `#${target}`;

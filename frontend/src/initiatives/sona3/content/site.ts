@@ -6,6 +6,17 @@ export const SITE_TAGLINE: Bi = {
   ar: 'منصة رقمية لتمكين الشباب من تأسيس المشروعات الصناعية والإنتاجية، وتحويل الأفكار إلى فرص استثمارية قابلة للتنفيذ والتمويل.',
   en: 'A digital platform that empowers young people to found industrial and productive projects and turns ideas into fundable investment opportunities.',
 };
+// المصدر: مبادرة صُنّاع المستقبل.pdf — «ثانيًا: الرؤية والرسالة والأهداف».
+export const VISION: Bi = {
+  ar: 'بناء جيل جديد من رواد الأعمال الصناعيين القادرين على إنشاء مشروعات إنتاجية مبتكرة ومستدامة، تسهم في تعزيز تنافسية الصناعة المصرية.',
+  en: 'Building a new generation of industrial entrepreneurs able to create innovative, sustainable productive projects that help strengthen the competitiveness of Egyptian industry.',
+};
+export const MISSION: Bi = {
+  ar: 'توفير مسار رقمي متكامل يربط الشباب بالخبرة الفنية ودراسات الجدوى والتمويل ومقدمي الخدمات، ويحوّل الأفكار الواعدة إلى مشروعات حقيقية.',
+  en: 'Providing an integrated digital pathway that connects young people with technical expertise, feasibility studies, funding and service providers, and turns promising ideas into real projects.',
+};
+export const HERO_EYEBROW: Bi = { ar: 'مركز تحديث الصناعة — الدورة الأولى', en: 'Industrial Modernization Center — Cohort 1' };
+
 export const MINISTRY: Bi = { ar: 'مركز تحديث الصناعة (IMC)', en: 'Industrial Modernization Center (IMC)' };
 
 export const FIGURES: Array<{ value: string; label: Bi }> = [
