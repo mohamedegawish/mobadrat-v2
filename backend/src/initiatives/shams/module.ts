@@ -36,7 +36,7 @@ import { addAuditLog } from './store/audit.js';
 import { requirements, sectionsFromProfile, DOC_MAP } from './requirements.js';
 import { stats } from './stats.js';
 import { shamsBodies } from './bodies.js';
-import { seedDevData } from './db/seed.js';
+import { seedDeployData, seedDevData } from './db/seed.js';
 import { readinessReport } from './services/readiness.js';
 import { startSlaMonitor, stopSlaMonitor } from './jobs/slaMonitor.js';
 import { startWebhookWorker, stopWebhookWorker } from './jobs/webhookWorker.js';
@@ -227,6 +227,7 @@ export const shamsModule: InitiativeModule = {
   },
 
   seedDemo(password) { return seedDevData(password); },
+  seedDeploy(passwordHash) { return seedDeployData(passwordHash); },
 
   registerMail() { registerCidResolver(providerLogoAttachments); },
 };

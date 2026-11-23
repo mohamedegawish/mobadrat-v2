@@ -86,7 +86,7 @@ async function main(): Promise<number> {
     const accounts = await target.count('users');
     const done = await target.one<{ n: number }>('SELECT COUNT(*) AS n FROM legacy_import_runs WHERE finishedAt IS NOT NULL');
     if (accounts > 0 || Number(done?.n) > 0) {
-      throw new Error(`the target database already has ${accounts} account(s)${Number(done?.n) ? ' and a finished import' : ''}: import into a fresh database (re-create it and run again)`);
+      throw new Error(`the target database already has ${accounts} account(s)${Number(done?.n) ? ' and a finished import' : ''}: import into a fresh database (re-create it and run again; keep SEED_ON_BOOT and SEED_ON_DEPLOY at 0 until the import has finished)`);
     }
     const fingerprint = createHash('sha256').update(report.sources.map((x) => `${x.name}:${x.fingerprint}`).join('|')).digest('hex');
     await target.exec('SET FOREIGN_KEY_CHECKS = 0');

@@ -35,7 +35,7 @@ import { addAuditLog } from './store/audit.js';
 import { requirements, personalFromProfile, DOC_MAP } from './requirements.js';
 import { stats } from './stats.js';
 import { sona3Bodies } from './bodies.js';
-import { seedDevData } from './db/seed.js';
+import { seedDeployData, seedDevData } from './db/seed.js';
 import { readinessReport } from './services/readiness.js';
 import { startSlaMonitor, stopSlaMonitor } from './jobs/slaMonitor.js';
 import { startWebhookWorker, stopWebhookWorker } from './jobs/webhookWorker.js';
@@ -178,6 +178,7 @@ export const sona3Module: InitiativeModule = {
   },
 
   async seedDemo(password) { return await seedDevData(password); },
+  async seedDeploy(passwordHash) { return await seedDeployData(passwordHash); },
 
   registerMail() {
     registerCidResolver((html) => {

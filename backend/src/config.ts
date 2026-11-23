@@ -92,6 +92,10 @@ export const config = {
   rateMax: num('RATE_MAX', 300),
   get trustProxy(): boolean { return process.env.TRUST_PROXY === '1'; },
   get seedOnBoot(): boolean { return (process.env.SEED_ON_BOOT ?? '0') === '1'; },
+  /** Deploy seeder (core/seedDeploy.ts): one account per role + demo data, at every boot, creating only what is missing. */
+  get seedOnDeploy(): boolean { return (process.env.SEED_ON_DEPLOY ?? '0') === '1'; },
+  /** Domain of the deploy seeder's accounts (empty = the listed demo addresses). Checked by assertConfigValid. */
+  get seedEmailDomain(): string { return (process.env.SEED_EMAIL_DOMAIN ?? '').trim().toLowerCase(); },
   get jwtSecret(): string { return process.env.JWT_SECRET ?? DEV_JWT_SECRET; },
   get jwtAccessTtlSec(): number { return num('JWT_ACCESS_TTL_SEC', 900); },
   get jwtRefreshTtlSec(): number { return num('JWT_REFRESH_TTL_SEC', 7 * 24 * 3600); },
@@ -165,6 +169,10 @@ export const PROD_LIMITS = { jwtSecretMinLength: 48, accessTtlMaxSec: 3600, refr
 /** Boot guard for every environment: values that cannot be interpreted are refused at start-up. */
 export function assertConfigValid(): void {
   parseMaxFileSizeMB(process.env.MAX_FILE_SIZE_MB);
+  const d = config.seedEmailDomain;
+  if (d && !/^(?=.{4,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/.test(d)) {
+    throw new Error(`[config] SEED_EMAIL_DOMAIN must be a domain such as test.example.gov.eg (got "${process.env.SEED_EMAIL_DOMAIN}").`);
+  }
   const m = mysqlSettings();
   const missing = (['host', 'user', 'database'] as const).filter((k) => !m[k]);
   if (missing.length) throw new Error(`[config] MySQL needs DATABASE_URL or ${missing.map((k) => `DB_${k === 'database' ? 'NAME' : k.toUpperCase()}`).join(', ')}.`);
@@ -178,7 +186,7 @@ export const SEED_PASSWORD_MIN_LENGTH = 12;
 /** Production may seed demo data on an empty database only with its own SEED_PASSWORD. Returns the problem or null. */
 export function seedPasswordProblem(): string | null {
   const p = process.env.SEED_PASSWORD ?? '';
-  if (!p) return 'SEED_PASSWORD is required to seed the demo data in production (the password of the seeded accounts).';
+  if (!p) return 'SEED_PASSWORD is required to seed accounts in production (SEED_ON_BOOT / SEED_ON_DEPLOY: the password of the seeded accounts).';
   if (p === DEFAULT_SEED_PASSWORD) return 'SEED_PASSWORD must not be the public development default in production.';
   if (p.length < SEED_PASSWORD_MIN_LENGTH) return `SEED_PASSWORD is too short (min ${SEED_PASSWORD_MIN_LENGTH} chars).`;
   return null;
@@ -204,7 +212,7 @@ export function assertProductionSafe(): void {
   if ((config.registryAdapter === 'mock' || process.env.REGISTRY_ADAPTER === 'mock') && !mockRegistryAllowedInProd()) {
     problems.push('REGISTRY_ADAPTER=mock is forbidden in production (ALLOW_MOCK_REGISTRY_IN_PRODUCTION=1 only for a demo deployment).');
   }
-  if (config.seedOnBoot) { const p = seedPasswordProblem(); if (p) problems.push(p); }
+  if (config.seedOnBoot || config.seedOnDeploy) { const p = seedPasswordProblem(); if (p) problems.push(p); }
   if (!config.mysql.password) problems.push('The MySQL password (DB_PASSWORD or DATABASE_URL) must be set in production.');
   if (problems.length) throw new Error(`[config] unsafe production configuration:\n - ${problems.join('\n - ')}`);
 }

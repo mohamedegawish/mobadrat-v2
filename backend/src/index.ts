@@ -3,6 +3,7 @@ import { createApp } from './app.js';
 import { closeDb, dbDialect } from './core/db/index.js';
 import { bootPlatform } from './core/boot.js';
 import { seedIfEmpty } from './core/seed.js';
+import { describeSeedReport, seedOnDeploy } from './core/seedDeploy.js';
 import { sweepStaleTmp } from './core/http/upload.js';
 import { startNotificationWorker, stopNotificationWorker } from './core/jobs/notificationWorker.js';
 import { startOutboxRetention, stopOutboxRetention } from './core/jobs/outboxRetention.js';
@@ -17,6 +18,14 @@ if (config.seedOnBoot) {
   if (config.isProd && seedPasswordProblem()) throw new Error(`[seed] ${seedPasswordProblem()}`);
   const seeded = await seedIfEmpty();
   if (seeded) console.log('[seed] demo accounts and data loaded (empty database)');
+}
+if (config.seedOnDeploy) {
+  // one account per role + demo data, creating only what is missing (core/seedDeploy.ts); never fatal for the server
+  try {
+    for (const line of describeSeedReport(await seedOnDeploy())) console.log(line);
+  } catch (e) {
+    console.error(`[seed:deploy] FAILED — nothing was created: ${(e as Error).message}`);
+  }
 }
 
 const swept = sweepStaleTmp();

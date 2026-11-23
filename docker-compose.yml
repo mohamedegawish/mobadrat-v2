@@ -33,6 +33,11 @@ services:
       # Demo accounts + data on the first start of an EMPTY database only (skipped once any account exists).
       # Needs its own SEED_PASSWORD (12+ chars, not the dev default) or the app refuses to start. Never with real data.
       SEED_ON_BOOT: ${SEED_ON_BOOT:-0}
+      # One account for every role + the demo data they need, at every start, creating only what is missing; never changes
+      # an existing account. Each seeded account must change SEED_PASSWORD at its first sign-in. With the legacy import:
+      # keep 0 until the import has finished (it needs an empty database). SEED_EMAIL_DOMAIN: role.initiative@<domain>.
+      SEED_ON_DEPLOY: ${SEED_ON_DEPLOY:-0}
+      SEED_EMAIL_DOMAIN: ${SEED_EMAIL_DOMAIN:-}
       SEED_PASSWORD: ${SEED_PASSWORD:-}
       # ── database (the same values as the mysql service below) ──
       DB_NAME: ${MYSQL_DATABASE:-mobadrat}

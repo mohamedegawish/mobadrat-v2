@@ -11,6 +11,8 @@
     "db:migrate": "tsx src/cli/migrate.ts",
     "db:migrate:prod": "node dist/cli/migrate.js",
     "db:seed": "tsx src/cli/seed.ts",
+    "db:seed:deploy": "tsx src/cli/seedDeploy.ts",
+    "db:seed:deploy:prod": "node dist/cli/seedDeploy.js",
     "admin:create": "tsx src/cli/createSuperAdmin.ts",
     "admin:create:prod": "node dist/cli/createSuperAdmin.js",
     "legacy:import": "tsx src/cli/legacy-import/index.ts",

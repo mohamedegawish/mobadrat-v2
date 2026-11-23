@@ -109,6 +109,11 @@ export interface EnrollResult {
 
 export interface ReadinessCheck { key: string; ok: boolean; labelAr: string; labelEn: string; detail?: string }
 
+/** One account of the deploy seeder: created now, already there (left untouched), or already there but disabled. */
+export interface DeploySeedAccount { email: string; initiativeId: string | null; role: string; status: 'created' | 'exists' | 'exists_disabled' }
+/** What a module's deploy seeder did: its accounts, and one line per piece of demo data (added or why it was skipped). */
+export interface DeploySeedResult { accounts: DeploySeedAccount[]; notes: string[] }
+
 export interface ModuleContext {
   /** Absolute URL of the platform (APP_URL). */
   appUrl: string;
@@ -159,6 +164,12 @@ export interface InitiativeModule {
   onBoot?(): Promise<void>;
   readiness?(): Promise<ReadinessCheck[]>;
   seedDemo?(password: string): Promise<void>;
+  /**
+   * Deploy seeder (core/seedDeploy.ts, SEED_ON_DEPLOY=1): one account per role of the module + the demo data those accounts
+   * need. Creates only what is missing and never changes an existing account; reference data people choose from is added
+   * only when the module has none of its own. Runs inside the seeder's transaction.
+   */
+  seedDeploy?(passwordHash: string): Promise<DeploySeedResult>;
   /** Registers inline-image resolvers for the module's e-mails (logos). */
   registerMail?(): void;
 }

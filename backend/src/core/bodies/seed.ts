@@ -6,7 +6,7 @@
 import { MODULES } from '../../initiatives/registry.js';
 import { addLink, createBody, type BodyInput } from './store.js';
 
-const DEMO: Array<BodyInput & { id: string; links: Array<[string, string]> }> = [
+export const DEMO_BODIES: Array<BodyInput & { id: string; links: Array<[string, string]> }> = [
   { id: 'body-imc', nameAr: 'مركز تحديث الصناعة (IMC)', nameEn: 'Industrial Modernisation Centre (IMC)', kind: 'center', description: 'يراجع طلبات شمس الصناعة ويدير مبادرة صُنّاع المستقبل.',
     contactEmail: 'info@imc.example.gov.eg', contactPhone: '', website: '', links: [['shams', 'org-imc'], ['sona3', 'org-imc']] },
   { id: 'body-encpc', nameAr: 'المركز الوطني للإنتاج الأنظف (ENCPC)', nameEn: 'Egypt National Cleaner Production Centre (ENCPC)', kind: 'center', description: 'المراجعة الفنية في شمس الصناعة.',
@@ -23,7 +23,7 @@ const DEMO: Array<BodyInput & { id: string; links: Array<[string, string]> }> = 
 export async function seedDemoBodies(): Promise<void> {
   const available = new Map<string, Set<string>>();
   for (const m of MODULES) available.set(m.id, new Set((await m.bodies.list()).map((o) => o.id)));
-  for (const d of DEMO) {
+  for (const d of DEMO_BODIES) {
     const links = d.links.filter(([initiativeId, orgId]) => available.get(initiativeId)?.has(orgId));
     if (!links.length) continue;
     const { id, links: _links, ...input } = d;
