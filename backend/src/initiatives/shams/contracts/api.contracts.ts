@@ -10,7 +10,8 @@ export interface ApiError {
   code: string;
   messageAr: string;
   messageEn: string;
-  details?: { field: string; issue: string }[];
+  /** F7: each invalid field's own message (its Arabic name + what is wrong); `field`/`issue` stay codes for programs. */
+  details?: { field: string; issue: string; messageAr?: string; messageEn?: string }[];
 }
 
 export interface Envelope<T> { message: string; status: 'ok'; data: T }

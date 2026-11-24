@@ -221,9 +221,12 @@ export const ApplicationWizard: React.FC = () => {
       }
       store.navigate('factory-dashboard');
     } catch (e) {
+      // F7: the server names each field in Arabic; a field code never reaches the person.
       const details = e instanceof ApiException ? (e.apiError.details ?? []).map((d) => {
+        const own = isAr ? d.messageAr : d.messageEn;
+        if (own) return own;
         const f = meta?.form.fields.find((x) => x.key === d.field);
-        return `${f ? label(f) : d.field}: ${validationMessage(d.issue, isAr)}`;
+        return f ? `${label(f)}: ${validationMessage(d.issue, isAr)}` : validationMessage(d.issue, isAr);
       }) : [];
       // رقم السجل محجوز لطلب آخر أو محظور: المصنع المتضرر يعترض بمستند (القاعدة G) بدل أن يبقى بلا مخرج.
       const code = e instanceof ApiException ? e.apiError.code : '';

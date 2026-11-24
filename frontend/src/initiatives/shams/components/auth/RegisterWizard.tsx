@@ -173,6 +173,12 @@ export const RegisterView: React.FC = () => {
 
   const submit = async () => {
     setSubmitError('');
+    // F7: the register-number formats are checked before sending — also for values restored from a saved draft.
+    const formatIssues = Object.fromEntries(['industrialRegistryNumber', 'commercialRegisterNumber', 'taxNumber']
+      .map((k) => [k, registerNumberIssue(k, form.company[k])] as const)
+      .filter(([, issue]) => Boolean(issue))
+      .map(([k, issue]) => [k, validationMessage(issue as string, isAr)]));
+    if (Object.keys(formatIssues).length) { setErrors((prev) => ({ ...prev, ...formatIssues })); return; }
     if (accountIssues.length || invalid.length || missing.length) return;
     setBusy(true); setProgress(0);
     try {

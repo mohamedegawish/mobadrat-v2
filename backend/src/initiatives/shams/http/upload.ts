@@ -60,7 +60,7 @@ export function singlePdfUpload(req: Request, res: Response, next: NextFunction)
       return apiError(res, 413, 'FILE_TOO_LARGE', `حجم الملف يتجاوز ${shamsPolicy.maxFileSizeMB} ميجابايت.`, `File exceeds ${shamsPolicy.maxFileSizeMB} MB.`);
     }
     if (code === 'LIMIT_FILE_COUNT' || code === 'LIMIT_UNEXPECTED_FILE') {
-      return apiError(res, 400, 'VALIDATION_ERROR', 'ملف واحد فقط في الحقل file.', 'Exactly one file in the "file" field.');
+      return apiError(res, 400, 'VALIDATION_ERROR', 'ارفع ملفًا واحدًا فقط في كل مرة.', 'Exactly one file in the "file" field.');
     }
     return next(err);
   });
@@ -140,7 +140,7 @@ export function discardUpload(file?: Express.Multer.File): void {
 
 /** يتحقق من الملف المؤقت وينقله للتخزين الدائم. يرمي AppError عند الرفض (بعد حذف الملف). */
 export function acceptPdf(file: Express.Multer.File | undefined): StoredFile {
-  if (!file) throw new AppError(400, 'FILE_REQUIRED', 'يجب إرفاق ملف PDF في الحقل file.', 'A PDF file is required in the "file" field.');
+  if (!file) throw new AppError(400, 'FILE_REQUIRED', 'يجب إرفاق ملف PDF.', 'A PDF file is required in the "file" field.');
   const originalName = decodeName(file.originalname).slice(0, 200);
   const extOk = path.extname(originalName).toLowerCase() === '.pdf';
   const mimeOk = file.mimetype === 'application/pdf' || file.mimetype === 'application/x-pdf' || file.mimetype === 'application/octet-stream';
@@ -198,7 +198,7 @@ export function singleImageUpload(req: Request, res: Response, next: NextFunctio
     if (!err) return next();
     const code = (err as { code?: string }).code;
     if (code === 'LIMIT_FILE_SIZE') return apiError(res, 413, 'FILE_TOO_LARGE', `حجم الشعار يتجاوز ${Math.round(max / 1024)} كيلوبايت.`, `The logo exceeds ${Math.round(max / 1024)} KB.`);
-    if (code === 'LIMIT_FILE_COUNT' || code === 'LIMIT_UNEXPECTED_FILE') return apiError(res, 400, 'VALIDATION_ERROR', 'ملف واحد فقط في الحقل file.', 'Exactly one file in the "file" field.');
+    if (code === 'LIMIT_FILE_COUNT' || code === 'LIMIT_UNEXPECTED_FILE') return apiError(res, 400, 'VALIDATION_ERROR', 'ارفع ملفًا واحدًا فقط في كل مرة.', 'Exactly one file in the "file" field.');
     return next(err);
   });
 }
@@ -224,7 +224,7 @@ export interface StoredImage { storedName: string; mime: LogoMime; sizeBytes: nu
 
 /** يتحقق من الصورة المؤقتة وينقلها للتخزين الدائم باسم عشوائي؛ يرمي AppError عند الرفض (بعد حذف الملف). */
 export function acceptLogo(file: Express.Multer.File | undefined): StoredImage {
-  if (!file) throw new AppError(400, 'FILE_REQUIRED', 'يجب إرفاق صورة الشعار في الحقل file.', 'A logo image is required in the "file" field.');
+  if (!file) throw new AppError(400, 'FILE_REQUIRED', 'يجب إرفاق صورة الشعار.', 'A logo image is required in the "file" field.');
   const mime = sniffImage(file.path);
   if (!mime || file.size < 16 || file.size > shamsPolicy.providerLogo.maxBytes) {
     discardUpload(file);

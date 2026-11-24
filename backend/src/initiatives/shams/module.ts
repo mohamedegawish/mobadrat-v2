@@ -50,6 +50,10 @@ import { copyStoredFile } from '../../core/http/upload.js';
 import { kickNotificationWorker } from './jobs/notificationWorker.js';
 import { MODULE_ID } from './config.js';
 import { shamsWorkspace } from './workspace.js';
+import { registerShamsFieldLabels } from './http/fieldLabels.js';
+
+// F7 (BUG-11): refusals of this initiative name each invalid field in Arabic (core/http/validationText.ts).
+registerShamsFieldLabels();
 
 /** The platform dashboard of each role (bank_reviewer is retired: no account, no dashboard). */
 const USER_TYPE: Partial<Record<Role, UserType>> = {
