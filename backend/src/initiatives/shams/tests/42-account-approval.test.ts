@@ -97,8 +97,10 @@ test('ACC-2 correction request: branded email, restricted sign-in (edit requeste
     assert.equal(res.status, 403, what);
     assert.equal(res.json.code, 'ACCOUNT_RESTRICTED', what);
   }
+  // D3 (QA 2026-11-23): withdrawal passes the guard during data completion (here refused only for the stale version).
   const withdraw = await f.post(`/applications/${appId}/actions/withdraw`, { expectedVersion: 1, reason: 'x' });
-  assert.equal(withdraw.status, 403);
+  assert.equal(withdraw.status, 409);
+  assert.equal(withdraw.json.code, 'VERSION_CONFLICT');
   // Only the requested items can change.
   assert.equal((await f.put(`/applications/${appId}/data/general`, { phone2: '0229998888' })).status, 409, 'not in the deficiencies');
   assert.equal((await f.put(`/applications/${appId}/data/general`, { address: 'العنوان الكامل الجديد' })).status, 200);
@@ -106,10 +108,14 @@ test('ACC-2 correction request: branded email, restricted sign-in (edit requeste
   const re = await act(f, appId, 'resubmit');
   assert.equal(re.status, 200, JSON.stringify(re.json));
   assert.equal(await status(email), 'under_review');
-  // The Shams screens close again until IMC decides (the platform session itself stays valid for other initiatives).
+  // Under review again: D3 — the application reads only (withdraw is its one action); everything else closes until IMC decides
+  // (the platform session itself stays valid for other initiatives).
   const after = await f.get(`/applications/${appId}`);
-  assert.equal(after.status, 403);
-  assert.equal(after.json.code, 'ACCOUNT_UNDER_REVIEW');
+  assert.equal(after.status, 200);
+  assert.deepEqual(after.json.data.allowedActions.map((a: any) => a.action), ['withdraw']);
+  const edit = await f.put(`/applications/${appId}/data/general`, { address: 'تعديل بعد الإرسال' });
+  assert.equal(edit.status, 403);
+  assert.equal(edit.json.code, 'ACCOUNT_UNDER_REVIEW');
   assert.equal((await login(email)).json.code, 'ACCOUNT_UNDER_REVIEW');
   assert.equal((await f.post('/auth/refresh', {})).status, 200, 'the platform session is not revoked');
 });

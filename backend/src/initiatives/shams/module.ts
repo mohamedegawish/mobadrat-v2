@@ -117,6 +117,8 @@ export const shamsModule: InitiativeModule = {
     const actor = await getUserById(user.id);
     if (!actor || actor.role !== 'factory_owner') return { status: 'full' };
     const block = accountLoginBlock(actor.factoryAccountStatus);
+    // D3: under IMC review the factory enters read-only (its application, withdraw, objection); only a rejection blocks.
+    if (block && actor.factoryAccountStatus === 'under_review') return { status: 'restricted', code: block.code, messageAr: block.ar, messageEn: block.en };
     if (block) return { status: 'blocked', code: block.code, messageAr: block.ar, messageEn: block.en };
     if (actor.factoryAccountStatus && actor.factoryAccountStatus !== 'approved') {
       return { status: 'restricted', code: 'ACCOUNT_RESTRICTED', messageAr: 'حساب المصنع لم يُقبل بعد — أكمل بيانات طلب التسجيل وأرسله.', messageEn: 'The factory account is not approved yet — complete and submit the registration.' };
@@ -138,7 +140,8 @@ export const shamsModule: InitiativeModule = {
       nextActionAr: task?.ar, nextActionEn: task?.en,
       // As in the old app: an approved factory lands on its dashboard («لوحتي»); one not approved yet on its registration
       // application, the only screen it may use.
-      view: factory!.accountStatus !== 'approved' && !isTerminal(app.state) ? `apply/${app.id}` : 'factory-dashboard',
+      view: factory!.accountStatus === 'under_review' || (factory!.accountStatus !== 'approved' && isTerminal(app.state)) ? `application/${app.id}`
+        : factory!.accountStatus !== 'approved' ? `apply/${app.id}` : 'factory-dashboard',
       tone: app.state === 'CONTRACTED' ? 'success' : isTerminal(app.state) ? 'neutral' : app.state.endsWith('_CORRECTION') ? 'warning' : 'info',
     };
   },
@@ -204,6 +207,10 @@ export const shamsModule: InitiativeModule = {
       } catch (e) {
         // Stays pending: the factory signs in (restricted) and resubmits — e.g. the registry service was unavailable.
         const err = e as { code?: string; message?: string; details?: unknown };
+        // F2 / D3: a number another factory holds (or one on hold) keeps the draft and offers the objection right away.
+        if (err.code === 'DUPLICATE_REGISTRY' || err.code === 'REGISTRY_BLOCKED') {
+          return { messageAr: 'رقم السجل الصناعي مستخدم في طلب آخر أو موقوف، فلم يُرسل طلبك وبقي محفوظًا. إن كان الرقم لمنشأتكم فافتحوا طلبكم في «شمس الصناعة» وقدّموا اعتراضًا بمستند.', data: { submitted: false, registryHeld: true, applicationId: draft.id } };
+        }
         console.warn(`[shams] auto-submit after e-mail verification failed for application ${draft.id}: ${err.code ?? ''} ${err.message ?? ''} ${err.details ? JSON.stringify(err.details) : ''}`);
         return { messageAr: 'تعذر إرسال طلب تسجيل المصنع للمراجعة الآن — افتح لوحة «شمس الصناعة» لإعادة إرساله.', data: { submitted: false } };
       }

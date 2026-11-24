@@ -64,14 +64,15 @@ export function isRestrictedFactory(user: User | null): boolean {
   return Boolean(user && user.role === 'factory_owner' && user.accountStatus && user.accountStatus !== 'approved');
 }
 
-/** Under IMC review or not accepted: the initiative is locked for this account (the platform account itself stays valid). */
+/** Not accepted: the initiative is locked for this account (the platform account itself stays valid). D3: under IMC review the
+ * factory may still read its application, withdraw it, or object to a registry number (the server enforces exactly that). */
 export function isLockedFactory(user: User | null): boolean {
-  return Boolean(user && user.role === 'factory_owner' && (user.accountStatus === 'under_review' || user.accountStatus === 'rejected'));
+  return Boolean(user && user.role === 'factory_owner' && user.accountStatus === 'rejected');
 }
 
 export function canView(view: View, user: User | null): boolean {
   const a = VIEW_ACCESS[view];
-  if (isRestrictedFactory(user) && a !== 'public') return view === 'apply';
+  if (isRestrictedFactory(user) && a !== 'public') return view === 'apply' || view === 'application';
   if (a === 'public') return true;
   if (a === 'guest') return !user;
   if (a === 'auth') return Boolean(user);
@@ -193,11 +194,13 @@ class Store {
   private async goRestrictedHome() {
     // Under IMC review / not approved: the initiative is locked — the platform chooser shows why (the account stays valid).
     const status = this.s.user?.accountStatus;
-    if (status === 'under_review' || status === 'rejected') { window.location.hash = '#hub'; return; }
+    if (status === 'rejected') { window.location.hash = '#hub'; return; }
     try {
       const p = await api.factoryProfile();
-      if (p.openApplicationId) { this.navigate('apply', p.openApplicationId); return; }
+      // D3: under IMC review the application is read-only (withdraw / objection only); before sending or in data completion, the wizard.
+      if (p.openApplicationId) { this.navigate(status === 'under_review' ? 'application' : 'apply', p.openApplicationId); return; }
     } catch { /* fall through */ }
+    if (status === 'under_review') { window.location.hash = '#hub'; return; }
     this.navigate('home');
   }
 

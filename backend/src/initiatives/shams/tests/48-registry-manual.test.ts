@@ -54,15 +54,19 @@ test('RM-2 manual: registration and activation go to IMC; recorded as a manual c
   assert.equal((await getApp(c.imc, id)).state, 'ENCPC_REVIEW');
 });
 
-test('RM-3 manual: a number already used by an open application is still refused (no API needed for that)', async () => {
+test('RM-3 manual: a number already used by an open application holds the new draft (F2 / D3: account + held draft, never submitted until PMU decides)', async () => {
   process.env.REGISTRY_ADAPTER = 'manual';
   const reg = `IND-RM-DUP-${++seq}`;
   const first = `rm.dup1.${seq}@test.local`;
   assert.equal((await registerFactory(new Client(srv.base), registrationPayload(first, reg))).status, 201);
   assert.equal((await new Client(srv.base).post('/auth/verify-email', { token: await activationTokenFor(first) })).json.data.submitted, true);
-  const second = await registerFactory(new Client(srv.base), registrationPayload(`rm.dup2.${seq}@test.local`, reg));
-  assert.equal(second.status, 409, JSON.stringify(second.json));
-  assert.equal(second.json.code, 'REGISTRY_IN_USE');
+  const secondEmail = `rm.dup2.${seq}@test.local`;
+  const second = await registerFactory(new Client(srv.base), registrationPayload(secondEmail, reg));
+  assert.equal(second.status, 201, JSON.stringify(second.json));
+  assert.equal(second.json.data.registryHeld, true);
+  const v = await new Client(srv.base).post('/auth/verify-email', { token: await activationTokenFor(secondEmail) });
+  assert.equal(v.json.data.submitted, false, 'the held draft is not submitted');
+  assert.equal(v.json.data.modules.shams.registryHeld, true);
 });
 
 test('RM-4 production accepts the manual mode (unlike mock); readiness says the registry is checked by hand', async () => {

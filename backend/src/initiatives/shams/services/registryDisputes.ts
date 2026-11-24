@@ -76,7 +76,11 @@ export async function submitObjection(user: UserInternal, body: unknown, file: E
   // الاعتراض لمن تضرر فعلًا: الرقم محظور/محجوز لغيره، أو سبق أن تعارض طلبه مع طلب آخر على الرقم.
   const blocked = !(await registryAccess(registryNumber, factory.id)).allowed;
   const hadConflict = (await conflictsOf(registryNumber)).some((x) => x.attemptedFactoryId === factory.id);
-  if (!blocked && !hadConflict) {
+  // F2 / D3: a factory whose own draft holds a number another factory's open application uses may object right away,
+  // without first being refused on submit.
+  const holder = await findOpenSubmittedByRegistry(registryNumber, '');
+  const heldByOther = Boolean(holder && holder.factoryId !== factory.id);
+  if (!blocked && !hadConflict && !heldByOther) {
     return fail(Errors.conflict('OBJECTION_NOT_APPLICABLE', 'لا يوجد حظر ولا تعارض على هذا الرقم يخص منشأتك.', 'There is no block or conflict on this number involving your facility.'));
   }
   if (await pendingObjection(factory.id, registryNumber)) {

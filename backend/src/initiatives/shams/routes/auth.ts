@@ -28,6 +28,7 @@ import { fieldForDocKind, type DocumentKind } from '../workflow/applicationForm.
 import { addDocumentVersion } from '../store/documents.js';
 import { registryAccess } from '../store/registry.js';
 import { findOpenSubmittedByRegistry } from '../store/applications.js';
+import { recordRegistryConflict } from '../workflow/actionService.js';
 import { getRegistryClient } from '../integrations/registry/index.js';
 import { addAuditLog } from '../store/audit.js';
 import { kickNotificationWorker } from '../jobs/notificationWorker.js';
@@ -100,11 +101,12 @@ publicAuthRouter.post('/register', registerLimiter, registrationUpload, ah(async
     }
 
     const regNumber = String(data.company?.industrialRegistryNumber ?? '');
+    // F2 / D3: a number another application holds (or one on hold) no longer refuses the sign-up. The account and a draft held
+    // on that number are created, the conflict is recorded for IMC and PMU, and the factory is offered the objection right away;
+    // the draft cannot be submitted until PMU decides (performAction refuses DUPLICATE_REGISTRY / REGISTRY_BLOCKED).
     const access = await registryAccess(regNumber, '');
-    if (!access.allowed || await findOpenSubmittedByRegistry(regNumber, '')) {
-      throw new AppError(409, 'REGISTRY_IN_USE', 'رقم السجل الصناعي مستخدم في طلب آخر أو موقوف لمراجعة وحدة إدارة المبادرة. إن كان الرقم لمنشأتكم فتواصلوا مع الدعم الفني.',
-        'This industrial registry number is used by another application or on hold for PMU review. If it belongs to your facility, contact support.', [{ field: 'industrialRegistryNumber', issue: 'duplicate' }]);
-    }
+    const holder = await findOpenSubmittedByRegistry(regNumber, '');
+    const registryHeld = !access.allowed || Boolean(holder);
     let check: Awaited<ReturnType<ReturnType<typeof getRegistryClient>['verify']>>;
     try { check = await getRegistryClient().verify(regNumber); } catch { check = { result: 'unavailable', errorCode: 'CLIENT_ERROR' }; }
     if (check.result === 'invalid') {
@@ -114,7 +116,7 @@ publicAuthRouter.post('/register', registerLimiter, registrationUpload, ah(async
       throw new AppError(503, 'REGISTRY_UNAVAILABLE', 'تعذر التحقق من السجل الصناعي حاليًا. بياناتك محفوظة في هذه الصفحة — أعد المحاولة بعد قليل.', 'The industrial registry is unavailable right now. Your data is kept on this page — try again shortly.');
     }
 
-    const done = () => okMessage(res, 201, 'تم استلام التسجيل — راجع بريدك الإلكتروني لإكمال الخطوة التالية.', { email: email!.toLowerCase(), emailVerified: false });
+    const done = () => okMessage(res, 201, 'تم استلام التسجيل — راجع بريدك الإلكتروني لإكمال الخطوة التالية.', { email: email!.toLowerCase(), emailVerified: false, ...(registryHeld ? { registryHeld: true } : {}) });
     const existing = await getCoreUserByEmail(email!);
     if (existing) {
       // Same answer and about the same cost: registration never reveals that an e-mail exists. The owner is told to sign in
@@ -125,6 +127,7 @@ publicAuthRouter.post('/register', registerLimiter, registrationUpload, ah(async
       return done();
     }
     const passwordHash = await hashPasswordAsync(b.password as string);
+    const created: { user?: NonNullable<Awaited<ReturnType<typeof getUserById>>>; app?: Awaited<ReturnType<typeof createRegistrationDraft>> } = {};
     await tx(async () => {
       const account = await createAccount({ email: email!, nameAr: contactName!, phone: mobile!, passwordHash, ip: clientIp(req), source: MODULE_ID });
       await savePersonProfile(account.id, { 'person.fullNameAr': contactName!, 'person.phone': mobile! });
@@ -150,7 +153,9 @@ publicAuthRouter.post('/register', registerLimiter, registrationUpload, ah(async
       await addAuditLog({ actorType: 'user', actorUserId: u.id, actorName: u.nameAr, actorRole: u.role, actorOrgId: org.id, ip: clientIp(req),
         action: 'auth.register', entityType: 'factory', entityId: factory.id, applicationId: app.id, summaryAr: `تسجيل مصنع جديد: ${companyName}`,
         details: { documents: stored.length, sha256: stored.map((s) => s.file.sha256) } });
+      created.user = u; created.app = app;
     });
+    if (holder && created.user && created.app) await recordRegistryConflict(created.user, created.app, holder, regNumber, clientIp(req), companyName!);
     kickNotificationWorker();
     return done();
   } catch (e) {

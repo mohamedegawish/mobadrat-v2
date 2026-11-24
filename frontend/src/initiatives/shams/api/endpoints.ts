@@ -28,7 +28,7 @@ export const api = {
     const fd = new FormData();
     fd.append('payload', JSON.stringify(payload));
     for (const f of files) fd.append(f.kind, f.file, f.file.name);
-    return apiUpload<Envelope<{ email: string }>>(`${V1}/auth/register`, fd, onProgress);
+    return apiUpload<Envelope<{ email: string; registryHeld?: boolean }>>(`${V1}/auth/register`, fd, onProgress);
   },
   verifyEmail: (token: string) => apiFetch<Envelope<{ submitted?: boolean } | undefined>>(`${V1}/auth/verify-email`, { method: 'POST', body: { token } }),
   resendVerification: (email: string) => apiFetch<Envelope<undefined>>(`${V1}/auth/resend-verification`, { method: 'POST', body: { email } }),

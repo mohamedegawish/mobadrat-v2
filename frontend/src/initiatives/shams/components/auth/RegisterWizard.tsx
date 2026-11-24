@@ -176,8 +176,10 @@ export const RegisterView: React.FC = () => {
     setBusy(true); setProgress(0);
     try {
       // الحساب + كل أقسام النموذج + المستندات في طلب واحد؛ قبول الحساب مبني على هذه المستندات.
-      await api.register({ companyName, contactName, email, mobile, password, application: buildApplication(form) },
+      const res = await api.register({ companyName, contactName, email, mobile, password, application: buildApplication(form) },
         allFiles.map((f) => ({ kind: f.kind, file: toFile(f) })), setProgress);
+      // F2 / D3: the number is used by another application (or on hold) — the account and a held draft were created.
+      try { if ((res as { data?: { registryHeld?: boolean } })?.data?.registryHeld) sessionStorage.setItem(HELD_KEY, '1'); else sessionStorage.removeItem(HELD_KEY); } catch { /* ignore */ }
       if (saveTimer.current) clearTimeout(saveTimer.current);
       saveDone(email);
       clearTextDraft();
@@ -373,7 +375,10 @@ const LocalDocField: React.FC<{ field: FieldMeta; files: LocalFile[]; available:
 };
 
 /** بعد إنشاء الحساب: راجع بريدك (تبقى بعد تحديث الصفحة). */
+const HELD_KEY = 'shams-register-registry-held';
+
 const RegisterDone: React.FC<{ email: string; onAnother: () => void }> = ({ email, onAnother }) => {
+  const held = (() => { try { return sessionStorage.getItem(HELD_KEY) === '1'; } catch { return false; } })();
   const { t, isAr } = useStore();
   const [info, setInfo] = useState('');
   const resend = async () => {
@@ -390,6 +395,12 @@ const RegisterDone: React.FC<{ email: string; onAnother: () => void }> = ({ emai
           <p style={{ lineHeight: 1.9 }} data-testid="register-done">
             {t(`استلمنا بيانات التسجيل ومستنداته، وأرسلنا رابط تفعيل إلى ${email}.`, `We received the registration data and documents, and sent an activation link to ${email}.`)}
           </p>
+          {held ? (
+            <div className="account-banner" role="status" data-testid="register-registry-held">
+              <b>{t('رقم السجل الصناعي مستخدم في طلب مصنع آخر أو موقوف', 'This industrial registry number is used by another factory’s application or on hold')}</b>
+              <span>{t('أنشأنا حسابك وحفظنا طلبك، لكنه لن يُرسل حتى تقرر وحدة إدارة المبادرة لمن الرقم. بعد تفعيل بريدك افتح طلبك واضغط «الرقم لمنشأتي — تقديم اعتراض بمستند».', 'Your account and application are saved, but the application will not be sent until the PMU decides who the number belongs to. After activating your e-mail, open your application and choose “This number is my facility’s — file an objection”.')}</span>
+            </div>
+          ) : null}
           <ol className="register-next" data-testid="register-next-steps">
             <li>{t('افتح رابط التفعيل في بريدك — يُرسل طلب التسجيل بعده لمراجعة مركز تحديث الصناعة (IMC).', 'Open the activation link — the registration then goes to IMC review.')}</li>
             <li>{t('يصلك بريد بالقرار: قبول الحساب، أو طلب تعديل بيانات، أو الرفض.', 'You will be emailed the decision: approval, a request to edit data, or rejection.')}</li>

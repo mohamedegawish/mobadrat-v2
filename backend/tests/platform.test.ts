@@ -191,9 +191,12 @@ test('P-11 a factory not approved yet: the chooser opens its registration applic
   const sub = await c.post(`/i/shams/applications/${appId}/actions/submit`, { expectedVersion: draft.version });
   assert.equal(sub.status, 200, JSON.stringify(sub.json));
   m = await shams();
-  assert.equal(m.access.status, 'blocked', 'under IMC review: the initiative screens are locked');
+  // D3 (Shams QA 2026-11-23): under IMC review the factory enters read-only — its application, withdraw, objection — nothing else.
+  assert.equal(m.access.status, 'restricted', 'under IMC review: read-only access');
   assert.equal(m.access.code, 'ACCOUNT_UNDER_REVIEW');
-  assert.equal((await c.get(`/i/shams/applications/${appId}`)).json.code, 'ACCOUNT_UNDER_REVIEW');
+  assert.equal(m.card.view, `application/${appId}`, 'the chooser opens the submitted application read-only');
+  assert.equal((await c.get(`/i/shams/applications/${appId}`)).status, 200);
+  assert.equal((await c.get('/i/shams/applications')).json.code, 'ACCOUNT_UNDER_REVIEW', 'the rest stays locked');
   assert.equal((await c.get('/me')).status, 200, 'the platform account itself stays usable');
 
   // IMC asks for a correction → the factory may only fix its application: the chooser opens it (not the dashboard).

@@ -531,7 +531,7 @@ export async function performAction(user: UserInternal, appId: string, actionRaw
  * I3: محاولة إرسال برقم سجل يحجزه طلب مفتوح لمصنع آخر — يُسجل التعارض ويُبلَّغ IMC وPMU برقمي الطرفين (مرة لكل زوج).
  * معاملة مستقلة لأن الإرسال نفسه يُرفض بعدها.
  */
-async function recordRegistryConflict(user: UserInternal, app: AppRow, holder: AppRow, regNumber: string, ip: string, attemptedName: string): Promise<void> {
+export async function recordRegistryConflict(user: UserInternal, app: AppRow, holder: AppRow, regNumber: string, ip: string, attemptedName: string): Promise<void> {
   await tx(async () => {
     const c = await recordConflict({ registryNumber: regNumber, attemptedApplicationId: app.id, attemptedFactoryId: app.factoryId, holdingApplicationId: holder.id, attemptedBy: user.id });
     await addAuditLog({ actorType: 'user', actorUserId: user.id, actorName: user.nameAr, actorRole: user.role, actorOrgId: user.organizationId, ip,

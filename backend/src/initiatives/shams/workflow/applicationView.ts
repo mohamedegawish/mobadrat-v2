@@ -3,13 +3,13 @@ import type { UserInternal } from '../store/users.js';
 import { mapSeq, filterSeq } from '../http/helpers.js';
 import {
   getApplication, getSection, listTransitions, listDeficiencies, openDeficiencies, getBankReferral, getRegistryVerification, latestRegistryVerification, referralHistory,
-  getDistributionContract, type AppRow, type TransitionRow,
+  getDistributionContract, findOpenSubmittedByRegistry, type AppRow, type TransitionRow,
 } from '../store/applications.js';
 import { listDocuments, isActiveAt, wasSubmitted, type DocumentRow } from '../store/documents.js';
 import { getOrganization, getOrganizationsByIds, type Organization } from '../store/organizations.js';
 import { getUserNamesByIds } from '../store/users.js';
 import { getProvider, isSelectable } from '../store/providers.js';
-import { conflictsForApplication } from '../store/registry.js';
+import { conflictsForApplication, listObjections, registryAccess } from '../store/registry.js';
 import { AppError, Errors } from '../http/errors.js';
 import {
   allowedActions, STATE_LABELS, STATE_RESPONSIBLE, RESPONSIBLE_LABELS, RETURN_ACTIONS, stateStep, stateTask,
@@ -20,7 +20,7 @@ import {
   visibleDeficiencies, visibleDocuments, visibleSections, visibleTransitions, viewAttempt, isFactoryOwnerOf,
 } from '../access/visibility.js';
 import { FORM_SECTIONS, FIELD_BY_KEY, DOCUMENT_LABELS, docKindForField, fieldForDocKind, type DataSection } from './applicationForm.js';
-import { ALL_FORM_FIELD_KEYS } from './validate.js';
+import { ALL_FORM_FIELD_KEYS, normalizeRegistryNumber } from './validate.js';
 import type { FormFieldKey } from '../config/shamsPolicy.js';
 
 /** I5: هل حُددت أي مهلة؟ لا مهلة = لا معنى لعدّ «متأخرة: 0». */
@@ -269,6 +269,7 @@ export async function buildDetail(user: UserInternal, app: AppRow) {
       other: other ? { id: other.id, number: other.number, companyName: other.companyName, state: other.state, stateLabelAr: STATE_LABELS[other.state].ar, stateLabelEn: STATE_LABELS[other.state].en } : null };
   }) : [];
   const regView = registry && !metaOnly ? registryView(registry.facilityData, app.companyName) : null;
+  const registryHold = isOwner && (app.state === 'DRAFT' || app.state === 'IMC_CORRECTION') ? await holdOf(app, data) : null;
   const bank = seesStageData ? await orgLabel(app.bankOrgId) : null;
   const canSeeAllHistory = user.role === 'pmu_reviewer' || user.role === 'system_admin';
 
@@ -281,6 +282,8 @@ export async function buildDetail(user: UserInternal, app: AppRow) {
       facility: metaOnly ? null : registry.facilityData, fields: regView?.fields ?? [], nameCheck: regView?.nameCheck ?? null,
     } : null,
     registryConflicts: conflicts,
+    // F2 / D3: the owner's draft holds a number used by another open application (or on hold) → the objection is offered.
+    registryHold,
     provider: provider ? { id: provider.id, nameAr: provider.nameAr, nameEn: provider.nameEn, contactName: metaOnly ? '' : provider.contactName, contactPhone: metaOnly ? '' : provider.contactPhone, contactEmail: metaOnly ? '' : provider.contactEmail, status: provider.status,
       description: provider.description, isActive: provider.isActive === 1, selectable: isSelectable(provider) } : null,
     referralHistory: seesStageData ? await mapSeq(await referralHistory(app.id), async (h) => {
@@ -325,3 +328,20 @@ export async function buildDetail(user: UserInternal, app: AppRow) {
 }
 
 export type ApplicationDetail = ReturnType<typeof buildDetail>;
+
+/**
+ * F2 / D3: is the owner's draft held on its registry number? `in_use` = another factory's open application holds it,
+ * `blocked` / `reserved` = on hold until a documented PMU decision. Carries the factory's own latest objection on that number.
+ */
+async function holdOf(app: AppRow, data: Partial<Record<DataSection, Record<string, unknown>>>) {
+  const raw = String(data.company?.industrialRegistryNumber ?? app.industrialRegistryNumber ?? '').trim();
+  if (!raw) return null;
+  const registryNumber = normalizeRegistryNumber(raw);
+  const access = await registryAccess(registryNumber, app.factoryId);
+  const holder = await findOpenSubmittedByRegistry(registryNumber, app.id);
+  const inUse = Boolean(holder && holder.factoryId !== app.factoryId);
+  if (access.allowed && !inUse) return null;
+  const mine = (await listObjections({ factoryId: app.factoryId })).filter((o) => o.registryNumber === registryNumber);
+  const latest = mine.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0] ?? null;
+  return { registryNumber, reason: inUse ? 'in_use' as const : (access.allowed ? 'blocked' as const : access.reason), objection: latest ? { id: latest.id, status: latest.status, decisionReason: latest.decisionReason, decisionReference: latest.decisionReference } : null };
+}

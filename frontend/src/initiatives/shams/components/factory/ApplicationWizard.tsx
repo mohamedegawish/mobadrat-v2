@@ -268,8 +268,18 @@ export const ApplicationWizard: React.FC = () => {
         <div className="account-banner" role="status" data-testid="restricted-banner">
           <b>{user?.accountStatus === 'correction' ? t('حساب مصنعكم لم يُقبل بعد — مطلوب تعديل بيانات التسجيل', 'Your factory account is not approved yet — registration changes are requested') : t('حساب مصنعكم لم يُقبل بعد — لم يُرسل طلب التسجيل للمراجعة', 'Your factory account is not approved yet — the registration has not been sent for review')}</b>
           <span>{user?.accountStatus === 'correction'
-            ? t('عدّل البنود التي طلبها مركز تحديث الصناعة (IMC) ثم أعد الإرسال. باقي المنصة متاح بعد قبول الحساب، وبعد الإرسال لا يمكن الدخول حتى يصلك القرار بالبريد.', 'Edit the items IMC requested, then resubmit. The rest of the platform opens once the account is approved; after resubmitting you cannot sign in until the decision is emailed.')
-            : t('راجع البيانات ثم أرسل طلب التسجيل لمراجعة IMC. لا يمكن الدخول بعد الإرسال حتى يصلك القرار بالبريد.', 'Review the data, then send the registration for IMC review. After sending you cannot sign in until the decision is emailed.')}</span>
+            ? t('عدّل البنود التي طلبها مركز تحديث الصناعة (IMC) ثم أعد الإرسال. باقي المنصة متاح بعد قبول الحساب؛ حتى صدور القرار يمكنك الاطلاع على طلبك أو الانسحاب منه.', 'Edit the items IMC requested, then resubmit. The rest of the platform opens once the account is approved; after resubmitting you cannot sign in until the decision is emailed.')
+            : t('راجع البيانات ثم أرسل طلب التسجيل لمراجعة IMC. بعد الإرسال يمكنك الاطلاع على طلبك أو الانسحاب منه حتى يصلك القرار بالبريد.', 'Review the data, then send the registration for IMC review. After sending you cannot sign in until the decision is emailed.')}</span>
+        </div>
+      ) : null}
+
+      {app.registryHold ? (
+        <div className="account-banner" role="status" data-testid="registry-hold" style={{ marginBottom: '1rem' }}>
+          <b>{t(`رقم السجل الصناعي ${app.registryHold.registryNumber} مستخدم في طلب مصنع آخر أو موقوف — لا يُرسل طلبك حتى تقرر وحدة إدارة المبادرة`, `Registry number ${app.registryHold.registryNumber} is used by another factory’s application or on hold — your application cannot be sent until the PMU decides`)}</b>
+          {app.registryHold.objection?.status === 'pending'
+            ? <span data-testid="registry-hold-pending">{t('اعتراضكم قيد مراجعة وحدة إدارة المبادرة. ستصلكم رسالة بالقرار.', 'Your objection is under PMU review. You will be notified of the decision.')}</span>
+            : <span>{app.registryHold.objection?.status === 'rejected' ? t(`رُفض اعتراضكم السابق: ${app.registryHold.objection.decisionReason}`, `Your previous objection was rejected: ${app.registryHold.objection.decisionReason}`) : t('إن كان الرقم لمنشأتكم فقدّموا اعتراضًا بمستند يثبت الملكية أو التفويض.', 'If the number belongs to your facility, file an objection with a document proving ownership or authorisation.')}
+              {' '}<button type="button" className="btn btn-outline btn-sm" onClick={() => setObjecting(true)} data-testid="open-objection">{t('الرقم لمنشأتي — تقديم اعتراض بمستند', 'This number is my facility’s — file an objection')}</button></span>}
         </div>
       ) : null}
 
@@ -338,7 +348,7 @@ export const ApplicationWizard: React.FC = () => {
         {fieldErrors._save ? <ErrorBox message={fieldErrors._save} /> : null}
         {submitError ? (
           <ErrorBox style={{ marginTop: '1rem' }} message={<>{submitError.message}{submitError.details.length ? <ul style={{ margin: '0.4rem 0 0' }}>{submitError.details.map((d) => <li key={d}>{d}</li>)}</ul> : null}
-            {submitError.objectable ? <div style={{ marginTop: '0.6rem' }}><button type="button" className="btn btn-outline btn-sm" onClick={() => setObjecting(true)} data-testid="open-objection">{t('الرقم لمنشأتي — تقديم اعتراض بمستند', 'This number is my facility’s — file an objection')}</button></div> : null}</>} />
+            {submitError.objectable && !app.registryHold ? <div style={{ marginTop: '0.6rem' }}><button type="button" className="btn btn-outline btn-sm" onClick={() => setObjecting(true)} data-testid="open-objection">{t('الرقم لمنشأتي — تقديم اعتراض بمستند', 'This number is my facility’s — file an objection')}</button></div> : null}</>} />
         ) : null}
         <div className="wizard-nav">
           <div className="row" style={{ gap: '0.6rem' }}>
@@ -379,7 +389,7 @@ export const ApplicationWizard: React.FC = () => {
         />
       ) : null}
 
-      {objecting ? <ObjectionDialog registryNumber={String(form.company.industrialRegistryNumber ?? '')} onClose={() => setObjecting(false)} /> : null}
+      {objecting ? <ObjectionDialog registryNumber={app.registryHold?.registryNumber ?? String(form.company.industrialRegistryNumber ?? '')} onClose={() => setObjecting(false)} onDone={() => res.reload?.()} /> : null}
 
       {confirming ? (
         <ConfirmDialog

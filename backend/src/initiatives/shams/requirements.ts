@@ -6,8 +6,6 @@
 import type { Blocker, RequirementField, RequirementsManifest } from '../../core/profile/requirements.js';
 import { isRequired } from './workflow/applicationForm.js';
 import type { FormFieldKey } from './config/shamsPolicy.js';
-import { registryAccess } from './store/registry.js';
-import { findOpenSubmittedByRegistry } from './store/applications.js';
 import { getFactoryByProfile } from './store/factories.js';
 import { getDb } from './db/database.js';
 
@@ -59,14 +57,8 @@ async function precheck({ factory }: { factory: { id: string; values: Record<str
     const open = await getDb().prepare(`SELECT 1 FROM shams_applications WHERE factoryId = ? AND state NOT IN ('REJECTED','CONTRACTED','CLOSED_NOT_CONTRACTED','WITHDRAWN')`).get(linked.id);
     if (open) out.push({ code: 'OPEN_APPLICATION', messageAr: 'لهذه المنشأة طلب مفتوح في المبادرة بالفعل.', messageEn: 'This factory already has an open application in the initiative.' });
   }
-  const reg = String(factory.values['factory.industrialRegistryNumber'] ?? '');
-  if (reg) {
-    const access = await registryAccess(reg, linked?.id ?? '');
-    if (!access.allowed || await findOpenSubmittedByRegistry(reg, '')) {
-      out.push({ code: 'REGISTRY_IN_USE', messageAr: 'رقم السجل الصناعي لهذه المنشأة مستخدم في طلب آخر أو موقوف لمراجعة وحدة إدارة المبادرة — تواصل مع الدعم الفني.',
-        messageEn: 'The factory\'s industrial registry number is used by another application or on hold for PMU review — contact support.' });
-    }
-  }
+  // F2 / D3: a registry number already used (or on hold) no longer blocks enrolment. The file opens with a draft held on
+  // that number; the draft offers the objection right away and cannot be submitted until PMU decides (registryHold).
   return out;
 }
 

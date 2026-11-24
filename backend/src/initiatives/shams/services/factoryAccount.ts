@@ -50,8 +50,9 @@ export async function syncFactoryAccount(app: AppRow, from: ApplicationState, to
 /** رسائل منع الدخول على شاشات المبادرة (لا تمنع الدخول للمنصة). null = مسموح (كامل أو مقيّد). */
 export function accountLoginBlock(status: FactoryAccountStatus | null): { code: string; ar: string; en: string } | null {
   if (status === 'under_review') {
-    return { code: 'ACCOUNT_UNDER_REVIEW', ar: 'طلب تسجيل مصنعكم في مبادرة «شمس الصناعة» قيد مراجعة مركز تحديث الصناعة (IMC). ستصلكم رسالة على البريد بالقرار، وتُفتح لوحة المبادرة بعد قبول الحساب.',
-      en: 'Your factory registration in Shams El-Senaa is under IMC review. You will be emailed the decision; the initiative dashboard opens once it is approved.' };
+    // D3: during IMC review the factory may read its application, withdraw it, or object to a registry number — nothing else.
+    return { code: 'ACCOUNT_UNDER_REVIEW', ar: 'طلب تسجيل مصنعكم في مبادرة «شمس الصناعة» قيد مراجعة مركز تحديث الصناعة (IMC). يمكنكم الاطلاع على الطلب أو الانسحاب منه حتى صدور القرار، وتُفتح لوحة المبادرة كاملة بعد قبول الحساب.',
+      en: 'Your factory registration in Shams El-Senaa is under IMC review. You can view or withdraw it until the decision; the full dashboard opens once it is approved.' };
   }
   if (status === 'rejected') {
     return { code: 'ACCOUNT_REJECTED', ar: 'لم يُقبل طلب تسجيل هذا المصنع في مبادرة «شمس الصناعة». سبب القرار مرسل على بريدكم — للاستفسار تواصلوا مع الدعم. حسابكم على المنصة يبقى صالحًا لباقي المبادرات.',
