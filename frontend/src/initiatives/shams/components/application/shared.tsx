@@ -128,6 +128,13 @@ const RETIRED_ACTIONS: Record<string, { ar: string; en: string }> = {
   record_result: { ar: 'نتيجة دراسة البنك (مرحلة ملغاة)', en: 'Bank study result (retired step)' },
   reassign_bank: { ar: 'إعادة الإحالة لبنك آخر (مرحلة ملغاة)', en: 'Bank reassignment (retired step)' },
   bank_study_retired: { ar: 'نقل آلي: إلغاء مرحلة دراسة البنك', en: 'Automatic move: bank study retired' },
+  // System entries (backend SYSTEM_ACTION_LABELS): provider suspension (D6/D7), registry dispute decisions (D4), stopped bank (D2).
+  provider_suspended_return: { ar: 'إرجاع آلي لرفع العرض (إيقاف مقدم الخدمة)', en: 'Automatic return to offer upload (provider suspended)' },
+  provider_suspended_reselect: { ar: 'عودة آلية لاختيار مقدم الخدمة (إيقاف مقدم الخدمة)', en: 'Automatic return to provider selection (provider suspended)' },
+  provider_suspended_warning: { ar: 'تنبيه: أُوقف مقدم الخدمة المختار — لا تغيير في مسار الطلب', en: 'Warning: the chosen provider was suspended — the application continues' },
+  registry_dispute_reject: { ar: 'إغلاق آلي بقرار PMU في نزاع رقم السجل', en: 'Closed by the PMU registry dispute decision' },
+  registry_dispute_decided: { ar: 'قرار PMU في نزاع رقم السجل', en: 'PMU registry dispute decision' },
+  bank_released: { ar: 'تحرير الطلب من بنك موقوف — اختر بنكًا آخر', en: 'Released from a stopped bank — choose another bank' },
 };
 
 /**
@@ -138,9 +145,7 @@ export const TransitionTimeline: React.FC<{ items: TransitionEntry[]; documents?
   const { isAr, t, meta } = useStore();
   if (!items.length && !documents?.length) return <p className="text-muted" style={{ fontSize: '0.85rem' }}>{t('لا توجد أحداث مسموح بعرضها.', 'No visible events.')}</p>;
   // التسمية بحسب الفعل والحالة معًا: «accept» عند IMC غير «accept» عند PMU.
-  const actionLabel = (a: string, from: string) => (a === 'provider_suspended_return'
-    ? t('إرجاع آلي لرفع العرض (إيقاف مقدم الخدمة)', 'Automatic return to offer upload (provider suspended)')
-    : RETIRED_ACTIONS[a] ? (isAr ? RETIRED_ACTIONS[a].ar : RETIRED_ACTIONS[a].en)
+  const actionLabel = (a: string, from: string) => (RETIRED_ACTIONS[a] ? (isAr ? RETIRED_ACTIONS[a].ar : RETIRED_ACTIONS[a].en)
     : (meta?.transitions.find((x) => x.action === a && x.from === from) ?? meta?.transitions.find((x) => x.action === a))?.[isAr ? 'labelAr' : 'labelEn'] ?? a);
   type Row = { kind: 'transition'; at: string; i: number; e: TransitionEntry } | { kind: 'document'; at: string; i: number; d: ApplicationDocument };
   const rows: Row[] = [

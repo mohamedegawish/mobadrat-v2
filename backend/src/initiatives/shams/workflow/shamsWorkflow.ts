@@ -58,6 +58,20 @@ export const RETIRED_ACTION_LABELS: Record<string, { ar: string; en: string }> =
 };
 export type ActionName = (typeof ACTIONS)[number];
 
+/**
+ * انتقالات نظامية تُسجَّل في سجل الطلب دون أن يملكها أي دور (لا تُنفذ عبر /actions):
+ * إيقاف مقدم الخدمة (القرار 6 وD6 وD7)، قرار PMU في نزاع رقم السجل (D4)، وتحرير الطلب من بنك موقوف (D2).
+ */
+export const SYSTEM_ACTION_LABELS = {
+  provider_suspended_return: { ar: 'إرجاع آلي لرفع العرض (إيقاف مقدم الخدمة)', en: 'Automatic return to offer upload (provider suspended)' },
+  provider_suspended_reselect: { ar: 'عودة آلية لاختيار مقدم الخدمة (إيقاف مقدم الخدمة)', en: 'Automatic return to provider selection (provider suspended)' },
+  provider_suspended_warning: { ar: 'تنبيه: أُوقف مقدم الخدمة المختار — لا تغيير في مسار الطلب', en: 'Warning: the chosen provider was suspended — the application continues' },
+  registry_dispute_reject: { ar: 'إغلاق آلي بقرار PMU في نزاع رقم السجل', en: 'Closed by the PMU registry dispute decision' },
+  registry_dispute_decided: { ar: 'قرار PMU في نزاع رقم السجل', en: 'PMU registry dispute decision' },
+  bank_released: { ar: 'تحرير الطلب من بنك موقوف — اختر بنكًا آخر', en: 'Released from a stopped bank — choose another bank' },
+} as const satisfies Record<string, { ar: string; en: string }>;
+export type SystemAction = keyof typeof SYSTEM_ACTION_LABELS;
+
 /** الجهة المسؤولة عن الخطوة الحالية. */
 export type Responsible = 'factory' | 'imc' | 'encpc' | 'pmu' | 'none';
 

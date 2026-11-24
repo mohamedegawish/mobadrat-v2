@@ -1,6 +1,6 @@
 import { getDb, nowIso, parseJson } from '../db/database.js';
 import { newId, likePattern, type SqlParam } from '../http/helpers.js';
-import type { ApplicationState, ActionName, ContractPath } from '../workflow/shamsWorkflow.js';
+import type { ApplicationState, ActionName, ContractPath, SystemAction } from '../workflow/shamsWorkflow.js';
 import type { DataSection } from '../workflow/applicationForm.js';
 
 export interface AppRow {
@@ -119,7 +119,7 @@ export async function sectionHistory(appId: string, section: DataSection): Promi
 // ── الانتقالات والنواقص ─────────────────────────────────────────────────────
 
 export interface TransitionRow {
-  id: string; applicationId: string; fromState: ApplicationState; toState: ApplicationState; action: ActionName | 'provider_suspended_return';
+  id: string; applicationId: string; fromState: ApplicationState; toState: ApplicationState; action: ActionName | SystemAction;
   actorUserId: string | null; actorRole: string; actorOrgId: string | null; actorName: string; reason: string; attempt: number;
   payload: Record<string, unknown>; createdAt: string;
 }

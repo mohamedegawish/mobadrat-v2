@@ -9,7 +9,7 @@ import { listDocuments, isActiveAt, wasSubmitted, type DocumentRow } from '../st
 import { getOrganization, getOrganizationsByIds, type Organization } from '../store/organizations.js';
 import { getUserNamesByIds } from '../store/users.js';
 import { getProvider, isSelectable } from '../store/providers.js';
-import { conflictsForApplication, listObjections, registryAccess } from '../store/registry.js';
+import { conflictsForApplication, listObjections, pendingObjectionAgainst, registryAccess } from '../store/registry.js';
 import { AppError, Errors } from '../http/errors.js';
 import {
   allowedActions, STATE_LABELS, STATE_RESPONSIBLE, RESPONSIBLE_LABELS, RETURN_ACTIONS, stateStep, stateTask,
@@ -75,6 +75,12 @@ export async function responsibleInfo(app: AppRow, orgs?: OrgCache) {
  * البنك يُختار مرة واحدة ثم تُسجَّل النتيجة (G-01)؛ مقدم خدمة لم يعد معتمدًا → لا إرسال عرض، ويُتاح إعادة الاختيار (I11).
  */
 export async function actionBlock(app: AppRow, action: ActionName): Promise<AppError | null> {
+  // D4: while another factory's objection to this registry number is under PMU review, the holder's application does not move
+  // forward (withdrawal stays possible). PMU's decision unfreezes it — or closes it (registryDisputes.ts).
+  if (action !== 'withdraw' && app.state !== 'DRAFT' && app.industrialRegistryNumber && await pendingObjectionAgainst(app.industrialRegistryNumber, app.factoryId)) {
+    return Errors.conflict('REGISTRY_DISPUTE_OPEN', 'على رقم السجل الصناعي لهذا الطلب اعتراض قيد مراجعة وحدة إدارة المبادرة — لا يتقدم الطلب حتى صدور قرارها.',
+      "An objection to this application's registry number is under PMU review — the application cannot move forward until the decision.");
+  }
   if (app.state === 'CONTRACT_OUTCOME') {
     if (action === 'select_bank' && app.bankOrgId) {
       return Errors.conflict('BANK_ALREADY_SELECTED', 'سُجّل البنك المختار لهذا الطلب بالفعل.', 'A bank has already been chosen for this application.');
@@ -282,6 +288,8 @@ export async function buildDetail(user: UserInternal, app: AppRow) {
       facility: metaOnly ? null : registry.facilityData, fields: regView?.fields ?? [], nameCheck: regView?.nameCheck ?? null,
     } : null,
     registryConflicts: conflicts,
+    // D4: frozen by an objection under PMU review (only withdrawal remains).
+    registryDisputeOpen: !isTerminal(app.state) && app.state !== 'DRAFT' && Boolean(app.industrialRegistryNumber) && await pendingObjectionAgainst(app.industrialRegistryNumber!, app.factoryId),
     // F2 / D3: the owner's draft holds a number used by another open application (or on hold) → the objection is offered.
     registryHold,
     provider: provider ? { id: provider.id, nameAr: provider.nameAr, nameEn: provider.nameEn, contactName: metaOnly ? '' : provider.contactName, contactPhone: metaOnly ? '' : provider.contactPhone, contactEmail: metaOnly ? '' : provider.contactEmail, status: provider.status,

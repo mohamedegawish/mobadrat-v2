@@ -10,7 +10,7 @@ import type { SqlParam } from '../http/helpers.js';
 import { listApplications, type AppRow } from '../store/applications.js';
 import { listScope, visibleTransitions } from '../access/visibility.js';
 import { listFlags, slaConfigured } from '../workflow/applicationView.js';
-import { APPLICATION_STATES, NON_TERMINAL_STATES, STATE_LABELS, TRANSITIONS, RETIRED_ACTION_LABELS, type ApplicationState } from '../workflow/shamsWorkflow.js';
+import { APPLICATION_STATES, NON_TERMINAL_STATES, STATE_LABELS, TRANSITIONS, RETIRED_ACTION_LABELS, SYSTEM_ACTION_LABELS, type ApplicationState } from '../workflow/shamsWorkflow.js';
 import { listProviders } from '../store/providers.js';
 import { shamsPolicy } from '../config/shamsPolicy.js';
 import { stuckApplications } from './readiness.js';
@@ -29,7 +29,7 @@ export interface RecentItem { at: string; applicationId: string; number: string 
 
 const ACTION_LABEL = new Map<string, { ar: string; en: string }>();
 for (const t of TRANSITIONS) if (!ACTION_LABEL.has(t.action)) ACTION_LABEL.set(t.action, { ar: t.labelAr, en: t.labelEn });
-ACTION_LABEL.set('provider_suspended_return', { ar: 'إرجاع آلي لرفع العرض (إيقاف مقدم الخدمة)', en: 'Automatic return to offer upload (provider suspended)' });
+for (const [k, v] of Object.entries(SYSTEM_ACTION_LABELS)) ACTION_LABEL.set(k, v);
 for (const [k, v] of Object.entries(RETIRED_ACTION_LABELS)) ACTION_LABEL.set(k, v);
 // تسمية موحدة لإجراءات تتكرر بمعانٍ مختلفة بحسب المرحلة
 function actionLabel(action: string, from: ApplicationState): { ar: string; en: string } {

@@ -12,7 +12,7 @@ export const TEMPLATE_KEYS = [
   'ops.no_recipients', 'ops.no_providers', 'ops.registry_conflict', 'ops.contract_amount_alert', 'ops.bank_unavailable',
   // المراجعة الأمنية
   'auth.account_setup', 'ops.account_request', 'ops.account_event', 'auth.suspicious_logins', 'auth.registration_attempt',
-  'ops.integration_key', 'registry.blocked', 'registry.released', 'ops.registry_objection', 'registry.objection_decided',
+  'ops.integration_key', 'registry.blocked', 'registry.released', 'registry.decision_lost', 'ops.registry_objection', 'registry.objection_decided',
   'ops.registry_held_by_inactive', 'auth.recovery_requested', 'ops.recovery_pending', 'auth.recovery_approved', 'auth.recovery_closed',
   // دليل مقدمي الخدمة
   'ops.provider_pending', 'ops.provider_changed',
@@ -426,10 +426,23 @@ export function renderTemplate(key: TemplateKey, v: TemplateVars): Rendered {
         subject: `قرار بشأن رقم السجل ${v.registryNumber ?? ''} — شمس الصناعة`, heading: 'قرار وحدة إدارة المبادرة على رقم السجل', tone: 'success',
         panelTitle: `رقم السجل: ${v.registryNumber ?? ''}`,
         panelText: `قررت وحدة إدارة المبادرة السماح باستخدام رقم السجل للمنشأة: ${v.companyName ?? ''} فقط. أي حساب آخر يبقى ممنوعًا من هذا الرقم.`,
-        rows: [['رقم السجل', v.registryNumber ?? ''], ['المرجع', v.reference ?? '']],
+        rows: [['رقم السجل', v.registryNumber ?? ''], ['المرجع', v.reference ?? ''], ...(v.otherCompanyName ? [['الطرف الآخر', v.otherCompanyName] as [string, string]] : [])],
+        body: v.reason ? paragraph(`<b>السبب:</b> ${escapeMultiline(v.reason)}`) : '',
         ctaLabel: 'لوحة المصنع', link: siteLink('factory-dashboard'),
         english: `PMU decided that registry number ${v.registryNumber ?? ''} may be used by one facility only.`,
         sms: `شمس الصناعة: صدر قرار بشأن رقم السجل ${v.registryNumber ?? ''}.`,
+      });
+    // D5: the losing party gets the decision, the reason and the reference, never the other company's name.
+    case 'registry.decision_lost':
+      return build({
+        subject: `قرار بشأن رقم السجل ${v.registryNumber ?? ''} — شمس الصناعة`, heading: 'قرار وحدة إدارة المبادرة على رقم السجل', tone: 'neutral',
+        panelTitle: `رقم السجل: ${v.registryNumber ?? ''}`,
+        panelText: 'قررت وحدة إدارة المبادرة بعد مراجعة المستندات أن رقم السجل لمنشأة أخرى، فلا يمكن استخدامه في طلبكم. للاستفسار تواصلوا مع الدعم الفني.',
+        rows: [['رقم السجل', v.registryNumber ?? ''], ['المرجع', v.reference ?? '']],
+        body: v.reason ? paragraph(`<b>السبب:</b> ${escapeMultiline(v.reason)}`) : '',
+        ctaLabel: 'لوحة المصنع', link: siteLink('factory-dashboard'),
+        english: `PMU decided that registry number ${v.registryNumber ?? ''} belongs to another facility. The reason is shown above.`,
+        sms: `شمس الصناعة: صدر قرار بأن رقم السجل ${v.registryNumber ?? ''} لمنشأة أخرى.`,
       });
     case 'ops.registry_objection':
       return build({

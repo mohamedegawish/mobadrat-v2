@@ -693,7 +693,7 @@ test('F-06/3) before the offer is sent and after it was accepted the application
 
 // ══ المرحلة 6 (F-03): نزاع رقم السجل بعد أن تجاوز الطلب الحاجز مراجعة IMC — يثبّت السلوك الحالي المعتمد فقط ═══════════════════
 // القرار D11 مفتوح: من يملك إيقاف طلب حاجز لرقم سجل بعد IMC؟ لا حل مقترح مُنفَّذ هنا ولا يُرمَّز في الاختبار.
-test('F-03/1) CURRENT behavior: after PMU names factory B, factory A\'s application (already past IMC) is untouched, no role can stop it, and B stays refused until A leaves', async () => {
+test('F-03/1) D4 (QA 2026-11-23): after PMU names factory B, factory A\'s application (already past IMC) closes as Rejected and B submits', async () => {
   const idA = await draft(c.factory, 'IND-F03-1');
   assert.equal((await act(c.factory, idA, 'submit')).status, 200);
   assert.equal((await act(c.imc, idA, 'accept')).status, 200); // الطلب الحاجز تجاوز IMC
@@ -704,35 +704,23 @@ test('F-03/1) CURRENT behavior: after PMU names factory B, factory A\'s applicat
 
   const obj = await c.factory2.upload('/registry-objections', { registryNumber: 'IND-F03-1', note: 'الرقم يخص منشأتنا' }, PDF, 'ownership-proof.pdf');
   assert.equal(obj.status, 201, JSON.stringify(obj.json));
-  const before = await getApp(c.pmu, idA);
+  // D4: while the objection is under review the holder application does not move forward
+  assert.equal((await act(c.encpc, idA, 'compliant')).json.code, 'REGISTRY_DISPUTE_OPEN');
   const decision = await c.pmu.post(`/registry-objections/${obj.json.data.id}/accept`, { reason: 'مستندات الملكية سليمة وتثبت ملكية المنشأة المعترضة', reference: 'REF-F03' });
   assert.equal(decision.status, 200, JSON.stringify(decision.json));
   assert.deepEqual({ id: decision.json.data.heldByOtherApplication.id, state: decision.json.data.heldByOtherApplication.state }, { id: idA, state: 'ENCPC_REVIEW' },
-    'PMU is told the number is still held by an open application');
+    'PMU is told which open application held the number (it is now closed)');
 
-  // قرار PMU لا يمس الطلب الحاجز
+  // D4: the holder application closes as Rejected (REGISTRY_OWNERSHIP) at its stage; no role can move it any more
   const after = await getApp(c.pmu, idA);
-  assert.deepEqual({ state: after.state, version: after.version }, { state: before.state, version: before.version });
-
-  // المصنع المسمّى ما زال ممنوعًا ما دام الطلب الحاجز مفتوحًا
-  const again = await act(c.factory2, idB, 'submit');
-  assert.equal(again.status, 409, JSON.stringify(again.json));
-  assert.equal(again.json.code, 'DUPLICATE_REGISTRY');
-
-  // لا جهة تملك إجراءً يوقف الطلب الحاجز: IMC خارج مرحلتها، PMU بلا قرار في هذه المرحلة، ENCPC لا ترفض، والأدمن بلا قرارات، والبنك لا يراه
-  const actionsOf = async (cl: Client) => (await getApp(cl, idA)).allowedActions.map((a: any) => a.action).sort();
-  assert.deepEqual(await actionsOf(c.imc), []);
-  assert.deepEqual(await actionsOf(c.pmu), []);
-  assert.deepEqual(await actionsOf(c.admin), []);
-  assert.deepEqual(await actionsOf(c.encpc), ['compliant', 'non_compliant']);
+  assert.equal(after.state, 'REJECTED');
+  assert.equal(after.transitions.at(-1).action, 'registry_dispute_reject');
   for (const cl of [c.imc, c.pmu, c.encpc, c.admin]) {
-    const r = await act(cl, idA, 'reject', { reason: 'محاولة رفض خارج الصلاحية' });
-    assert.ok([403, 409].includes(r.status), `reject by ${cl.user.role}: ${r.status}`);
+    const r = await act(cl, idA, 'compliant');
+    assert.ok([403, 409].includes(r.status), `${cl.user.role}: ${r.status}`);
   }
-  assert.equal((await appRow(idA)).state, 'ENCPC_REVIEW', 'the holder application is still where it was');
 
-  // المخرج الوحيد اليوم: صاحب الطلب الحاجز ينسحب (أو يصل طلبه لحالة نهائية)
-  assert.equal((await act(c.factory, idA, 'withdraw', { reason: 'تنازل عن الرقم' })).status, 200);
+  // the authorised factory submits at once
   const ok = await act(c.factory2, idB, 'submit');
   assert.equal(ok.status, 200, JSON.stringify(ok.json));
   await assertConsistentSubmission(idB, 'IND-F03-1');

@@ -131,3 +131,9 @@ export async function decideObjection(id: string, status: 'accepted' | 'rejected
   return Number((await getDb().prepare(`UPDATE shams_registry_objections SET status = ?, decidedBy = ?, decidedAt = ?, decisionReason = ?, decisionReference = ?
     WHERE id = ? AND status = 'pending'`).run(status, userId, nowIso(), reason, reference, id)).changes) === 1;
 }
+
+/** D4: an objection by ANOTHER factory to this registry number is under PMU review (the holder's application is frozen). */
+export async function pendingObjectionAgainst(registryNumber: string, holderFactoryId: string): Promise<boolean> {
+  return Boolean(await getDb().prepare("SELECT 1 FROM shams_registry_objections WHERE registryNumber = ? AND status = 'pending' AND factoryId <> ? LIMIT 1")
+    .get(registryNumber, holderFactoryId));
+}

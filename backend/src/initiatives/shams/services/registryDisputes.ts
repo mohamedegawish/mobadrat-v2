@@ -15,13 +15,17 @@ import { normalizeRegistryNumber } from '../workflow/validate.js';
 import { ORG_IDS } from '../domain.js';
 import { addAuditLog, type AuditActor } from '../store/audit.js';
 import { getFactory, getFactoryByOrg } from '../store/factories.js';
-import { findOpenSubmittedByRegistry } from '../store/applications.js';
+import { findOpenApplicationForFactory, findOpenSubmittedByRegistry, getApplication, insertTransition, type AppRow } from '../store/applications.js';
+import { enqueueWebhook } from '../store/outbox.js';
+import { syncFactoryAccount } from './factoryAccount.js';
+import { config } from '../config.js';
+import { randomUUID } from 'node:crypto';
 import { activeUsersOf, type UserInternal } from '../store/users.js';
 import {
   activeBlocks, decideObjection as storeDecideObjection, getObjection, insertBlock, insertObjection, listBlocks, listObjections,
   pendingObjection, registryAccess, releaseNumber, type RegistryObjectionRow,
 } from '../store/registry.js';
-import { dispatch, orgRecipients, type Recipient } from '../notifications/notify.js';
+import { dispatch, factoryRecipients, orgRecipients, type Recipient } from '../notifications/notify.js';
 import { kickNotificationWorker } from '../jobs/notificationWorker.js';
 import { shamsPolicy } from '../config/shamsPolicy.js';
 
@@ -143,14 +147,71 @@ async function reserveFor(user: UserInternal, registryNumber: string, allowedFac
   else await insertBlock({ registryNumber, factoryId: null, applicationId: null, transitionId: null, source, createdBy: user.id, release: { allowedFactoryId, reason, reference } });
 }
 
-async function notifyDecision(registryNumber: string, allowedFactoryId: string, reason: string, reference: string, exceptFactoryIds: string[]) {
+/**
+ * D5: the authorised factory gets the decision for its own facility; every other party gets the decision, the reason and the
+ * reference without the other company's name; IMC and PMU see both names. `skipWinner` when the winner already got its own
+ * objection decision.
+ */
+async function notifyDecision(registryNumber: string, allowedFactoryId: string, reason: string, reference: string, skipWinner = false) {
   const allowed = await getFactory(allowedFactoryId);
-  const vars = { registryNumber, companyName: allowed?.companyName ?? '', reference, reason };
-  const parties = new Set<string>(await involvedFactoryIds(registryNumber));
-  const recipients: Recipient[] = [];
-  for (const fid of parties) if (!exceptFactoryIds.includes(fid)) recipients.push(...await factoryUsers(fid));
-  recipients.push(...await orgRecipients(ORG_IDS.imc, 'imc_reviewer'));
-  await dispatch('registry.released', vars, recipients, { dedupePrefix: `rdec:${registryNumber}:${allowedFactoryId}:${nowIso()}`, channels: ['email'] });
+  const parties = await involvedFactoryIds(registryNumber);
+  const prefix = `rdec:${registryNumber}:${allowedFactoryId}:${nowIso()}`;
+  if (!skipWinner) {
+    await dispatch('registry.released', { registryNumber, companyName: allowed?.companyName ?? '', reference, reason }, await factoryUsers(allowedFactoryId), { dedupePrefix: `${prefix}:win`, channels: ['email'] });
+  }
+  const losers: Recipient[] = [];
+  for (const fid of parties) if (fid !== allowedFactoryId) losers.push(...await factoryUsers(fid));
+  if (losers.length) await dispatch('registry.decision_lost', { registryNumber, reference, reason }, losers, { dedupePrefix: `${prefix}:lost`, channels: ['email'] });
+  const others = (await mapSeq(parties.filter((f) => f !== allowedFactoryId), getFactory)).map((f) => f?.companyName).filter(Boolean).join('، ');
+  const staff = [...await orgRecipients(ORG_IDS.imc, 'imc_reviewer'), ...await orgRecipients(ORG_IDS.pmu, 'pmu_reviewer')];
+  await dispatch('registry.released', { registryNumber, companyName: allowed?.companyName ?? '', otherCompanyName: others, reference, reason }, staff, { dedupePrefix: `${prefix}:staff`, channels: ['email'] });
+}
+
+/**
+ * D4: PMU authorised another factory, so the holder's open application closes as Rejected (reason code REGISTRY_OWNERSHIP) at
+ * any stage, in its history, with a webhook and a notice to the factory (D5: the reason never names the other company).
+ */
+async function closeHolder(user: UserInternal, ip: string, app: AppRow, registryNumber: string, reason: string, reference: string): Promise<void> {
+  const now = nowIso();
+  const r = await getDb().prepare(`UPDATE shams_applications SET state = 'REJECTED', version = version + 1, stateEnteredAt = ?, closedAt = ?, updatedAt = ?
+    WHERE id = ? AND version = ? AND state = ?`).run(now, now, now, app.id, app.version, app.state);
+  if (Number(r.changes) !== 1) throw Errors.conflict('VERSION_CONFLICT', 'تغيّر طلب صاحب الرقم أثناء القرار — أعد المحاولة.', "The holder's application changed during the decision — try again.");
+  const text = `قررت وحدة إدارة المبادرة في نزاع رقم السجل ${registryNumber} أن الرقم لمنشأة أخرى، فأُغلق الطلب: ${reason} (مرجع ${reference})`;
+  const t = await insertTransition({
+    applicationId: app.id, fromState: app.state, toState: 'REJECTED', action: 'registry_dispute_reject',
+    actorUserId: user.id, actorRole: user.role, actorOrgId: user.organizationId, actorName: user.nameAr, reason: text, attempt: app.attempt,
+    payload: { reasonCode: shamsPolicy.registryDispute.closeHolderReasonCode, registryNumber, reference, automatic: true },
+  });
+  await addAuditLog({ ...userActor(user, ip), action: 'application.registry_dispute_reject', entityType: 'application', entityId: app.id, applicationId: app.id,
+    summaryAr: `إغلاق الطلب ${app.number ?? app.id} بقرار PMU في نزاع رقم السجل ${registryNumber}`, details: { fromState: app.state, transitionId: t.id, registryNumber, reference } });
+  const eventId = randomUUID();
+  await enqueueWebhook(eventId, 'application.state_changed', t.id, {
+    id: eventId, type: 'application.state_changed', occurredAt: now,
+    data: { applicationId: app.id, number: app.number, fromState: app.state, toState: 'REJECTED', action: 'registry_dispute_reject', actorRole: user.role, actorOrgId: user.organizationId, attempt: app.attempt, version: app.version + 1 },
+  }, !(config.platformWebhookUrl && config.platformWebhookSecret));
+  const after = (await getApplication(app.id))!;
+  const accountEvent = await syncFactoryAccount(after, app.state, 'REJECTED', 'reject', user, ip);
+  await dispatch(accountEvent === 'rejected' ? 'account.rejected' : 'app.rejected', { appId: app.id, number: app.number, companyName: app.companyName, reason: text },
+    await factoryRecipients(after), { dedupePrefix: t.id, applicationId: app.id });
+}
+
+/** D4: applies PMU's decision to every open application on the number, inside the caller's transaction. */
+async function applyDecision(user: UserInternal, ip: string, registryNumber: string, allowedFactoryId: string, reason: string, reference: string): Promise<string | null> {
+  const holder = await findOpenSubmittedByRegistry(registryNumber, '');
+  let closed: string | null = null;
+  if (holder && holder.factoryId !== allowedFactoryId) { await closeHolder(user, ip, holder, registryNumber, reason, reference); closed = holder.id; }
+  for (const fid of await involvedFactoryIds(registryNumber)) {
+    const app = await findOpenApplicationForFactory(fid);
+    if (!app || app.id === closed) continue;
+    const won = fid === allowedFactoryId;
+    await insertTransition({
+      applicationId: app.id, fromState: app.state, toState: app.state, action: 'registry_dispute_decided',
+      actorUserId: user.id, actorRole: user.role, actorOrgId: user.organizationId, actorName: user.nameAr, attempt: app.attempt,
+      reason: `${won ? `قررت وحدة إدارة المبادرة أن رقم السجل ${registryNumber} لمنشأتكم` : `قررت وحدة إدارة المبادرة أن رقم السجل ${registryNumber} لمنشأة أخرى`}: ${reason} (مرجع ${reference})`,
+      payload: { registryNumber, reference, authorised: won },
+    });
+  }
+  return closed;
 }
 
 export async function decideObjection(user: UserInternal, id: string, accept: boolean, body: unknown, ip: string) {
@@ -165,12 +226,17 @@ export async function decideObjection(user: UserInternal, id: string, accept: bo
     if (!await storeDecideObjection(id, accept ? 'accepted' : 'rejected', user.id, d.reason, d.reference)) {
       throw Errors.conflict('ALREADY_DECIDED', 'تم البت في هذا الاعتراض بالفعل.', 'This objection was already decided.');
     }
+    // D4: accepting authorises the objector (the holder's open application closes); rejecting keeps the number with the holder
+    // and the objector stays blocked.
     if (accept) await reserveFor(user, o.registryNumber, o.factoryId, d.reason, d.reference, 'objection');
+    else if (holderOther) await reserveFor(user, o.registryNumber, holderOther.factoryId, d.reason, d.reference, 'objection');
+    const winner = accept ? o.factoryId : holderOther?.factoryId ?? null;
+    if (winner) await applyDecision(user, ip, o.registryNumber, winner, d.reason, d.reference);
     await addAuditLog({ ...userActor(user, ip), action: accept ? 'registry_objection.accept' : 'registry_objection.reject', entityType: 'registry_objection', entityId: id,
       summaryAr: `${accept ? 'قبول' : 'رفض'} اعتراض على رقم السجل ${o.registryNumber} (مرجع ${d.reference})`,
       details: { registryNumber: o.registryNumber, factoryId: o.factoryId, reason: d.reason, reference: d.reference, holderApplicationId: holderOther?.id ?? null } });
     await dispatch('registry.objection_decided', { registryNumber: o.registryNumber, decision: accept ? 'accepted' : 'rejected', reason: d.reason }, await factoryUsers(o.factoryId), { dedupePrefix: `robd:${id}`, channels: ['email'] });
-    if (accept) await notifyDecision(o.registryNumber, o.factoryId, d.reason, d.reference, [o.factoryId]);
+    if (winner) await notifyDecision(o.registryNumber, winner, d.reason, d.reference, winner === o.factoryId);
     return (await getObjection(id))!;
   });
   kickNotificationWorker();
@@ -192,6 +258,7 @@ export async function decideDispute(user: UserInternal, body: unknown, ip: strin
   const closed: string[] = [];
   await tx(async () => {
     await reserveFor(user, registryNumber, allowedFactoryId, d.reason, d.reference, 'pmu_dispute');
+    await applyDecision(user, ip, registryNumber, allowedFactoryId, d.reason, d.reference);
     for (const o of (await listObjections()).filter((x) => x.registryNumber === registryNumber && x.status === 'pending')) {
       const win = o.factoryId === allowedFactoryId;
       if (await storeDecideObjection(o.id, win ? 'accepted' : 'rejected', user.id, d.reason, d.reference)) {
@@ -202,7 +269,7 @@ export async function decideDispute(user: UserInternal, body: unknown, ip: strin
     await addAuditLog({ ...userActor(user, ip), action: 'registry_dispute.decide', entityType: 'registry_number', entityId: registryNumber,
       summaryAr: `قرار PMU في نزاع رقم السجل ${registryNumber}: المخوَّل ${(await getFactory(allowedFactoryId))?.companyName} (مرجع ${d.reference})`,
       details: { registryNumber, allowedFactoryId, reason: d.reason, reference: d.reference, closedObjections: closed, holderApplicationId: holderOther?.id ?? null } });
-    await notifyDecision(registryNumber, allowedFactoryId, d.reason, d.reference, []);
+    await notifyDecision(registryNumber, allowedFactoryId, d.reason, d.reference);
   });
   kickNotificationWorker();
   return { dispute: (await listDisputes()).find((x) => x.registryNumber === registryNumber) ?? null, heldByOtherApplication: holderOther ? { id: holderOther.id, number: holderOther.number, companyName: holderOther.companyName, state: holderOther.state } : null };

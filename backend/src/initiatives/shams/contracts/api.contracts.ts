@@ -120,6 +120,8 @@ export interface ApplicationDetail extends ApplicationListItem {
    * F2 / D3 (owner, DRAFT or IMC_CORRECTION only): the draft's registry number is used by another factory's open application
    * (`in_use`) or on hold (`blocked` / `reserved`) — it cannot be submitted until PMU decides; the objection is offered.
    */
+  /** D4: an objection by another factory to this application's registry number is under PMU review — only withdrawal remains. */
+  registryDisputeOpen?: boolean;
   registryHold?: {
     registryNumber: string; reason: 'in_use' | 'blocked' | 'reserved';
     objection: { id: string; status: 'pending' | 'accepted' | 'rejected'; decisionReason: string; decisionReference: string } | null;

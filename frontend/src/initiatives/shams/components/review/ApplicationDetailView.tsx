@@ -68,6 +68,13 @@ export const ApplicationDetailView: React.FC = () => {
         </p>
       ) : null}
 
+      {app.registryDisputeOpen ? (
+        <div className="account-banner" role="status" data-testid="registry-dispute-open" style={{ marginBottom: '1rem' }}>
+          <b>{t('على رقم السجل الصناعي لهذا الطلب اعتراض قيد مراجعة وحدة إدارة المبادرة', 'An objection to this application’s registry number is under PMU review')}</b>
+          <span>{t('لا يتقدم الطلب حتى صدور قرارها؛ يبقى الانسحاب متاحًا للمصنع.', 'The application cannot move forward until the decision; the factory can still withdraw.')}</span>
+        </div>
+      ) : null}
+
       {app.registryConflicts.length ? <ConflictsPanel app={app} /> : null}
 
       {/* مراجعة موافقة شركة التوزيع: المستند ونسخه وتاريخ الإرسال أمام المراجع مباشرةً فوق القرار */}

@@ -37,7 +37,7 @@ function inboxLink(key: TemplateKey, v: TemplateVars): string {
 const REASON_LABEL: Partial<Record<TemplateKey, string>> = {
   'app.correction_requested': 'المطلوب', 'account.correction_requested': 'المطلوب',
   'app.rejected': 'سبب الرفض', 'account.rejected': 'سبب الرفض',
-  'app.closed': 'السبب', 'registry.objection_decided': 'السبب', 'registry.released': 'السبب',
+  'app.closed': 'السبب', 'registry.objection_decided': 'السبب', 'registry.released': 'السبب', 'registry.decision_lost': 'السبب',
 };
 
 /** نص السبب: النواقص (البند: الملاحظة) ثم السبب العام إن لم يكن تكرارًا لملاحظة. null = لا سبب لهذا القرار. */
