@@ -94,15 +94,18 @@ export async function expectLoginRefused(page: Page, email: string, password: st
 }
 
 /**
- * مصنع لم يُقبل بعد (قيد المراجعة / مرفوض): يدخل المنصة لكن «شمس الصناعة» مقفلة — صفحة «مبادراتي» تعرض الرسالة بدون
- * زر الدخول للوحة المبادرة، وأي شاشة أو API في المبادرة يُرفض (كان التطبيق القديم يرفض الدخول نفسه بنفس الرسالة).
+ * مصنع قيد مراجعة IMC — D3 (QA 2026-11-23): صفحة «مبادراتي» تعرض الرسالة، وزر الدخول يفتح طلبه المرسل للقراءة فقط
+ * (الانسحاب هو الإجراء الوحيد)؛ لوحة المصنع وقائمة الطلبات وباقي شاشات المبادرة تبقى مقفلة حتى قرار IMC.
  */
 export async function expectShamsLocked(page: Page, email: string, password: string, text: RegExp) {
   await login(page, email, password);
   await expect(page).toHaveURL(/#hub/);
   const card = page.locator('.pf-hub-card', { hasText: 'شمس الصناعة' });
   await expect(card.locator('.pf-alert').first()).toContainText(text);
-  await expect(card.getByText('ادخل لوحة المبادرة')).toHaveCount(0);
+  await card.getByText('ادخل لوحة المبادرة').click();
+  await expect(page).toHaveURL(/#i\/shams\/application\//);
+  await expect(page.getByTestId('action-withdraw')).toBeVisible();
+  await expect(page.locator('[data-testid^="action-"]')).toHaveCount(1);
   await page.goto('/#i/shams/factory-dashboard');
   await expect(page).toHaveURL(/#hub/);
   const token = await apiToken(page.request, email, password);

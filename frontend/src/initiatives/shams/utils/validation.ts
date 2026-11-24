@@ -53,6 +53,17 @@ export function toLatinDigits(v: string): string {
 const PHONE_RE = /^\+?[0-9][0-9\s-]{5,19}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
+/** F7: صيغة رقم السجل / السجل التجاري / الرقم الضريبي — نفس قاعدة السيرفر (REGISTER_NUMBER_RE في workflow/validate.ts). */
+const REGISTER_NUMBER_RE = /^[\p{L}\p{N}][\p{L}\p{N}\s/-]{0,49}$/u;
+const REGISTER_NUMBER_KEYS = new Set(['industrialRegistryNumber', 'commercialRegisterNumber', 'taxNumber']);
+
+/** F7: «invalid format» لرقم سجل لا يطابق القاعدة — يُفحص في الصفحة قبل الإرسال. */
+export function registerNumberIssue(key: string, value: unknown): string | null {
+  if (!REGISTER_NUMBER_KEYS.has(key) || typeof value !== 'string') return null;
+  const v = toLatinDigits(value).trim();
+  return v === '' || REGISTER_NUMBER_RE.test(v) ? null : 'invalid format';
+}
+
 /** كود المشكلة (نفس أكواد السيرفر) لقيمة حقل من نوع معين، أو null إن كانت سليمة أو فارغة. */
 export function clientFieldIssue(type: string, value: unknown): string | null {
   if (value === undefined || value === null || value === '') return null;

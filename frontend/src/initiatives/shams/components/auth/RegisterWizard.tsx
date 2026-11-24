@@ -10,7 +10,7 @@ import { Check, CheckCircle2, FileText, KeyRound, MailCheck, RotateCcw, Trash2, 
 import { api, ApiException, type FieldMeta, type FormSection } from '../../api';
 import { errorDetails, errorText, store, useStore } from '../../store/state';
 import { formatBytes, formatNumber } from '../../hooks/useAsync';
-import { clientFieldIssue, toLatinDigits, validationMessage } from '../../utils/validation';
+import { clientFieldIssue, registerNumberIssue, toLatinDigits, validationMessage } from '../../utils/validation';
 import {
   addLocalFile, clearDone, clearLocalFiles, clearTextDraft, listLocalFiles, loadDone, loadTextDraft, localFilesAvailable,
   removeLocalFile, saveDone, saveTextDraft, toFile, type LocalFile,
@@ -108,7 +108,8 @@ export const RegisterView: React.FC = () => {
       if (key === 'governorate') next.general = { ...next.general, industrialZone: '' };
       return next;
     });
-    const issue = f ? clientFieldIssue(f.type, value) : null;
+    // F7: the registry-number format is checked on the page, before sending (same rule as the server).
+    const issue = f ? (registerNumberIssue(key, value) ?? clientFieldIssue(f.type, value)) : null;
     setErrors((prev) => { const n = { ...prev }; if (issue) n[key] = validationMessage(issue, isAr); else delete n[key]; return n; });
   };
 
