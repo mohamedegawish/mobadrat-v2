@@ -110,8 +110,15 @@ test('refresh token: httpOnly cookie only, rotation, reuse revokes the whole fam
   assert.equal((await c.post('/auth/refresh')).status, 401, 'family revoked after reuse');
   // تسجيل الخروج يلغي التوكن
   await c.login(DEV.pmu);
+  const beforeLogout = c.cookies.get('mobadrat_refresh')!;
   assert.equal((await c.post('/auth/logout')).status, 200);
-  assert.equal((await c.post('/auth/refresh')).status, 401);
+  // F8: بلا كوكي (حذفه الخروج) فهذا زائر = «لا جلسة» بلا رمز ولا خطأ؛ والكوكي القديم بعد الخروج مرفوض لأنه أُلغي.
+  const probe = await c.post('/auth/refresh');
+  assert.equal(probe.status, 200);
+  assert.equal(probe.json.data.accessToken, null);
+  const replay = new Client(srv.base);
+  replay.cookies.set('mobadrat_refresh', beforeLogout);
+  assert.equal((await replay.post('/auth/refresh')).status, 401, 'the token is revoked by the logout');
 });
 
 test('no demo authentication: x-user-id ignored, switch-user does not exist', async () => {

@@ -177,8 +177,12 @@ authRouter.post('/auth/login', loginLimiter, ah(async (req, res) => {
 
 authRouter.post('/auth/refresh', refreshLimiter, ah(async (req, res) => {
   const token = (req.cookies as Record<string, string> | undefined)?.[REFRESH_COOKIE];
+  // F8 (QA 2026-11-23, BUG-12): every page load asks «is there a session?». No refresh cookie at all is a visitor, not
+  // an error: «no session» (200, no token) instead of a 401 the browser logs on every page. A cookie that is invalid,
+  // expired or already rotated is still refused (401) and cleared — theft detection is unchanged.
+  if (!token) return okMessage(res, 200, 'لا توجد جلسة.', { accessToken: null, user: null });
   const unauthorized = () => { clearRefreshCookie(res); return apiError(res, 401, 'UNAUTHORIZED', 'انتهت الجلسة — سجّل الدخول من جديد.', 'Session expired.'); };
-  if (!token || !verifyRefresh(token)) return unauthorized();
+  if (!verifyRefresh(token)) return unauthorized();
   // Check → issue → rotate in ONE transaction: two concurrent refreshes of the same token cannot both mint a child token.
   const rotated = await tx(async () => {
     const check = await checkRefreshToken(token);

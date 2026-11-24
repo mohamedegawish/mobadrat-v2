@@ -31,8 +31,9 @@ export function refreshSession(): Promise<boolean> {
         method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: '{}',
       });
       if (!res.ok) { setAccessToken(null); return false; }
-      const j = (await res.json()) as { data?: { accessToken?: string } };
-      if (!j.data?.accessToken) return false;
+      const j = (await res.json()) as { data?: { accessToken?: string | null } };
+      // F8: a visitor (no refresh cookie) is answered «no session» — 200 with no token, never an error status.
+      if (!j.data?.accessToken) { setAccessToken(null); return false; }
       setAccessToken(j.data.accessToken);
       return true;
     } catch {
