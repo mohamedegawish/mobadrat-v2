@@ -150,7 +150,7 @@ export function renderTemplate(key: TemplateKey, v: TemplateVars): Rendered {
         panelTitle: v.stateAr ?? 'استيفاء', panelText: 'طلب فريق المبادرة استيفاء بعض البنود. عدّل البنود المطلوبة فقط ثم أعد الإرسال.',
         rows: appRows(v), body: `${deficienciesHtml(v)}${reasonHtml(v, 'ملاحظات')}`,
         ctaLabel: 'استكمال الطلب', link, english: `Corrections were requested on application ${v.number ?? ''}. Update the listed items and resubmit.`,
-        sms: `مطلوب استيفاء على الطلب ${ref(v)}. ادخل على المنصة لمعرفة البنود.`,
+        sms: `مطلوب استيفاء على الطلب ${ref(v)}.`,
       });
     case 'app.rejected':
       return build({
@@ -158,7 +158,7 @@ export function renderTemplate(key: TemplateKey, v: TemplateVars): Rendered {
         panelTitle: 'قرار نهائي', panelText: 'نأسف لإبلاغك بأن الطلب لم يستوفِ متطلبات المرحلة. يمكنك تقديم تظلم مسبب خلال المدة المعلنة من صفحة الطلب.',
         rows: appRows(v), body: reasonHtml(v, 'سبب القرار'), ...open,
         english: `Application ${v.number ?? ''} was not accepted. The reason is shown above. You may file one appeal within the announced period.`,
-        sms: `صدر قرار بعدم قبول الطلب ${ref(v)}. السبب وإمكانية التظلم على المنصة.`,
+        sms: `صدر قرار بعدم قبول الطلب ${ref(v)}، ويمكنك التظلم من المنصة.`,
       });
     case 'app.eligible':
       return build({
@@ -188,7 +188,7 @@ export function renderTemplate(key: TemplateKey, v: TemplateVars): Rendered {
         subject: `نتيجة الاختيار — الطلب ${ref(v)}`, heading: 'لم يُختر المشروع في هذه الدورة', tone: 'neutral',
         panelTitle: 'نتيجة الاختيار', panelText: 'شكرًا لمشاركتك. لم يُختر المشروع ضمن مستهدف هذه الدورة. يمكنك تقديم تظلم مسبب خلال المدة المعلنة، أو التقديم في دورة قادمة.',
         rows: appRows(v), body: reasonHtml(v), ...open, english: `Application ${v.number ?? ''} was not selected in this cohort.`,
-        sms: `لم يُختر المشروع ${ref(v)} في هذه الدورة. التفاصيل على المنصة.`,
+        sms: `لم يُختر المشروع ${ref(v)} في هذه الدورة.`,
       });
     case 'app.approved':
       return build({
@@ -201,7 +201,7 @@ export function renderTemplate(key: TemplateKey, v: TemplateVars): Rendered {
       return build({
         subject: `قرار الاعتماد — الطلب ${ref(v)}`, heading: 'لم يُعتمد المشروع', tone: 'neutral',
         panelTitle: 'قرار نهائي', panelText: 'لم يُعتمد المشروع في مرحلة العرض والاعتماد.', rows: appRows(v), body: reasonHtml(v), ...open,
-        english: `Application ${v.number ?? ''} was not approved.`, sms: `لم يُعتمد المشروع ${ref(v)}. التفاصيل على المنصة.`,
+        english: `Application ${v.number ?? ''} was not approved.`, sms: `لم يُعتمد المشروع ${ref(v)}.`,
       });
     case 'app.funder_referred':
       return build({

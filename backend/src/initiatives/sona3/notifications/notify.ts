@@ -3,6 +3,7 @@
  */
 import type { Channel } from '../store/outbox.js';
 import { dispatchRendered } from '../../../core/notify/dispatch.js';
+import type { DecisionReason } from '../../../core/notify/decisionText.js';
 import { MODULE_ID } from '../config.js';
 import { activeUsersOf } from '../store/users.js';
 import type { AppRow, TransitionRow } from '../store/applications.js';
@@ -26,7 +27,26 @@ export async function dispatch(
   return await dispatchRendered(rendered, recipients, {
     initiativeId: MODULE_ID, templateKey: key, dedupePrefix: opts.dedupePrefix, applicationId: opts.applicationId ?? null,
     sensitive: opts.sensitive, channels: opts.channels, inboxLink: appId ? `application/${encodeURIComponent(appId)}` : '',
+    reason: decisionReason(key, vars),
   });
+}
+
+/** D10 (shared with every initiative): negative decisions carry their reason in-app and in the SMS (core/notify). */
+const REASON_LABEL: Partial<Record<TemplateKey, string>> = {
+  'app.correction_requested': 'المطلوب', 'app.rejected': 'سبب القرار', 'app.not_selected': 'السبب', 'app.not_approved': 'السبب',
+  'app.funding_declined': 'السبب', 'app.closed': 'السبب', 'app.appeal_decided': 'أسباب القرار', 'app.milestone_reviewed': 'الملاحظات',
+};
+
+export function decisionReason(key: TemplateKey, v: TemplateVars): DecisionReason | undefined {
+  const labelAr = REASON_LABEL[key];
+  if (!labelAr) return undefined;
+  if (key === 'app.closed' && v.outcome === 'COMPLETED') return undefined;
+  if (key === 'app.appeal_decided' && v.accepted) return undefined;
+  if (key === 'app.milestone_reviewed' && v.verified) return undefined;
+  const notes = (v.deficiencies ?? []).map((d) => (d.note ? `${d.labelAr}: ${d.note}` : d.labelAr));
+  const reason = v.reason?.trim();
+  if (reason && !(v.deficiencies ?? []).some((d) => d.note?.trim() === reason)) notes.push(reason);
+  return notes.length ? { labelAr, text: notes.join(' — ') } : undefined;
 }
 
 /** مستلمو المتقدم: مستخدموه النشطون ذوو البريد المفعّل فقط. */

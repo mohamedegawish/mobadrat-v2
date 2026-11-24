@@ -93,13 +93,15 @@ test('pagination, auth and no sensitive content: verification/reset/setup links 
     assert.ok(!/^https?:/i.test(r.link), 'link is an internal hash path');
     assert.ok(r.link === '' || /^[a-z-]+(\/[A-Za-z0-9_%-]+)?$/.test(r.link), `safe link: ${r.link}`);
   }
-  // الأسباب والنواقص لا تُخزَّن (الصندوق = عنوان + نص قصير)
+  // D10 (QA 2026-11-23): the reason of a negative decision is in the factory's inbox in full — and only in that factory's.
   await closeOpen();
   const id = await advanceTo('IMC_REVIEW', c, reg());
-  assert.equal((await act(c.imc, id, 'request_correction', { deficiencies: [{ field: 'address', note: 'ملاحظة داخلية سرية جدًا' }] })).status, 200);
-  const rows = await q<{ body: string; title: string }>('SELECT body, title FROM user_notifications WHERE applicationId = ?', id);
+  assert.equal((await act(c.imc, id, 'request_correction', { deficiencies: [{ field: 'address', note: 'ملاحظة المراجع على العنوان' }] })).status, 200);
+  const rows = await q<{ body: string; title: string; userId: string }>('SELECT body, title, userId FROM user_notifications WHERE applicationId = ?', id);
   assert.ok(rows.length >= 1);
-  assert.ok(!rows.some((r) => `${r.body} ${r.title}`.includes('ملاحظة داخلية سرية جدًا')), 'deficiency notes stay out of the inbox');
+  const withNote = rows.filter((r) => `${r.body} ${r.title}`.includes('ملاحظة المراجع على العنوان'));
+  assert.ok(withNote.length >= 1, 'the deficiency note reaches the inbox (D10)');
+  assert.ok(withNote.every((r) => r.userId === c.factory.user.id), 'only the factory receives it');
 });
 
 test('no duplicates: re-dispatching with the same key adds no inbox row, and the inbox works with email not configured', async () => {

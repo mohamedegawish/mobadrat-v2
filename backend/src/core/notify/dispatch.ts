@@ -8,6 +8,8 @@ import { getSmsAdapter } from '../integrations/sms/index.js';
 import { enqueueNotification, type Channel } from '../store/outbox.js';
 import { insertUserNotification } from '../store/userNotifications.js';
 import { renderCoreTemplate, type CoreTemplateKey, type CoreTemplateVars, type Rendered } from './templates.js';
+import { composeDecisionTexts, type DecisionReason } from './decisionText.js';
+import { config } from '../../config.js';
 
 export interface Recipient { userId?: string | null; email?: string; phone?: string }
 
@@ -21,6 +23,12 @@ export interface DispatchOpts {
   channels?: Channel[];
   /** In-app link (hash route relative to the initiative's own screens, or a platform route when initiativeId is null). */
   inboxLink?: string;
+  /**
+   * D10: the reason of a negative decision. In-app gets the decision + the full reason; the SMS gets the decision, the reason
+   * cut to fit two segments and `smsLink` (default: the platform address). The e-mail is rendered by the template as before.
+   */
+  reason?: DecisionReason;
+  smsLink?: string;
 }
 
 export async function dispatchRendered(rendered: Rendered, recipients: Recipient[], opts: DispatchOpts): Promise<number> {
@@ -29,13 +37,16 @@ export async function dispatchRendered(rendered: Rendered, recipients: Recipient
   const smsOk = getSmsAdapter() !== null;
   const seen = new Set<string>();
   const inboxSeen = new Set<string>();
+  const texts = opts.reason?.text?.trim()
+    ? composeDecisionTexts(rendered.sms, opts.reason, opts.smsLink ?? config.appUrl)
+    : { inbox: rendered.sms, sms: rendered.sms };
   let n = 0;
   for (const r of recipients) {
     if (r.userId && !opts.sensitive && !inboxSeen.has(r.userId)) {
       inboxSeen.add(r.userId);
       await insertUserNotification({
         initiativeId: opts.initiativeId, userId: r.userId, applicationId: opts.applicationId ?? null, templateKey: opts.templateKey,
-        title: rendered.subject, body: rendered.sms, link: opts.inboxLink ?? '', dedupeKey: `${opts.dedupePrefix}:${opts.templateKey}:inbox:${r.userId}`,
+        title: rendered.subject, body: texts.inbox, link: opts.inboxLink ?? '', dedupeKey: `${opts.dedupePrefix}:${opts.templateKey}:inbox:${r.userId}`,
       });
     }
     for (const ch of channels) {
@@ -48,7 +59,8 @@ export async function dispatchRendered(rendered: Rendered, recipients: Recipient
         channel: ch, templateKey: opts.templateKey, applicationId: opts.applicationId ?? null, recipientUserId: r.userId ?? null,
         recipientAddress: address,
         subject: ch === 'email' ? rendered.subject : '',
-        body: ch === 'email' ? rendered.html : rendered.sms,
+        // The SMS text is stored even when no provider is configured (status `skipped`), so the outbox shows what would be sent.
+        body: ch === 'email' ? rendered.html : texts.sms,
         textBody: ch === 'email' ? rendered.text : '',
         sensitive: opts.sensitive,
         skipReason: ch === 'email' ? (mailOk ? undefined : 'mail_not_configured') : (smsOk ? undefined : 'sms_provider_not_configured'),

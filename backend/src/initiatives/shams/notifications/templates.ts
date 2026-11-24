@@ -219,7 +219,7 @@ export function renderTemplate(key: TemplateKey, v: TemplateVars): Rendered {
         panelTitle: v.stateAr ?? 'استيفاء', panelText: 'طلبت الجهة المراجعة استيفاء بعض البيانات أو المستندات. عدّل البنود المطلوبة فقط ثم أعد التقديم.',
         rows: appRows(v), body: `${deficienciesHtml(v)}${v.reason ? paragraph(`<b>ملاحظات:</b> ${escapeMultiline(v.reason)}`) : ''}`,
         ctaLabel: 'استكمال الطلب', link, english: `Corrections were requested on application ${v.number ?? ''}. Update the listed items and resubmit.`,
-        sms: `شمس الصناعة: مطلوب استيفاء على الطلب ${ref(v)}. ادخل على الموقع لمعرفة النواقص.`,
+        sms: `شمس الصناعة: مطلوب استيفاء على الطلب ${ref(v)}.`,
       });
     case 'app.rejected':
       return build({
@@ -228,7 +228,7 @@ export function renderTemplate(key: TemplateKey, v: TemplateVars): Rendered {
         body: v.reason ? paragraph(`<b>سبب الرفض:</b> ${escapeMultiline(v.reason)}`) : '',
         // لا نص عربي حر داخل سطر الملخص الإنجليزي (LTR) — السبب ظاهر في المتن العربي (M7).
         ctaLabel: 'عرض الطلب', link, english: `Application ${v.number ?? ''} was rejected. The reason is shown above.`,
-        sms: `شمس الصناعة: رُفض الطلب ${ref(v)}. السبب متاح على الموقع.`,
+        sms: `شمس الصناعة: رُفض الطلب ${ref(v)}.`,
       });
     case 'app.encpc_compliant': {
       // الرابط يفتح صفحة الاختيار داخل الحساب (يتطلب تسجيل الدخول)؛ لا يختار أحد من الرسالة نفسها ولا يحمل الرابط توكنًا.
@@ -308,7 +308,7 @@ export function renderTemplate(key: TemplateKey, v: TemplateVars): Rendered {
         rows: appRows(v), body: `${deficienciesHtml(v)}${v.reason ? paragraph(`<b>ملاحظات المراجع:</b> ${escapeMultiline(v.reason)}`) : ''}`,
         ctaLabel: 'تسجيل الدخول لتعديل البيانات', link: siteLink('login'),
         english: `Changes were requested on your factory registration ${v.number ?? ''}. Sign in, update the listed items and resubmit; the account is approved after review.`,
-        sms: `شمس الصناعة: مطلوب تعديل بيانات تسجيل مصنعكم ${ref(v)}. سجّلوا الدخول لمعرفة البنود.`,
+        sms: `شمس الصناعة: مطلوب تعديل بيانات تسجيل مصنعكم ${ref(v)}.`,
       });
     case 'account.rejected':
       return build({
@@ -318,7 +318,7 @@ export function renderTemplate(key: TemplateKey, v: TemplateVars): Rendered {
         rows: appRows(v),
         body: `${v.reason ? paragraph(`<b>سبب الرفض:</b> ${escapeMultiline(v.reason)}`) : ''}${paragraph('للاستفسار أو التظلم تواصلوا مع الدعم الفني عبر بيانات التواصل أسفل الرسالة.')}`,
         english: `Your factory registration ${v.number ?? ''} was not approved, so the account will not be activated. The reason is shown above.`,
-        sms: `شمس الصناعة: لم يُقبل طلب تسجيل مصنعكم ${ref(v)}. السبب في البريد الإلكتروني.`,
+        sms: `شمس الصناعة: لم يُقبل طلب تسجيل مصنعكم ${ref(v)}.`,
       });
     case 'app.imc_accepted':
       return build({
@@ -429,7 +429,7 @@ export function renderTemplate(key: TemplateKey, v: TemplateVars): Rendered {
         rows: [['رقم السجل', v.registryNumber ?? ''], ['المرجع', v.reference ?? '']],
         ctaLabel: 'لوحة المصنع', link: siteLink('factory-dashboard'),
         english: `PMU decided that registry number ${v.registryNumber ?? ''} may be used by one facility only.`,
-        sms: `شمس الصناعة: صدر قرار بشأن رقم السجل ${v.registryNumber ?? ''}. التفاصيل على الموقع.`,
+        sms: `شمس الصناعة: صدر قرار بشأن رقم السجل ${v.registryNumber ?? ''}.`,
       });
     case 'ops.registry_objection':
       return build({

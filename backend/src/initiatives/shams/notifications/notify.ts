@@ -1,17 +1,17 @@
 /**
  * إدخال الإشعارات في outbox — يُستدعى داخل معاملة الانتقال، والإرسال الفعلي بالعامل لاحقًا (القرار لا ينتظر الإرسال).
  */
-import { isMailConfigured } from '../mail/mailer.js';
-import { getSmsAdapter } from '../integrations/sms/index.js';
-import { enqueueNotification, type Channel } from '../store/outbox.js';
+import type { Channel } from '../store/outbox.js';
 import { activeUsersOf } from '../store/users.js';
 import type { AppRow } from '../store/applications.js';
 import { getOrganization } from '../store/organizations.js';
 import { getProvider, listSelectableProviders } from '../store/providers.js';
-import { insertUserNotification } from '../store/userNotifications.js';
 import { renderTemplate, type TemplateKey, type TemplateVars } from './templates.js';
 import type { AccountEvent } from '../services/factoryAccount.js';
 import { ORG_IDS, type Role } from '../domain.js';
+import { MODULE_ID } from '../config.js';
+import { dispatchRendered } from '../../../core/notify/dispatch.js';
+import type { DecisionReason } from '../../../core/notify/decisionText.js';
 import {
   STATE_LABELS, STATE_RESPONSIBLE, responsibleOrgId, type ApplicationState, type TransitionDef,
 } from '../workflow/shamsWorkflow.js';
@@ -30,44 +30,36 @@ function inboxLink(key: TemplateKey, v: TemplateVars): string {
   return INBOX_VIEW[key] ?? '';
 }
 
+/**
+ * D10: قوالب القرارات السلبية — السبب يصل في الإشعار الداخلي كاملًا وفي الـ SMS مختصرًا (الطبقة المشتركة core/notify).
+ * الإيميل يحمل السبب أصلًا من القالب.
+ */
+const REASON_LABEL: Partial<Record<TemplateKey, string>> = {
+  'app.correction_requested': 'المطلوب', 'account.correction_requested': 'المطلوب',
+  'app.rejected': 'سبب الرفض', 'account.rejected': 'سبب الرفض',
+  'app.closed': 'السبب', 'registry.objection_decided': 'السبب', 'registry.released': 'السبب',
+};
+
+/** نص السبب: النواقص (البند: الملاحظة) ثم السبب العام إن لم يكن تكرارًا لملاحظة. null = لا سبب لهذا القرار. */
+export function decisionReason(key: TemplateKey, v: TemplateVars): DecisionReason | undefined {
+  const labelAr = REASON_LABEL[key];
+  if (!labelAr) return undefined;
+  if (key === 'app.closed' && v.outcome === 'CONTRACTED') return undefined; // ملاحظات تعاقد ناجح ليست سبب قرار سلبي
+  const notes = (v.deficiencies ?? []).map((d) => (d.note ? `${d.labelAr}: ${d.note}` : d.labelAr));
+  const reason = v.reason?.trim();
+  if (reason && !(v.deficiencies ?? []).some((d) => d.note?.trim() === reason)) notes.push(reason);
+  return notes.length ? { labelAr, text: notes.join(' — ') } : undefined;
+}
+
+/** يُصيّر القالب ويضعه في الطابور المشترك للمنصة (core/notify/dispatch) موسومًا بهذه المبادرة. */
 export async function dispatch(
   key: TemplateKey, vars: TemplateVars, recipients: Recipient[],
   opts: { dedupePrefix: string; applicationId?: string | null; sensitive?: boolean; channels?: Channel[] },
 ): Promise<number> {
-  const rendered = renderTemplate(key, vars);
-  const channels = opts.channels ?? ['email', 'sms'];
-  const mailOk = isMailConfigured();
-  const smsOk = getSmsAdapter() !== null;
-  const seen = new Set<string>();
-  const inboxSeen = new Set<string>();
-  let n = 0;
-  for (const r of recipients) {
-    // الصندوق الداخلي: صف لكل مستلم له حساب، بنفس مفتاح عدم التكرار، ولا يعتمد على إعداد البريد/SMS. الحساس (روابط) لا يُخزَّن.
-    if (r.userId && !opts.sensitive && !inboxSeen.has(r.userId)) {
-      inboxSeen.add(r.userId);
-      await insertUserNotification({
-        userId: r.userId, applicationId: opts.applicationId ?? null, templateKey: key, title: rendered.subject, body: rendered.sms,
-        link: inboxLink(key, vars), dedupeKey: `${opts.dedupePrefix}:${key}:inbox:${r.userId}`,
-      });
-    }
-    for (const ch of channels) {
-      const address = ch === 'email' ? r.email?.trim().toLowerCase() : r.phone?.replace(/\s+/g, '');
-      if (!address || seen.has(`${ch}:${address}`)) continue;
-      seen.add(`${ch}:${address}`);
-      const inserted = await enqueueNotification({
-        dedupeKey: `${opts.dedupePrefix}:${key}:${ch}:${address}`,
-        channel: ch, templateKey: key, applicationId: opts.applicationId ?? null, recipientUserId: r.userId ?? null,
-        recipientAddress: address,
-        subject: ch === 'email' ? rendered.subject : '',
-        body: ch === 'email' ? rendered.html : rendered.sms,
-        textBody: ch === 'email' ? rendered.text : '',
-        sensitive: opts.sensitive,
-        skipReason: ch === 'email' ? (mailOk ? undefined : 'mail_not_configured') : (smsOk ? undefined : 'sms_provider_not_configured'),
-      });
-      if (inserted) n++;
-    }
-  }
-  return n;
+  return await dispatchRendered(renderTemplate(key, vars), recipients, {
+    initiativeId: MODULE_ID, templateKey: key, dedupePrefix: opts.dedupePrefix, applicationId: opts.applicationId ?? null,
+    sensitive: opts.sensitive, channels: opts.channels, inboxLink: inboxLink(key, vars), reason: decisionReason(key, vars),
+  });
 }
 
 /**
