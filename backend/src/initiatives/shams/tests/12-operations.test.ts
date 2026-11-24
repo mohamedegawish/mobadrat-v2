@@ -112,7 +112,7 @@ test('G-02: no bank referral or reassignment exists — PMU cannot move the bank
   assert.equal((await getApp(c.pmu, id)).bank.id, BANK_A, 'bank unchanged');
 });
 
-test('disabling a bank chosen by open applications needs explicit confirmation, alerts PMU, and never blocks the factory from recording the outcome', async () => {
+test('disabling a bank chosen by open applications needs explicit confirmation, alerts PMU, and releases them to pick another bank (D2)', async () => {
   await closeOpen();
   const id = await advanceTo('CONTRACT_OUTCOME', c, reg(), BANK_A);
   const blocked = await c.admin.put(`/admin/organizations/${BANK_A}`, { isActive: false });
@@ -126,8 +126,12 @@ test('disabling a bank chosen by open applications needs explicit confirmation, 
     const alert = await q<{ recipientAddress: string }>("SELECT recipientAddress FROM notification_outbox WHERE templateKey = 'ops.bank_unavailable'");
     assert.ok(alert.some((a) => a.recipientAddress === 'pmu@shams.local'));
     assert.ok(!(await c.admin.get('/admin/readiness')).json.data.stuck.some((s: any) => s.id === id), 'not stuck: the factory still acts');
+    // D2 (QA 2026-11-23): the application is released from the stopped bank; the factory picks another active bank first.
+    assert.equal((await getApp(c.factory, id)).bank, null, 'released');
+    assert.equal((await act(c.factory, id, 'record_no_contract', { reason: 'البنك أوقف التمويل' })).json.code, 'BANK_NOT_SELECTED');
+    assert.equal((await act(c.factory, id, 'select_bank', { bankOrgId: 'org-bank-demo-b' })).status, 200, 'another active bank');
     const done = await act(c.factory, id, 'record_no_contract', { reason: 'البنك أوقف التمويل' });
-    assert.equal(done.status, 200, 'outcome recorded although the bank is now inactive (the bank is external)');
+    assert.equal(done.status, 200, JSON.stringify(done.json));
   } finally {
     await c.admin.put(`/admin/organizations/${BANK_A}`, { isActive: true });
   }

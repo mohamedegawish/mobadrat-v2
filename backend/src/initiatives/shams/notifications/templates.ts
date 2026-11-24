@@ -13,7 +13,7 @@ export const TEMPLATE_KEYS = [
   // المراجعة الأمنية
   'auth.account_setup', 'ops.account_request', 'ops.account_event', 'auth.suspicious_logins', 'auth.registration_attempt',
   'ops.integration_key', 'registry.blocked', 'registry.released', 'registry.decision_lost', 'ops.registry_objection', 'registry.objection_decided',
-  'ops.registry_held_by_inactive', 'auth.recovery_requested', 'ops.recovery_pending', 'auth.recovery_approved', 'auth.recovery_closed',
+  'ops.registry_held_by_inactive', 'app.bank_released', 'auth.recovery_requested', 'ops.recovery_pending', 'auth.recovery_approved', 'auth.recovery_closed',
   // دليل مقدمي الخدمة
   'ops.provider_pending', 'ops.provider_changed',
   // إيصالات ونتائج
@@ -420,6 +420,15 @@ export function renderTemplate(key: TemplateKey, v: TemplateVars): Rendered {
         rows: appRows(v), ctaLabel: 'تقديم اعتراض', link: siteLink('factory-dashboard'),
         english: `Registry number ${v.registryNumber ?? ''} is blocked for all accounts pending a PMU decision. The owner can object with documents.`,
         sms: `شمس الصناعة: رقم السجل ${v.registryNumber ?? ''} محظور حتى قرار وحدة إدارة المبادرة. يمكنك الاعتراض من الموقع.`,
+      });
+    // D2: the factory's chosen bank was stopped — the application is released to pick another active bank.
+    case 'app.bank_released':
+      return build({
+        subject: `أُوقف البنك المختار للطلب ${ref(v)} — اختر بنكًا آخر`, heading: 'اختر بنكًا نشطًا آخر', tone: 'warning',
+        panelTitle: v.bankNameAr ?? 'البنك', panelText: 'أوقفت إدارة المنصة البنك الذي اخترته، فحُرّر طلبك منه. اختر بنكًا نشطًا آخر من صفحة الطلب، ثم سجّل نتيجة التعاقد بعد التواصل معه.',
+        rows: appRows(v), ctaLabel: 'اختيار بنك آخر', link: v.appId ? applicationLink(v.appId) : siteLink('factory-dashboard'),
+        english: `The bank chosen for application ${v.number ?? ''} was stopped. Choose another active bank, then record the contract outcome.`,
+        sms: `شمس الصناعة: أُوقف البنك المختار للطلب ${ref(v)}. اختر بنكًا نشطًا آخر من الموقع.`,
       });
     case 'registry.released':
       return build({

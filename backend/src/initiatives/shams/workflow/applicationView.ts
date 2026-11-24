@@ -6,7 +6,7 @@ import {
   getDistributionContract, findOpenSubmittedByRegistry, type AppRow, type TransitionRow,
 } from '../store/applications.js';
 import { listDocuments, isActiveAt, wasSubmitted, type DocumentRow } from '../store/documents.js';
-import { getOrganization, getOrganizationsByIds, type Organization } from '../store/organizations.js';
+import { getOrganization, getOrganizationsByIds, isBankAvailable, type Organization } from '../store/organizations.js';
 import { getUserNamesByIds } from '../store/users.js';
 import { getProvider, isSelectable } from '../store/providers.js';
 import { conflictsForApplication, listObjections, pendingObjectionAgainst, registryAccess } from '../store/registry.js';
@@ -87,6 +87,10 @@ export async function actionBlock(app: AppRow, action: ActionName): Promise<AppE
     }
     if ((action === 'record_contract' || action === 'record_no_contract') && !app.bankOrgId) {
       return Errors.conflict('BANK_NOT_SELECTED', 'اختر البنك أولًا، ثم سجّل نتيجة التعاقد.', 'Choose the bank first, then record the contract outcome.');
+    }
+    // D2: no contract is recorded with a bank that is no longer active (deactivation releases the application first).
+    if (action === 'record_contract' && app.bankOrgId && !await isBankAvailable(app.bankOrgId)) {
+      return Errors.conflict('BANK_INACTIVE', 'البنك المختار لم يعد نشطًا — اختر بنكًا نشطًا آخر قبل تسجيل التعاقد.', 'The chosen bank is no longer active — choose another active bank before recording the contract.');
     }
     // مسار التعاقد يُختار مرة واحدة: بعد اختيار بنك لا يُتاح مسار شركة التوزيع (والعكس مضمون بالحالة DISTRIBUTION_* نفسها).
     if (action === 'select_distribution_path' && (app.bankOrgId || app.contractPath)) {

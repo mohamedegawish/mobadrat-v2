@@ -24,6 +24,8 @@ import { dispatch, orgRecipients, type Recipient } from '../notifications/notify
 import { kickNotificationWorker } from '../jobs/notificationWorker.js';
 import { revokeAllSessions } from '../store/refreshTokens.js';
 import { addAuditLog, type AuditActor } from '../store/audit.js';
+import { getApplication, getBankReferral, insertTransition } from '../store/applications.js';
+import { factoryRecipients } from '../notifications/notify.js';
 
 export interface AccountsPolicy { allowAdminAccounts: boolean }
 
@@ -69,6 +71,8 @@ export async function updateOrg(actor: AuditActor, id: string, body: unknown, op
     if (b.isActive === false) for (const u of await activeUsersOf(id)) await revokeAllSessions(u.id);
     await addAuditLog({ ...actor, action: 'organization.update', entityType: 'organization', entityId: id, summaryAr: `تعديل جهة: ${updated.nameAr}`, details: { before: org, after: updated, openLoad: load } });
     if (load) await alertBankUnavailable(org.id, org.nameAr, load);
+    // D2: a stopped bank releases every open application bound to it — the factory picks another active bank.
+    if (b.isActive === false && org.type === 'bank' && org.isActive) await releaseBankApplications(org.id, org.nameAr, actor);
     for (const a of holds) {
       await dispatch('ops.registry_held_by_inactive', { appId: a.id, number: a.number, companyName: a.companyName, registryNumber: a.industrialRegistryNumber ?? '' },
         await pmuRecipients(), { dedupePrefix: `held-inactive:${a.id}:${nowIso()}`, applicationId: a.id, channels: ['email'] });
@@ -424,11 +428,45 @@ async function requireBankLoadConfirmation(bankOrgId: string, confirm: unknown):
   if (!total) return null;
   if (confirm !== true) {
     throw new AppError(409, 'OPEN_REFERRALS',
-      `اختار هذا البنكَ ${load.referrals} طلب لم يسجل نتيجة التعاقد بعد. الإيقاف لا يمنعها من تسجيل النتيجة لكنه يخفي البنك عن الاختيارات الجديدة. أكّد الإيقاف صراحة للمتابعة.`,
-      `${load.referrals} open application(s) chose this bank and have not recorded the contract outcome yet. Deactivation hides it from new choices only. Confirm explicitly to proceed.`,
+      `اختار هذا البنكَ ${load.referrals} طلب لم يسجل نتيجة التعاقد بعد. الإيقاف يحرر هذه الطلبات ليختار كل مصنع بنكًا نشطًا آخر، ويخفي البنك عن الاختيارات الجديدة، ولا يُسجَّل تعاقد معه بعد ذلك. أكّد الإيقاف صراحة للمتابعة.`,
+      `${load.referrals} open application(s) chose this bank and have not recorded the contract outcome yet. Deactivation releases them so each factory picks another active bank, hides the bank from new choices and no contract can be recorded with it. Confirm explicitly to proceed.`,
       [{ field: 'confirmOpenReferrals', issue: `required: ${total} open application(s)` }]);
   }
   return load;
+}
+
+/**
+ * D2 (QA 2026-11-23): every open application bound to the stopped bank (CONTRACT_OUTCOME, outcome not recorded) is released:
+ * its bank is cleared (the bank path stays chosen), the old choice moves to the referral history, a history entry records it, and
+ * the factory is told to pick another active bank (PMU gets ops.bank_unavailable).
+ */
+async function releaseBankApplications(bankOrgId: string, bankNameAr: string, actor: AuditActor): Promise<number> {
+  const db = getDb();
+  const rows = await db.prepare("SELECT id FROM shams_applications WHERE bankOrgId = ? AND state = 'CONTRACT_OUTCOME'").all(bankOrgId) as Array<{ id: string }>;
+  let n = 0;
+  for (const { id } of rows) {
+    const app = await getApplication(id);
+    if (!app || app.bankOrgId !== bankOrgId) continue;
+    const now = nowIso();
+    const r = await db.prepare('UPDATE shams_applications SET bankOrgId = NULL, version = version + 1, updatedAt = ? WHERE id = ? AND version = ? AND bankOrgId = ?')
+      .run(now, app.id, app.version, bankOrgId);
+    if (Number(r.changes) !== 1) continue;
+    const reason = `أُوقف البنك «${bankNameAr}» — اختر بنكًا نشطًا آخر ثم سجّل نتيجة التعاقد.`;
+    const t = await insertTransition({
+      applicationId: app.id, fromState: app.state, toState: app.state, action: 'bank_released',
+      actorUserId: actor.actorUserId ?? null, actorRole: actor.actorRole ?? 'system', actorOrgId: actor.actorOrgId ?? null, actorName: actor.actorName ?? 'النظام',
+      reason, attempt: app.attempt, payload: { bankOrgId, automatic: true },
+    });
+    const ref = await getBankReferral(app.id);
+    await db.prepare(`INSERT INTO shams_bank_referral_history (id, applicationId, bankOrgId, referredAt, referredBy, endedAt, endedBy, endReason, transitionId)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(newId('refh'), app.id, bankOrgId, ref?.referredAt ?? now, ref?.referredBy ?? null, now, actor.actorUserId ?? null, reason, t.id);
+    await addAuditLog({ ...actor, action: 'application.bank_released', entityType: 'application', entityId: app.id, applicationId: app.id,
+      summaryAr: `تحرير الطلب ${app.number ?? app.id} من البنك الموقوف ${bankNameAr}`, details: { bankOrgId, transitionId: t.id } });
+    await dispatch('app.bank_released', { appId: app.id, number: app.number, companyName: app.companyName, bankNameAr }, [...await factoryRecipients(app), ...await pmuRecipients()],
+      { dedupePrefix: t.id, applicationId: app.id });
+    n++;
+  }
+  return n;
 }
 
 async function alertBankUnavailable(bankOrgId: string, bankNameAr: string, load: { referrals: number; pendingSelections: number }): Promise<void> {
