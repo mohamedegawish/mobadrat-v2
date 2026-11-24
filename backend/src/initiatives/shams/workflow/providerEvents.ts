@@ -3,7 +3,7 @@
  *  - قبل إرسال العرض (OFFER_UPLOAD) — D6: يعود الطلب آليًا إلى «اختيار مقدم الخدمة» بقيد في السجل وإشعار للمصنع.
  *  - أثناء مراجعة العرض أو تصحيحه (OFFER_REVIEW / OFFER_CORRECTION): يعود الطلب تلقائيًا إلى OFFER_UPLOAD
  *    بانتقال نظامي مُسجَّل (action = provider_suspended_return) ويُطلب عرض جديد من مقدم خدمة معتمد.
- *  - بعد قبول العرض: تنبيه لـPMU فقط — لا يُعاد ضبط الطلب.
+ *  - بعد قبول العرض — D7: لا تتغير الحالة؛ تنبيه للمصنع وPMU داخل المنصة وبالبريد، وقيد في السجل.
  * المنفِّذ في السجل هو من أوقف المقدم (مساءلة)، والوصف يوضح أن الانتقال آلي.
  */
 import { randomUUID } from 'node:crypto';
@@ -101,8 +101,15 @@ export async function applyProviderSuspension(provider: { id: string; nameAr: st
       await dispatch('app.provider_suspended', { ...vars, reselect: true }, [...await factoryRecipients(cur), ...await orgRecipients(ORG_IDS.pmu, 'pmu_reviewer')], opts);
       result.notifiedBeforeOffer.push(cur.id);
     } else {
-      // بعد قبول العرض: لا يتغير مسار الطلب — PMU تُنبَّه فقط، والحالة ظاهرة على الطلب.
-      await dispatch('app.provider_suspended', { ...vars, alertOnly: true }, await orgRecipients(ORG_IDS.pmu, 'pmu_reviewer'), opts);
+      // D7 (QA 2026-11-23): after the offer was accepted the path does not change — the factory and PMU are warned (in-app and
+      // e-mail) and the application history records it.
+      await insertTransition({
+        applicationId: cur.id, fromState: cur.state, toState: cur.state, action: PROVIDER_WARNING_ACTION,
+        actorUserId: user.id, actorRole: user.role, actorOrgId: user.organizationId, actorName: user.nameAr, attempt: cur.attempt,
+        reason: `أُوقف مقدم الخدمة «${provider.nameAr}» بعد قبول العرض الفني — للعلم فقط، لا يتغير مسار الطلب.`,
+        payload: { providerId: provider.id, automatic: true, providerEvent, stateBefore: cur.state, stateAfter: cur.state },
+      });
+      await dispatch('app.provider_suspended', { ...vars, alertOnly: true }, [...await factoryRecipients(cur), ...await orgRecipients(ORG_IDS.pmu, 'pmu_reviewer')], opts);
       await auditUnavailable(cur.id, cur.state, 'alert_only');
       result.alertedAfterAcceptance.push(cur.id);
     }

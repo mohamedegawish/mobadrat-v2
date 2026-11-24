@@ -95,7 +95,7 @@ test('before the offer is sent (OFFER_UPLOAD): D6 — back to provider selection
   } finally { await approve(); }
 });
 
-test('after the offer was accepted: alert only — the application is not reset and the factory is not asked to act', async () => {
+test('after the offer was accepted: D7 — the application is not reset; the factory and PMU are warned and the history records it', async () => {
   await closeOpen();
   const id = await advanceTo('ELECTRICITY_UPLOAD', c, reg());
   const before = await getApp(c.pmu, id);
@@ -106,9 +106,10 @@ test('after the offer was accepted: alert only — the application is not reset 
     assert.equal(view.version, before.version, 'version unchanged');
     assert.equal(view.provider.status, 'suspended', 'status still shown on the application');
     assert.ok(!view.transitions.some((x: any) => x.action === 'provider_suspended_return'));
+    assert.ok(view.transitions.some((x: any) => x.action === 'provider_suspended_warning'), 'history records the warning');
     const mails = (await outbox(id, 'app.provider_suspended')).map((r) => r.recipientAddress);
     assert.ok(mails.includes('pmu@shams.local'), 'PMU alerted');
-    assert.ok(!mails.includes('factory@shams.local'), 'factory is not asked to do anything');
+    assert.ok(mails.includes('factory@shams.local'), 'factory warned (no action required)');
     // الاستمرار الطبيعي ممكن: رفع موافقة الكهرباء
     assert.equal((await c.factory.upload(`/applications/${id}/documents`, { kind: 'electricityApprovalFile' }, pdfVariant('e1'), 'a.pdf')).status, 201);
     const go = await act(c.factory, id, 'submit_electricity', { distributionCompany: 'شركة توزيع' });
