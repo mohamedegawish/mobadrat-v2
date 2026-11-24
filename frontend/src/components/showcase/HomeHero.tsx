@@ -79,13 +79,6 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
             gap: '1.05rem',
           }}
         >
-          <span
-            className="badge badge-gold"
-            style={{ alignSelf: 'flex-start', letterSpacing: '0.02em' }}
-          >
-            {isAr ? 'المنصة الوطنية للتمويل والمبادرات الصناعية' : 'National Platform for Industrial Financing & Initiatives'}
-          </span>
-
           <h1
             style={{
               fontFamily: isAr ? 'var(--font-display-ar)' : 'var(--font-display-en)',
@@ -99,8 +92,8 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
             }}
           >
             {isAr
-              ? 'بوابة التمويل الميسّر لكافة المبادرات'
-              : 'Concessional financing for all initiatives'}
+              ? 'بوابة مبادرات وزارة الصناعة'
+              : 'Ministry of Industry Initiatives Portal'}
           </h1>
 
           <p
@@ -113,8 +106,8 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
             }}
           >
             {isAr
-              ? 'منصة موحدة تجمع المبادرات الوطنية: تمويل ميسّر للمصانع، حلول طاقة شمسية تخفض التكلفة، وبرامج تحديث لخطوط الإنتاج وتعميق المكوّن المحلي.'
-              : 'One national portal for concessional factory financing, cost-cutting solar programs, and production-line modernization with deeper local content.'}
+              ? 'منصة موحدة تجمع المبادرات الوطنية: حلول طاقة شمسية تخفض التكلفة، وبرامج تحديث لخطوط الإنتاج وتعميق المكوّن المحلي.'
+              : 'One national portal for cost-cutting solar programs and production-line modernization with deeper local content.'}
           </p>
 
           {/* شارات الجهات */}

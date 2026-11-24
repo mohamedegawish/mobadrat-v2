@@ -45,7 +45,7 @@ export const CohortsView: React.FC = () => {
   const toast = useToast();
   const { data, error, load } = useLoad(() => apiFetch<any>(`${V1}/admin/cohorts`).then((r) => r.data.items as any[]));
   const criteria: any[] = (meta as any)?.criteria ?? [];
-  const [f, setF] = useState<any>({ evaluationTarget: 60, selectionTarget: 15, maxAge: 35 });
+  const [f, setF] = useState<any>({ evaluationTarget: 500, selectionTarget: 300, maxAge: 40 });
   const [w, setW] = useState<Record<string, Record<string, number>>>({});
   const run = async (fn: () => Promise<unknown>) => { try { await fn(); load(); toast.toast('success', t('تم الحفظ', 'Saved')); } catch (e) { toast.toast('error', errorText(e, isAr)); } };
   const create = () => run(() => apiFetch(`${V1}/admin/cohorts`, { method: 'POST', body: { ...f, evaluationTarget: Number(f.evaluationTarget), selectionTarget: Number(f.selectionTarget), maxAge: Number(f.maxAge) } }));

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// شاشة الأدمن: تحرير كل نصوص الواجهة العامة (الاسم، الأرقام، الرحلة، الشروط، المعايير، التمويل، الصفحات التعريفية) بدون نشر جديد.
+// شاشة الأدمن: تحرير كل نصوص الواجهة العامة (الاسم، الأرقام، الرحلة، الشروط، التمويل، الصفحات التعريفية) بدون نشر جديد.
 import React, { useState } from 'react';
 import { ArrowDown, ArrowUp, Plus, RotateCcw, Save, Trash2 } from 'lucide-react';
 import { errorText, useStore } from '../../store/state';

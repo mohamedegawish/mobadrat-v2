@@ -45,7 +45,7 @@ export async function seedDevData(password: string): Promise<void> {
       .run('apl-demo-1', 'org-applicant-demo-1', ids['s3-usr-applicant-1'], 'متقدم تجريبي', ids['s3-usr-applicant-1'], now, now);
     await db.prepare(`INSERT OR IGNORE INTO sona3_cohorts (id, nameAr, nameEn, opensAt, closesAt, evaluationTarget, selectionTarget, maxAge, ageReference, weights,
         minTotalScore, minFinancialScore, minTechnicalScore, minEvaluators, createdBy, createdAt, updatedAt)
-      VALUES (?, ?, ?, ?, ?, 60, 15, 35, 'cohort_close', ?, 50, 50, 50, 1, ?, ?, ?)`)
+      VALUES (?, ?, ?, ?, ?, 500, 300, 40, 'cohort_close', ?, 50, 50, 50, 1, ?, ?, ?)`)
       .run('coh-demo-1', 'الدورة الأولى (تجريبية)', 'Cohort 1 (demo)', dayStr(-7), dayStr(90), JSON.stringify(policy.defaultWeights), ids['s3-usr-admin'], now, now);
     const ex = db.prepare(`INSERT OR IGNORE INTO sona3_experts (id, nameAr, nameEn, specialty, contactName, contactPhone, contactEmail, status, approvedBy, approvedAt, createdAt, updatedAt)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
@@ -97,7 +97,7 @@ export async function seedDeployData(passwordHash: string): Promise<DeploySeedRe
   else {
     await db.prepare(`INSERT INTO sona3_cohorts (id, nameAr, nameEn, opensAt, closesAt, evaluationTarget, selectionTarget, maxAge, ageReference, weights,
         minTotalScore, minFinancialScore, minTechnicalScore, minEvaluators, createdBy, createdAt, updatedAt)
-      VALUES (?, ?, ?, ?, ?, 60, 15, 35, 'cohort_close', ?, 50, 50, 50, 1, ?, ?, ?)`)
+      VALUES (?, ?, ?, ?, ?, 500, 300, 40, 'cohort_close', ?, 50, 50, 50, 1, ?, ?, ?)`)
       .run('coh-demo-1', 'الدورة الأولى (تجريبية)', 'Cohort 1 (demo)', dayStr(-7), dayStr(90), JSON.stringify(policy.defaultWeights), ids['s3-usr-admin'], now, now);
     notes.push(`sona3: cohorts — a demo cohort open until ${dayStr(90)} added (the initiative had none)`);
   }

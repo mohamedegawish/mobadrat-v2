@@ -70,7 +70,7 @@ export const App: React.FC = () => {
   const { view, user, booting, isAr, t, meta } = useStore();
   useEffect(() => { void store.boot(); void loadSiteContent(); }, []);
   useEffect(() => {
-    document.title = isAr ? 'مبادرة صُنّاع المستقبل | المنصة الوطنية للتمويل والمبادرات الصناعية' : 'Future Makers | National Platform for Industrial Financing & Initiatives';
+    document.title = isAr ? 'مبادرة صُنّاع المستقبل | بوابة مبادرات وزارة الصناعة' : 'Future Makers | Ministry of Industry Initiatives Portal';
   }, [isAr]);
 
   // The public pages are the initiative's page on the platform; a signed-in person's home is their workspace.

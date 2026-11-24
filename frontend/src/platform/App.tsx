@@ -49,7 +49,7 @@ const PlatformShell: React.FC<{ module: ModuleEntry | null }> = ({ module }) => 
   const { view, booting, me, isAr } = usePlatform();
   const moduleWorkspace = useWorkspace();
   const { toast } = useToast();
-  useEffect(() => { if (!module) document.title = isAr ? 'المنصة الوطنية للتمويل والمبادرات الصناعية | جمهورية مصر العربية' : 'National Platform for Industrial Financing & Initiatives | Arab Republic of Egypt'; }, [isAr, view, module]);
+  useEffect(() => { if (!module) document.title = isAr ? 'بوابة مبادرات وزارة الصناعة | جمهورية مصر العربية' : 'Ministry of Industry Initiatives Portal | Arab Republic of Egypt'; }, [isAr, view, module]);
 
   // Show a welcome toast on first load
   useEffect(() => {
@@ -57,7 +57,7 @@ const PlatformShell: React.FC<{ module: ModuleEntry | null }> = ({ module }) => 
     try { welcomed = Boolean(localStorage.getItem('egypt_ind_welcomed')); if (!welcomed) localStorage.setItem('egypt_ind_welcomed', '1'); } catch { /* private mode */ }
     if (welcomed) return;
     const id = window.setTimeout(() => {
-      toast('info', isAr ? 'مرحباً بك في المنصة الوطنية للتمويل والمبادرات الصناعية — جمهورية مصر العربية' : 'Welcome to the National Platform for Industrial Financing & Initiatives — Arab Republic of Egypt');
+      toast('info', isAr ? 'مرحباً بك في بوابة مبادرات وزارة الصناعة — جمهورية مصر العربية' : 'Welcome to the Ministry of Industry Initiatives Portal — Arab Republic of Egypt');
     }, 800);
     return () => window.clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps

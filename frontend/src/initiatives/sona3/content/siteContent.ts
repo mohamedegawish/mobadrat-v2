@@ -16,7 +16,7 @@ export type Kind = 'bi' | 'bilist' | 'figures' | 'journey' | 'faq';
 export interface SiteContent {
   vision: Bi; mission: Bi; siteName: Bi; siteTagline: Bi; ministry: Bi; topBar: Bi; brandSub: Bi; heroEyebrow: Bi; footerRights: Bi;
   figures: Figure[]; journey: JourneyItem[];
-  eligibility: Bi[]; criteria: Bi[]; financing: Bi[];
+  eligibility: Bi[]; financing: Bi[];
   about: Bi[]; contact: Bi[]; terms: Bi[]; faq: FaqItem[];
 }
 export type ContentKey = keyof SiteContent;
@@ -24,12 +24,12 @@ export type ContentKey = keyof SiteContent;
 export const DEFAULTS: SiteContent = {
   vision: D.VISION, mission: D.MISSION,
   siteName: D.SITE_NAME, siteTagline: D.SITE_TAGLINE, ministry: D.MINISTRY,
-  topBar: { ar: 'وزارة الصناعة · مركز تحديث الصناعة', en: 'Ministry of Industry · Industrial Modernisation Centre' },
+  topBar: { ar: 'وزارة الصناعة · مبادرة صُنّاع المستقبل', en: 'Ministry of Industry · Future Makers Initiative' },
   brandSub: { ar: 'تقديم · تقييم · تمويل · متابعة', en: 'Apply · Evaluate · Fund · Monitor' },
   heroEyebrow: D.HERO_EYEBROW,
-  footerRights: { ar: 'مركز تحديث الصناعة (IMC) — جميع الحقوق محفوظة', en: 'Industrial Modernization Center (IMC) — All rights reserved' },
+  footerRights: { ar: 'مبادرة صُنّاع المستقبل — جميع الحقوق محفوظة', en: 'Future Makers Initiative — All rights reserved' },
   figures: D.FIGURES, journey: D.JOURNEY,
-  eligibility: D.ELIGIBILITY, criteria: D.CRITERIA_TEXT, financing: D.FINANCING_TERMS,
+  eligibility: D.ELIGIBILITY, financing: D.FINANCING_TERMS,
   about: [], contact: [], terms: [], faq: [],
 };
 
@@ -47,7 +47,6 @@ export const CONTENT_SCHEMA: Array<{ key: ContentKey; kind: Kind; ar: string; en
   { key: 'figures', kind: 'figures', ar: 'الأرقام الرئيسية', en: 'Key figures', group: 'home' },
   { key: 'journey', kind: 'journey', ar: 'رحلة المشروع', en: 'Project journey', group: 'home' },
   { key: 'eligibility', kind: 'bilist', ar: 'شروط التقديم', en: 'Eligibility', group: 'home' },
-  { key: 'criteria', kind: 'bilist', ar: 'معايير التقييم', en: 'Evaluation criteria', group: 'home' },
   { key: 'financing', kind: 'bilist', ar: 'نماذج التمويل', en: 'Financing models', group: 'home' },
   { key: 'about', kind: 'bilist', ar: 'صفحة «عن المبادرة» (فقرات)', en: 'About page (paragraphs)', group: 'pages' },
   { key: 'faq', kind: 'faq', ar: 'الأسئلة الشائعة', en: 'FAQ', group: 'pages' },

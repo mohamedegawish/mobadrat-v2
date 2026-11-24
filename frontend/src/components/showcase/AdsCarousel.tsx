@@ -27,8 +27,8 @@ export const AdsCarousel: React.FC = () => {
       }))
     : [{
         id: undefined,
-        titleAr: 'التمويل الميسّر لكافة المبادرات',
-        titleEn: 'Concessional financing for all initiatives',
+        titleAr: 'بوابة مبادرات وزارة الصناعة',
+        titleEn: 'Ministry of Industry Initiatives Portal',
         badgeAr: 'مبادرات وطنية',
         badgeEn: 'National initiatives',
         imageUrl: resolveCoverUrl(FALLBACK_COVER),

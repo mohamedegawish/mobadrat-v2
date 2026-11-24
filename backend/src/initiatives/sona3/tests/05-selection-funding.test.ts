@@ -1,4 +1,4 @@
-// المرحلتان 05 و06: الاختيار على مستوى الدورة (مستهدف 15 والاختيار خارج الترتيب)، الاعتماد، الإحالة لجهات التمويل، القبول والاعتذار.
+// المرحلتان 05 و06: الاختيار على مستوى الدورة (مستهدف الاختيار والاختيار خارج الترتيب)، الاعتماد، الإحالة لجهات التمويل، القبول والاعتذار.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -12,12 +12,12 @@ let w: World;
 before(async () => { srv = await startServer(); w = await buildWorld(srv, { selectionTarget: 3 }); });
 after(async () => { await srv.close(); await env.cleanup(); });
 
-test('default policy targets: 60 evaluated / 15 selected / age 35 / minimums 50 on a freshly created cohort', async () => {
+test('default policy targets: 500 evaluated / 300 selected / age 40 / minimums 50 on a freshly created cohort', async () => {
   const { makeCohort } = await import('./helpers.js');
   const c = await makeCohort({ opensAt: '2001-01-01', closesAt: '2001-02-01' });
-  assert.equal(c.evaluationTarget, 60);
-  assert.equal(c.selectionTarget, 15);
-  assert.equal(c.maxAge, 35);
+  assert.equal(c.evaluationTarget, 500);
+  assert.equal(c.selectionTarget, 300);
+  assert.equal(c.maxAge, 40);
   assert.equal(c.ageReference, 'cohort_close');
   assert.deepEqual([c.minTotalScore, c.minFinancialScore, c.minTechnicalScore, c.minEvaluators], [50, 50, 50, 1]);
   assert.equal(Object.values(c.weights).reduce((s, x) => s + x, 0), 100);

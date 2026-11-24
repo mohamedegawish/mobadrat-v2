@@ -5,7 +5,7 @@
  * page of the one platform instead of a second site. The content itself stays in each initiative's content files.
  */
 import React, { useEffect, useState } from 'react';
-import { Award, Building2, Check, ClipboardCheck, Eye, FileText, Landmark, Rocket, Sun, Target, Wallet, HelpCircle, Phone, ScrollText, Info } from 'lucide-react';
+import { Building2, ClipboardCheck, Eye, FileText, Landmark, Rocket, Sun, Target, Wallet, HelpCircle, Phone, ScrollText, Info } from 'lucide-react';
 import { call } from '../../platform/api';
 import * as SHAMS from '../../initiatives/shams/content/shams';
 import * as SONA3 from '../../initiatives/sona3/content/site';
@@ -136,13 +136,13 @@ const ShamsDetails: React.FC<{ isAr: boolean }> = ({ isAr }) => {
 interface Sona3Content {
   heroEyebrow: Bi; vision: Bi; mission: Bi;
   figures: Array<{ value: string; label: Bi }>; journey: Array<{ title: Bi; desc: Bi }>;
-  eligibility: Bi[]; criteria: Bi[]; financing: Bi[];
+  eligibility: Bi[]; financing: Bi[];
   about: Bi[]; contact: Bi[]; terms: Bi[]; faq: Array<{ q: Bi; a: Bi }>;
 }
 
 const SONA3_DEFAULTS: Sona3Content = {
   heroEyebrow: SONA3.HERO_EYEBROW, vision: SONA3.VISION, mission: SONA3.MISSION,
-  figures: SONA3.FIGURES, journey: SONA3.JOURNEY, eligibility: SONA3.ELIGIBILITY, criteria: SONA3.CRITERIA_TEXT, financing: SONA3.FINANCING_TERMS,
+  figures: SONA3.FIGURES, journey: SONA3.JOURNEY, eligibility: SONA3.ELIGIBILITY, financing: SONA3.FINANCING_TERMS,
   about: [], contact: [], terms: [], faq: [],
 };
 
@@ -198,26 +198,11 @@ const Sona3Details: React.FC<{ isAr: boolean }> = ({ isAr }) => {
       </section>
 
       <section>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: '0.9rem', alignItems: 'start' }}>
-          <div>
-            <Title icon={<Award size={16} />}>{isAr ? 'معايير التقييم' : 'Evaluation criteria'}</Title>
-            <div className="card" style={{ padding: '0.4rem 0', borderRadius: 'var(--radius-md)' }}>
-              {C.criteria.map((e, i) => (
-                <div key={i} style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', padding: '0.65rem 1.1rem', borderTop: i ? '1px solid var(--border-subtle)' : 'none', fontSize: '0.88rem', color: 'var(--text-body)' }}>
-                  <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: 'var(--status-approved-bg)', color: 'var(--status-approved)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Check size={13} strokeWidth={3} /></span>
-                  {L(e)}
-                </div>
-              ))}
-            </div>
-          </div>
-          <div>
-            <Title icon={<Wallet size={16} />}>{isAr ? 'نماذج التمويل' : 'Financing models'}</Title>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '0.6rem' }}>
-              {C.financing.map((e, i) => (
-                <div key={i} className="card" style={{ padding: '0.85rem 0.9rem', borderRadius: 'var(--radius-md)', borderInlineStart: '3px solid var(--gov-gold-bright)', fontSize: '0.86rem', fontWeight: 700, color: 'var(--gov-primary-900)', lineHeight: 1.5 }}>{L(e)}</div>
-              ))}
-            </div>
-          </div>
+        <Title icon={<Wallet size={16} />}>{isAr ? 'نماذج التمويل' : 'Financing models'}</Title>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 210px), 1fr))', gap: '0.6rem' }}>
+          {C.financing.map((e, i) => (
+            <div key={i} className="card" style={{ padding: '0.85rem 0.9rem', borderRadius: 'var(--radius-md)', borderInlineStart: '3px solid var(--gov-gold-bright)', fontSize: '0.86rem', fontWeight: 700, color: 'var(--gov-primary-900)', lineHeight: 1.5 }}>{L(e)}</div>
+          ))}
         </div>
       </section>
 

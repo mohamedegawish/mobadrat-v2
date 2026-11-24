@@ -20,7 +20,7 @@ export const Footer: React.FC = () => {
               </div>
               <div>
                 <div style={{ fontSize: '1rem', fontWeight: 700, color: '#FFFFFF' }}>
-                  {isAr ? 'المنصة الوطنية للتمويل والمبادرات الصناعية' : 'National Platform for Industrial Financing & Initiatives'}
+                  {isAr ? 'بوابة مبادرات وزارة الصناعة' : 'Ministry of Industry Initiatives Portal'}
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>
                   {isAr ? 'وزارة الصناعة — جمهورية مصر العربية' : 'Ministry of Industry — Arab Republic of Egypt'}

@@ -158,7 +158,7 @@ export const HeaderNavbar: React.FC = () => {
                 </div>
                 <div>
                   <div className="gov-brand-title">
-                    {isAr ? 'المنصة الوطنية للتمويل والمبادرات الصناعية' : 'National Platform for Industrial Financing & Initiatives'}
+                    {isAr ? 'بوابة مبادرات وزارة الصناعة' : 'Ministry of Industry Initiatives Portal'}
                   </div>
                   <div className="gov-brand-sub">
                     {isAr ? 'نظام التحديث الصناعي الموحد' : 'Unified Industrial Modernization System'}

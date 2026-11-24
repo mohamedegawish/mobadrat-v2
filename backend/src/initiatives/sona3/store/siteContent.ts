@@ -7,7 +7,7 @@ import { isObj } from '../http/validate.js';
 export const CONTENT_KINDS = {
   vision: 'bi', mission: 'bi', siteName: 'bi', siteTagline: 'bi', ministry: 'bi', topBar: 'bi', brandSub: 'bi', heroEyebrow: 'bi', footerRights: 'bi',
   figures: 'figures', journey: 'journey',
-  eligibility: 'bilist', criteria: 'bilist', financing: 'bilist',
+  eligibility: 'bilist', financing: 'bilist',
   about: 'bilist', contact: 'bilist', terms: 'bilist', faq: 'faq',
 } as const;
 export type ContentKey = keyof typeof CONTENT_KINDS;

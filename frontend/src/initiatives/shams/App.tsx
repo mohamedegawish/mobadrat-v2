@@ -79,7 +79,7 @@ export const App: React.FC = () => {
   const { view, user, booting, isAr, t, meta } = useStore();
   useEffect(() => { void store.boot(); }, []);
   useEffect(() => {
-    document.title = isAr ? 'مبادرة شمس الصناعة | المنصة الوطنية للتمويل والمبادرات الصناعية' : 'Shams El-Senaa | National Platform for Industrial Financing & Initiatives';
+    document.title = isAr ? 'مبادرة شمس الصناعة | بوابة مبادرات وزارة الصناعة' : 'Shams El-Senaa | Ministry of Industry Initiatives Portal';
   }, [isAr]);
 
   // A factory under IMC review (or not accepted) has no Shams screen: back to the platform chooser, which says why.

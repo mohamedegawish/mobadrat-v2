@@ -139,13 +139,13 @@ async function eligibilityChecks(app: AppRow, data: FormData) {
   const age = birth && refDate ? ageOn(birth, refDate) : null;
   const partners = Array.isArray(data.team?.partners) ? (data.team!.partners as Array<Record<string, unknown>>) : [];
   const checks = [
-    { key: 'age', labelAr: `السن ≤ ${cohort?.maxAge ?? 35} عامًا ${cohort?.ageReference === 'cohort_close' ? 'عند إغلاق باب التقديم' : 'عند التقديم'}`, labelEn: 'Age limit',
+    { key: 'age', labelAr: `السن ≤ ${cohort?.maxAge ?? 40} عامًا ${cohort?.ageReference === 'cohort_close' ? 'عند إغلاق باب التقديم' : 'عند التقديم'}`, labelEn: 'Age limit',
       ok: age !== null && cohort ? age <= cohort.maxAge : null, valueAr: age !== null ? `${age} عامًا` : '—' },
     { key: 'nationality', labelAr: 'الجنسية مصرية', labelEn: 'Egyptian nationality', ok: p.nationality ? p.nationality === 'egyptian' : null,
       valueAr: p.nationality === 'other' ? `أخرى: ${String(p.nationalityOther ?? '')}` : p.nationality === 'egyptian' ? 'مصري' : '—' },
     { key: 'nationalId', labelAr: 'الرقم القومي صحيح ويطابق تاريخ الميلاد', labelEn: 'National ID valid and matches birth date',
       ok: id ? id.ok && id.info.birthDate === birth : null, valueAr: id?.ok ? `مواليد ${id.info.birthDate}` : '—' },
-    { key: 'partnersAge', labelAr: `أعمار الشركاء ≤ ${cohort?.maxAge ?? 35}`, labelEn: 'Partner ages', ok: partners.length ? partners.every((x) => Number(x.age) <= (cohort?.maxAge ?? 35)) : null,
+    { key: 'partnersAge', labelAr: `أعمار الشركاء ≤ ${cohort?.maxAge ?? 40}`, labelEn: 'Partner ages', ok: partners.length ? partners.every((x) => Number(x.age) <= (cohort?.maxAge ?? 40)) : null,
       valueAr: partners.length ? partners.map((x) => String(x.age ?? '—')).join('، ') : 'لا يوجد شركاء' },
   ];
   return { referenceDate: refDate, checks };

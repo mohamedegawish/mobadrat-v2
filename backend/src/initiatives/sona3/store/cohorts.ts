@@ -65,8 +65,8 @@ export async function createCohort(input: CohortInput, createdBy: string | null)
   await getDb().prepare(`INSERT INTO sona3_cohorts (id, nameAr, nameEn, opensAt, closesAt, evaluationTarget, selectionTarget, maxAge, ageReference, weights,
       minTotalScore, minFinancialScore, minTechnicalScore, minEvaluators, createdBy, createdAt, updatedAt)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-    id, input.nameAr, input.nameEn ?? '', input.opensAt, input.closesAt, input.evaluationTarget ?? 60, input.selectionTarget ?? 15,
-    input.maxAge ?? 35, input.ageReference ?? 'cohort_close', JSON.stringify(input.weights ?? policy.defaultWeights),
+    id, input.nameAr, input.nameEn ?? '', input.opensAt, input.closesAt, input.evaluationTarget ?? 500, input.selectionTarget ?? 300,
+    input.maxAge ?? 40, input.ageReference ?? 'cohort_close', JSON.stringify(input.weights ?? policy.defaultWeights),
     input.minTotalScore ?? 50, input.minFinancialScore ?? 50, input.minTechnicalScore ?? 50, input.minEvaluators ?? 1, createdBy, now, now,
   );
   return (await getCohort(id))!;
