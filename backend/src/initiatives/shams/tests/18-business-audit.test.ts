@@ -662,16 +662,16 @@ test('F-06/2) ENCPC deactivation during offer review: same effect today, but the
   } finally { assert.equal((await c.encpc.post(`/service-providers/${PROVIDER_OK}/activate`, {})).status, 200); }
 });
 
-test('F-06/3) before the offer is sent and after it was accepted the application is not moved, and the event is still audited with its source', async () => {
+test('F-06/3) D6: before the offer is sent the application returns to provider selection; D7: after acceptance it is not moved — both audited with their source', async () => {
   const early = await inFlight('PROVIDER_SELECTION', 'IND-F06-3A');
   assert.equal((await act(c.factory, early, 'select_provider', { providerId: PROVIDER_OK })).status, 200);
   assert.equal((await c.encpc.post(`/service-providers/${PROVIDER_OK}/deactivate`, {})).status, 200);
   let pa: any;
   try {
-    assert.equal((await appRow(early)).state, 'OFFER_UPLOAD', 'no automatic transition before the offer is sent');
-    const a = await appAudit('application.provider_unavailable', early);
-    assert.deepEqual({ source: a.details.source, effect: a.details.effect, before: a.details.stateBefore, after: a.details.stateAfter },
-      { source: 'encpc_deactivate', effect: 'notified_before_offer', before: 'OFFER_UPLOAD', after: 'OFFER_UPLOAD' });
+    assert.equal((await appRow(early)).state, 'PROVIDER_SELECTION', 'D6: back to provider selection before the offer is sent');
+    const a = await appAudit('application.provider_suspended_reselect', early);
+    assert.deepEqual({ source: a.details.source, from: a.details.fromState, to: a.details.toState },
+      { source: 'encpc_deactivate', from: 'OFFER_UPLOAD', to: 'PROVIDER_SELECTION' });
     assert.equal(a.actorRole, 'encpc_reviewer');
     pa = await lastAudit('provider.deactivate', PROVIDER_OK);
     assert.ok(pa.details.effect.notifiedBeforeOffer.includes(early));

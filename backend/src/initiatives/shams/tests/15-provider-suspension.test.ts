@@ -80,7 +80,7 @@ test('during offer correction: same return to OFFER_UPLOAD', async () => {
   } finally { await approve(); }
 });
 
-test('before the offer is sent (OFFER_UPLOAD): no automatic transition, factory and PMU are told', async () => {
+test('before the offer is sent (OFFER_UPLOAD): D6 — back to provider selection, recorded, factory and PMU are told', async () => {
   await closeOpen();
   const id = await advanceTo('PROVIDER_SELECTION', c, reg());
   assert.equal((await act(c.factory, id, 'select_provider', { providerId: PROVIDER_OK })).status, 200);
@@ -88,9 +88,9 @@ test('before the offer is sent (OFFER_UPLOAD): no automatic transition, factory 
   assert.equal((await suspend()).status, 200);
   try {
     const view = await getApp(c.factory, id);
-    assert.equal(view.state, 'OFFER_UPLOAD');
-    assert.equal(view.version, v, 'no system transition');
-    assert.ok(!view.transitions.some((x: any) => x.action === 'provider_suspended_return'));
+    assert.equal(view.state, 'PROVIDER_SELECTION');
+    assert.equal(view.version, v + 1, 'one system transition');
+    assert.ok(view.transitions.some((x: any) => x.action === 'provider_suspended_reselect' && x.fromState === 'OFFER_UPLOAD'));
     assert.ok((await outbox(id, 'app.provider_suspended')).some((r) => r.recipientAddress === 'factory@shams.local'));
   } finally { await approve(); }
 });

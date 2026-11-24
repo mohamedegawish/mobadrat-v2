@@ -147,12 +147,14 @@ test('I11: provider suspended before the offer is sent → submit_offer blocked,
   assert.equal((await act(c.factory, id, 'select_provider', { providerId: 'sp-demo-2' })).status, 409, 'cannot change an approved provider');
   assert.equal((await c.pmu.post(`/service-providers/${PROVIDER_OK}/suspend`, {})).status, 200);
   try {
+    // D6 (QA 2026-11-23): before the offer is sent the application returns to provider selection.
     const v = await getApp(c.factory, id);
+    assert.equal(v.state, 'PROVIDER_SELECTION');
     assert.equal(v.provider.status, 'suspended');
     assert.deepEqual(v.allowedActions.map((a: any) => a.action).sort(), ['select_provider', 'withdraw']);
     const blocked = await act(c.factory, id, 'submit_offer');
-    assert.equal(blocked.status, 422);
-    assert.equal(blocked.json.code, 'PROVIDER_SUSPENDED');
+    assert.equal(blocked.status, 409);
+    assert.equal(blocked.json.code, 'INVALID_STATE');
     assert.ok((await outbox(id, 'app.provider_suspended')).some((r) => r.recipientAddress === 'factory@shams.local'));
     assert.equal((await act(c.factory, id, 'select_provider', { providerId: 'sp-demo-1' })).status, 422, 'suspended provider cannot be re-chosen');
     const re = await act(c.factory, id, 'select_provider', { providerId: 'sp-demo-2' });
@@ -160,7 +162,7 @@ test('I11: provider suspended before the offer is sent → submit_offer blocked,
     const after1 = await getApp(c.factory, id);
     assert.equal(after1.state, 'OFFER_UPLOAD');
     assert.equal(after1.provider.id, 'sp-demo-2');
-    assert.ok(after1.transitions.some((t: any) => t.action === 'select_provider' && t.fromState === 'OFFER_UPLOAD'));
+    assert.ok(after1.transitions.some((t: any) => t.action === 'select_provider' && t.fromState === 'PROVIDER_SELECTION'));
     assert.equal((await act(c.factory, id, 'submit_offer')).status, 422, 'a new offer from the new provider is required');
     await c.factory.upload(`/applications/${id}/documents`, { kind: 'technicalOfferFile' }, pdfVariant('o-2'), 'offer2.pdf');
     assert.equal((await act(c.factory, id, 'submit_offer')).status, 200);

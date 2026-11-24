@@ -65,6 +65,8 @@ export interface TemplateVars {
   providers?: ProviderCard[];
   /** بعد قبول العرض: تنبيه لـPMU فقط، دون أي إجراء مطلوب أو تغيير في مسار الطلب. */
   alertOnly?: boolean;
+  /** D6: suspension before the offer was sent — back to provider selection. */
+  reselect?: boolean;
   /** H2: سبب رابط تعيين كلمة المرور. */
   purpose?: 'created' | 'reset';
   /** نص الحدث (حسابات/مفاتيح/استرداد) كما يُعرض. */
@@ -334,6 +336,9 @@ export function renderTemplate(key: TemplateKey, v: TemplateVars): Rendered {
         panelTitle: v.providerNameAr ?? 'مقدم الخدمة',
         panelText: v.alertOnly
           ? 'للعلم فقط: أُوقف اعتماد مقدم الخدمة بعد قبول العرض الفني لهذا الطلب. لا يتغير مسار الطلب ولا يُطلب إجراء من المصنع؛ تظهر حالة المقدم على الطلب.'
+          : v.reselect
+          // D6: الإيقاف قبل إرسال العرض يعيد الطلب لاختيار مقدم الخدمة.
+          ? 'أُوقف اعتماد مقدم الخدمة المختار قبل إرسال العرض الفني، فعاد الطلب تلقائيًا إلى «اختيار مقدم الخدمة». اختر مقدم خدمة معتمدًا آخر ثم ارفع العرض الفني منه.'
           : v.returned
           // M6 (القرار 6): الإيقاف أثناء مراجعة العرض أو تصحيحه يعيد الطلب لرفع العرض.
           ? 'أُوقف اعتماد مقدم الخدمة المختار لهذا الطلب أثناء مراجعة العرض الفني، فأُعيد الطلب تلقائيًا إلى مرحلة رفع العرض. اختر مقدم خدمة معتمدًا آخر وارفع عرضًا فنيًا جديدًا منه.'
@@ -341,11 +346,15 @@ export function renderTemplate(key: TemplateKey, v: TemplateVars): Rendered {
         rows: appRows(v), ctaLabel: 'فتح الطلب', link,
         english: v.alertOnly
           ? `FYI: the service provider on application ${v.number ?? ''} was suspended after its offer was accepted. The application is unchanged.`
+          : v.reselect
+          ? `The service provider on application ${v.number ?? ''} was suspended before the offer was sent; the application returned to provider selection.`
           : v.returned
           ? `The service provider on application ${v.number ?? ''} was suspended during offer review; the application returned to offer upload.`
           : `The service provider on application ${v.number ?? ''} is no longer approved.`,
         sms: v.returned
           ? `شمس الصناعة: أُوقف مقدم الخدمة على الطلب ${ref(v)} وأُعيد الطلب لرفع عرض جديد.`
+          : v.reselect
+          ? `شمس الصناعة: أُوقف مقدم الخدمة على الطلب ${ref(v)} وعاد الطلب لاختيار مقدم خدمة آخر.`
           : `شمس الصناعة: مقدم الخدمة على الطلب ${ref(v)} لم يعد معتمدًا. ادخل على الموقع.`,
       });
     // ── المراجعة الأمنية: الحسابات (H2) ──

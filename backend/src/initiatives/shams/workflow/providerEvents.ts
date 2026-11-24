@@ -1,6 +1,6 @@
 /**
  * أثر إيقاف مقدم الخدمة على الطلبات التي اختارته (القاعدة الإضافية F + القرار 6) — يُستدعى داخل معاملة الإيقاف نفسها:
- *  - قبل إرسال العرض (OFFER_UPLOAD): لا انتقال؛ تُمنع إرسال العرض ويختار المصنع بديلًا (effectiveActions).
+ *  - قبل إرسال العرض (OFFER_UPLOAD) — D6: يعود الطلب آليًا إلى «اختيار مقدم الخدمة» بقيد في السجل وإشعار للمصنع.
  *  - أثناء مراجعة العرض أو تصحيحه (OFFER_REVIEW / OFFER_CORRECTION): يعود الطلب تلقائيًا إلى OFFER_UPLOAD
  *    بانتقال نظامي مُسجَّل (action = provider_suspended_return) ويُطلب عرض جديد من مقدم خدمة معتمد.
  *  - بعد قبول العرض: تنبيه لـPMU فقط — لا يُعاد ضبط الطلب.
@@ -18,6 +18,8 @@ import type { ApplicationState } from './shamsWorkflow.js';
 import type { UserInternal } from '../store/users.js';
 
 export const PROVIDER_RETURN_ACTION = 'provider_suspended_return' as const;
+export const PROVIDER_RESELECT_ACTION = 'provider_suspended_reselect' as const;
+export const PROVIDER_WARNING_ACTION = 'provider_suspended_warning' as const;
 
 /** حالات ما بعد قبول العرض — تنبيه فقط. */
 const AFTER_OFFER_ACCEPTED: ApplicationState[] = ['ELECTRICITY_UPLOAD', 'ELECTRICITY_REVIEW', 'BANK_STUDY', 'CONTRACT_OUTCOME', 'DISTRIBUTION_UPLOAD', 'DISTRIBUTION_REVIEW'];
@@ -77,8 +79,26 @@ export async function applyProviderSuspension(provider: { id: string; nameAr: st
       await dispatch('app.provider_suspended', { ...vars, returned: true }, [...await factoryRecipients(cur), ...await orgRecipients(ORG_IDS.pmu, 'pmu_reviewer')], opts);
       result.returned.push(cur.id);
     } else if (cur.state === 'OFFER_UPLOAD') {
-      await dispatch('app.provider_suspended', { ...vars, returned: false }, [...await factoryRecipients(cur), ...await orgRecipients(ORG_IDS.pmu, 'pmu_reviewer')], opts);
-      await auditUnavailable(cur.id, cur.state, 'notified_before_offer');
+      // D6 (QA 2026-11-23): before the offer is sent, the application returns to provider selection — recorded and notified.
+      const now = nowIso();
+      const changed = await db.prepare(`UPDATE shams_applications SET state = 'PROVIDER_SELECTION', version = version + 1, stateEnteredAt = ?, updatedAt = ?
+        WHERE id = ? AND version = ? AND state = 'OFFER_UPLOAD'`).run(now, now, cur.id, cur.version);
+      if (Number(changed.changes) !== 1) continue;
+      const reason = `أُوقف مقدم الخدمة «${provider.nameAr}» قبل إرسال العرض الفني — عاد الطلب آليًا لاختيار مقدم خدمة معتمد آخر.`;
+      const t = await insertTransition({
+        applicationId: cur.id, fromState: 'OFFER_UPLOAD', toState: 'PROVIDER_SELECTION', action: PROVIDER_RESELECT_ACTION,
+        actorUserId: user.id, actorRole: user.role, actorOrgId: user.organizationId, actorName: user.nameAr, reason, attempt: cur.attempt,
+        payload: { providerId: provider.id, automatic: true, providerEvent, stateBefore: 'OFFER_UPLOAD', stateAfter: 'PROVIDER_SELECTION' },
+      });
+      await addAuditLog({ ...actor, action: 'application.provider_suspended_reselect', entityType: 'application', entityId: cur.id, applicationId: cur.id,
+        summaryAr: `عودة آلية لاختيار مقدم الخدمة بعد إيقاف ${provider.nameAr}`,
+        details: { fromState: 'OFFER_UPLOAD', toState: 'PROVIDER_SELECTION', providerId: provider.id, transitionId: t.id, source: event.source, providerEvent } });
+      const eventId = randomUUID();
+      await enqueueWebhook(eventId, 'application.state_changed', t.id, {
+        id: eventId, type: 'application.state_changed', occurredAt: now,
+        data: { applicationId: cur.id, number: cur.number, fromState: 'OFFER_UPLOAD', toState: 'PROVIDER_SELECTION', action: PROVIDER_RESELECT_ACTION, actorRole: user.role, actorOrgId: user.organizationId, attempt: cur.attempt, version: cur.version + 1 },
+      }, !(config.platformWebhookUrl && config.platformWebhookSecret));
+      await dispatch('app.provider_suspended', { ...vars, reselect: true }, [...await factoryRecipients(cur), ...await orgRecipients(ORG_IDS.pmu, 'pmu_reviewer')], opts);
       result.notifiedBeforeOffer.push(cur.id);
     } else {
       // بعد قبول العرض: لا يتغير مسار الطلب — PMU تُنبَّه فقط، والحالة ظاهرة على الطلب.

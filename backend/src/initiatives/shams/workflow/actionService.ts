@@ -385,7 +385,9 @@ export async function performAction(user: UserInternal, appId: string, actionRaw
     if (action === 'select_bank') { sets.push('bankOrgId = ?', "contractPath = 'bank'"); vals.push(p.bankOrgId!); }
     if (action === 'select_distribution_path') sets.push("contractPath = 'distribution'");
     // F-07: عرض رُفع لمقدم لم يعد متاحًا ولم يُرسل — لا يصل المراجعين بعد أن تُحتسب المحاولة مُرسلة (يبقى للمصنع، دون حذف).
-    const discardedOffers = action === 'select_provider' && cur.state === 'OFFER_UPLOAD' ? await discardUnsentVersions(cur.id, 'technicalOfferFile', pending) : [];
+    // F-07 + D6: an offer uploaded for a provider that became unavailable and never sent is discarded when the factory re-picks
+    // (from offer upload, or from provider selection after the automatic return).
+    const discardedOffers = action === 'select_provider' && (cur.state === 'OFFER_UPLOAD' || cur.state === 'PROVIDER_SELECTION') ? await discardUnsentVersions(cur.id, 'technicalOfferFile', pending) : [];
 
     // المستند المُرسل لشركة التوزيع: النسخة السارية في المحاولة التي تُرسل الآن (يُثبَّت معرّفها في النتيجة والسجل).
     const distributionDoc = action === 'submit_distribution_approval'
