@@ -353,6 +353,10 @@ export function renderTemplate(key: TemplateKey, v: TemplateVars): Rendered {
           : `The service provider on application ${v.number ?? ''} is no longer approved.`,
         sms: v.returned
           ? `شمس الصناعة: أُوقف مقدم الخدمة على الطلب ${ref(v)} وأُعيد الطلب لرفع عرض جديد.`
+          : v.reselect
+          ? `شمس الصناعة: أُوقف مقدم الخدمة على الطلب ${ref(v)} وعاد الطلب لاختيار مقدم خدمة آخر.`
+          : v.alertOnly
+          ? `شمس الصناعة: للعلم — أُوقف مقدم الخدمة على الطلب ${ref(v)} بعد قبول العرض، ولا تغيير في مسار الطلب.`
           : `شمس الصناعة: مقدم الخدمة على الطلب ${ref(v)} لم يعد معتمدًا. ادخل على الموقع.`,
       });
     // ── المراجعة الأمنية: الحسابات (H2) ──

@@ -116,7 +116,17 @@ export interface ApplicationDetail extends ApplicationListItem {
   } | null;
   /** تعارضات رقم السجل مع طلبات مصانع أخرى (IMC وPMU) — I3. */
   registryConflicts: RegistryConflict[];
-  /** selectable = يستطيع المصنع المتابعة معه الآن (مفعّل من ENCPC ومعتمد من PMU إن لزم)؛ false بعد الإيقاف/إلغاء التفعيل. */
+  /**
+   * F2 / D3 (owner, DRAFT or IMC_CORRECTION only): the draft's registry number is used by another factory's open application
+   * (`in_use`) or on hold (`blocked` / `reserved`) — it cannot be submitted until PMU decides; the objection is offered.
+   */
+  /** D4: an objection by another factory to this application's registry number is under PMU review — only withdrawal remains. */
+  registryDisputeOpen?: boolean;
+  registryHold?: {
+    registryNumber: string; reason: 'in_use' | 'blocked' | 'reserved';
+    objection: { id: string; status: 'pending' | 'accepted' | 'rejected'; decisionReason: string; decisionReference: string } | null;
+  } | null;
+  /** selectable =يستطيع المصنع المتابعة معه الآن (مفعّل من ENCPC ومعتمد من PMU إن لزم)؛ false بعد الإيقاف/إلغاء التفعيل. */
   provider: { id: string; nameAr: string; nameEn: string; description: string; contactName: string; contactPhone: string; contactEmail: string; status: 'pending' | 'approved' | 'suspended'; isActive: boolean; selectable: boolean } | null;
   /** الإحالات السابقة قبل «إعادة الإحالة لبنك آخر» (I4). */
   referralHistory: { bankOrgId: string; bankNameAr: string; bankNameEn: string; referredAt: string; endedAt: string; endReason: string }[];
