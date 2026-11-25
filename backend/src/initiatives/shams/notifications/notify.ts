@@ -46,9 +46,12 @@ export function decisionReason(key: TemplateKey, v: TemplateVars): DecisionReaso
   if (!labelAr) return undefined;
   if (key === 'app.closed' && v.outcome === 'CONTRACTED') return undefined; // ملاحظات تعاقد ناجح ليست سبب قرار سلبي
   const notes = (v.deficiencies ?? []).map((d) => (d.note ? `${d.labelAr}: ${d.note}` : d.labelAr));
+  // The SMS has two segments: the reviewer's own words first — each note without its (sometimes long) field label;
+  // an item without a note is named by its label. In-app and e-mail keep «label: note».
+  const smsNotes = (v.deficiencies ?? []).map((d) => d.note?.trim() || d.labelAr);
   const reason = v.reason?.trim();
-  if (reason && !(v.deficiencies ?? []).some((d) => d.note?.trim() === reason)) notes.push(reason);
-  return notes.length ? { labelAr, text: notes.join(' — ') } : undefined;
+  if (reason && !(v.deficiencies ?? []).some((d) => d.note?.trim() === reason)) { notes.push(reason); smsNotes.push(reason); }
+  return notes.length ? { labelAr, text: notes.join(' — '), smsText: smsNotes.join(' — ') } : undefined;
 }
 
 /** يُصيّر القالب ويضعه في الطابور المشترك للمنصة (core/notify/dispatch) موسومًا بهذه المبادرة. */

@@ -67,6 +67,19 @@ test('IMC استيفاء and رفض, ENCPC غير مطابق: the reason reaches
   assertReason(await channels(c.factory, b, 'app.correction_requested'), r9, 'T9');
 });
 
+test('a long field label does not crowd the reviewer\'s own words out of the SMS (E2E re-run 2026-11-25, T9 roof areas)', async () => {
+  await closeOpen();
+  const b = await advanceTo('ENCPC_REVIEW', c, reg());
+  // the note's opening words are not part of the field label (the T9 case above passes on a shared word, «مساحات»)
+  const note = 'السطح الشمالي غير مذكور في الرسومات — أرفق مخططًا معتمدًا من المهندس الاستشاري';
+  assert.equal((await act(c.encpc, b, 'non_compliant', { deficiencies: [{ field: 'roofAreas', note }], reason: note })).status, 200);
+  const ch = await channels(c.factory, b, 'app.correction_requested');
+  assert.ok(ch.sms?.includes(note.slice(0, 20)), `the SMS carries the reviewer's words — got «${ch.sms}»`);
+  assert.ok(ch.sms!.length <= smsCapacity(ch.sms!), `still two segments (${ch.sms!.length})`);
+  assert.ok(/https?:\/\//.test(ch.sms!), 'and the link');
+  assert.ok(ch.inbox?.includes('بيان المساحات المتاحة من أسطح المنشأة الصناعية') && ch.inbox.includes(note), 'in-app keeps the field and the whole note');
+});
+
 test('PMU غير مقبول and غير مستوفاة; a withdrawal reaches the reviewer whose turn it was (T14, T18, T23)', async () => {
   await closeOpen();
   const a = await advanceTo('OFFER_REVIEW', c, reg());

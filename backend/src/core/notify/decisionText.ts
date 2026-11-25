@@ -25,6 +25,11 @@ export interface DecisionReason {
   text: string;
   /** Arabic label shown before the reason (default «السبب»). */
   labelAr?: string;
+  /**
+   * The reason as the SMS carries it, when shorter than `text` — e.g. the reviewer's notes without the long field labels,
+   * so the two segments hold the reviewer's own words (Shams QA re-run, T9). Defaults to `text`; in-app always has `text`.
+   */
+  smsText?: string;
 }
 
 const ELLIPSIS = '…';
@@ -40,7 +45,7 @@ export function composeDecisionTexts(decision: string, reason: DecisionReason, l
   if (!full) return { inbox: base, sms: link ? `${base} ${link}` : base };
   const inbox = `${base}\n${label}: ${full}`;
 
-  const flat = full.replace(/\s+/g, ' ');
+  const flat = (reason.smsText?.trim() || full).replace(/\s+/g, ' ');
   const head = `${base} ${label}: `;
   const tail = link ? ` ${link}` : '';
   const whole = `${head}${flat}${tail}`;
