@@ -29,7 +29,8 @@ export const FactoryTaskView: React.FC = () => {
 
   let body: React.ReactNode;
   switch (app.state) {
-    case 'PROVIDER_SELECTION': body = <ProviderStep app={app} />; break;
+    // D6: a provider stopped while the offer was being prepared sends the application back here — the page says why.
+    case 'PROVIDER_SELECTION': body = <ProviderStep app={app} reselect={Boolean(app.provider && !app.provider.selectable)} />; break;
     // I11: مقدم الخدمة المختار أُوقف قبل إرسال العرض → إعادة الاختيار بدل الطريق المغلق.
     case 'OFFER_UPLOAD': case 'OFFER_CORRECTION': body = app.state === 'OFFER_UPLOAD' && app.provider && !app.provider.selectable ? <ProviderStep app={app} reselect /> : <UploadStep app={app} kind="technicalOfferFile" action={app.state === 'OFFER_UPLOAD' ? 'submit_offer' : 'resubmit'} onUploaded={reload} />; break;
     case 'ELECTRICITY_UPLOAD': body = <UploadStep app={app} kind="electricityApprovalFile" action="submit_electricity" onUploaded={reload} />; break;

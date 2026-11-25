@@ -74,9 +74,11 @@ test('ENCPC adds a provider with a logo and activates it; PMU approves; the fact
   await encpc.getByTestId('confirm-action').click();
   await expect(row).toContainText('غير مفعّل');
   expect((await fApi.get('/service-providers')).items.some((p: any) => p.nameAr === name)).toBe(false);
-  // الطلب بعد الاختيار (قبل إرسال العرض): لا انتقال، وتظهر للمصنع رسالة إعادة الاختيار
+  // D6 (QA 2026-11-23): stopped before the offer was sent → the application returns to provider selection, and the page says why
+  await expect.poll(async () => (await fApi.get(`/applications/${appId}`)).state).toBe('PROVIDER_SELECTION');
   await open(fPage, `#task/${appId}`);
   await expect(fPage.getByTestId('provider-suspended')).toBeVisible();
+  await expect(fPage.locator('label.doc-item', { hasText: name })).toHaveCount(0);
 });
 
 test('a factory and other roles cannot manage the directory: the page is restricted and the API refuses', async ({ browser, request }) => {

@@ -94,20 +94,21 @@ export async function expectLoginRefused(page: Page, email: string, password: st
 }
 
 /**
- * مصنع قيد مراجعة IMC — D3 (QA 2026-11-23): صفحة «مبادراتي» تعرض الرسالة، وزر الدخول يفتح طلبه المرسل للقراءة فقط
- * (الانسحاب هو الإجراء الوحيد)؛ لوحة المصنع وقائمة الطلبات وباقي شاشات المبادرة تبقى مقفلة حتى قرار IMC.
+ * مصنع قيد مراجعة IMC — D3 (QA 2026-11-23): الدخول يفتح طلبه المرسل للقراءة فقط (الانسحاب هو الإجراء الوحيد)، وبطاقة
+ * «مبادراتي» تعرض الرسالة وزر الدخول إليه؛ لوحة المصنع وقائمة الطلبات وباقي شاشات المبادرة تبقى مقفلة حتى قرار IMC.
  */
 export async function expectShamsLocked(page: Page, email: string, password: string, text: RegExp) {
   await login(page, email, password);
-  await expect(page).toHaveURL(/#hub/);
+  await expect(page).toHaveURL(/#i\/shams\/application\//);
+  await expect(page.getByTestId('action-withdraw')).toBeVisible();
+  await expect(page.locator('[data-testid^="action-"]')).toHaveCount(1);
+  await page.goto('/#hub');
   const card = page.locator('.pf-hub-card', { hasText: 'شمس الصناعة' });
   await expect(card.locator('.pf-alert').first()).toContainText(text);
   await card.getByText('ادخل لوحة المبادرة').click();
   await expect(page).toHaveURL(/#i\/shams\/application\//);
-  await expect(page.getByTestId('action-withdraw')).toBeVisible();
-  await expect(page.locator('[data-testid^="action-"]')).toHaveCount(1);
   await page.goto('/#i/shams/factory-dashboard');
-  await expect(page).toHaveURL(/#hub/);
+  await expect(page.getByText('هذه الصفحة غير متاحة').first()).toBeVisible();
   const token = await apiToken(page.request, email, password);
   const r = await page.request.get('/api/v1/i/shams/applications', { headers: { Authorization: `Bearer ${token}` } });
   expect(r.status()).toBe(403);
