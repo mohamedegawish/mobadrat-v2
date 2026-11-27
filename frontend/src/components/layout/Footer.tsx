@@ -14,16 +14,28 @@ export const Footer: React.FC = () => {
       <div style={{ padding: '1.25rem 0 1.5rem 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         <div className="container-custom">
           <div className="footer-brand-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1.5rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-              <div style={{ width: '42px', height: '42px', borderRadius: 'var(--radius-sm)', background: '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '3px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                <EgyptianEagle size={34} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <img
+                  src="/ministry-industry-logo.png"
+                  alt="Ministry of Industry"
+                  width={42}
+                  height={42}
+                  style={{ width: 42, height: 42, objectFit: 'contain' }}
+                />
+                <img
+                  src="/imc-logo.png"
+                  alt="Industrial Modernisation Centre (IMC)"
+                  height={38}
+                  style={{ height: 38, width: 'auto', objectFit: 'contain', background: '#FFFFFF', padding: '3px 8px', borderRadius: '6px' }}
+                />
               </div>
               <div>
                 <div style={{ fontSize: '1rem', fontWeight: 700, color: '#FFFFFF' }}>
-                  {isAr ? 'بوابة مبادرات وزارة الصناعة' : 'Ministry of Industry Initiatives Portal'}
+                  {isAr ? 'منصة المبادرات الصناعية' : 'Industrial Initiatives Platform'}
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>
-                  {isAr ? 'وزارة الصناعة — جمهورية مصر العربية' : 'Ministry of Industry — Arab Republic of Egypt'}
+                  {isAr ? 'وزارة الصناعة — جمهورية مصر العربية | مركز تحديث الصناعة' : 'Ministry of Industry — Egypt | Industrial Modernisation Centre'}
                 </div>
               </div>
             </div>

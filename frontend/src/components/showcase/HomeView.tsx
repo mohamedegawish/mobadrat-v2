@@ -101,8 +101,6 @@ export const HomeView: React.FC = () => {
 
       <PlatformAbout />
 
-      <HomeBanners placement="before_steps" />
-
       {/* كيف تعمل المنصة */}
       <section aria-label={isAr ? 'كيف تعمل المنصة' : 'How it works'} className="home-section">
         <div className="section-anchor">

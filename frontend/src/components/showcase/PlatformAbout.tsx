@@ -9,12 +9,8 @@ import {
   Rocket,
   TrendingUp,
   Database,
-  Tags,
-  ClipboardCheck,
-  Network,
-  Activity,
-  Target,
 } from 'lucide-react';
+import { HomeBanners } from './HomeBanners';
 
 /**
  * PlatformAbout — تعريف المنصة في الصفحة الرئيسية:
@@ -38,49 +34,15 @@ export const PlatformAbout: React.FC = () => {
     { icon: <TrendingUp size={18} />, ar: 'أثر اقتصادي قابل للقياس', en: 'Measurable economic impact' },
   ];
 
-  const goals = [
-    {
-      icon: <Database size={20} />,
-      titleAr: 'الحصر والتجميع',
-      titleEn: 'Catalogue',
-      descAr: 'حصر وتجميع جميع المبادرات الصناعية التي تطلقها وزارة الصناعة في قاعدة بيانات وطنية موحدة.',
-      descEn: 'Gather every industrial initiative launched by the Ministry of Industry into one unified national database.',
-    },
-    {
-      icon: <Tags size={20} />,
-      titleAr: 'التصنيف',
-      titleEn: 'Classify',
-      descAr: 'تصنيف المبادرات حسب القطاع الصناعي، والمنطقة الجغرافية، والأولوية، وحجم الاستثمار.',
-      descEn: 'Classify initiatives by industrial sector, geographic region, priority and investment size.',
-    },
-    {
-      icon: <ClipboardCheck size={20} />,
-      titleAr: 'التقييم والجاهزية',
-      titleEn: 'Assess readiness',
-      descAr: 'تقييم المبادرات فنياً واقتصادياً وتحديد مدى جاهزيتها للتنفيذ.',
-      descEn: 'Evaluate initiatives technically and economically and determine their readiness for execution.',
-    },
-    {
-      icon: <Network size={20} />,
-      titleAr: 'الربط والتنسيق',
-      titleEn: 'Connect',
-      descAr: 'ربط المبادرات بالجهات والوزارات المعنية والبرامج التمويلية.',
-      descEn: 'Link initiatives with the relevant entities, ministries and financing programs.',
-    },
-    {
-      icon: <Activity size={20} />,
-      titleAr: 'متابعة التنفيذ والأثر',
-      titleEn: 'Track execution & impact',
-      descAr: 'متابعة التنفيذ ومؤشرات الأداء والأثر الاقتصادي لكل مبادرة.',
-      descEn: 'Monitor execution, performance indicators and the economic impact of every initiative.',
-    },
-    {
-      icon: <Target size={20} />,
-      titleAr: 'رصد الفجوات والفرص',
-      titleEn: 'Spot gaps & opportunities',
-      descAr: 'تحديد الفجوات والفرص الصناعية التي تتطلب إطلاق مبادرات جديدة.',
-      descEn: 'Identify industrial gaps and opportunities that call for new initiatives.',
-    },
+  const sectors = [
+    { ar: 'الصناعات الكيماوية والبترو كيماوية', en: 'Chemical & Petrochemical' },
+    { ar: 'الصناعات الهندسية والمعدنية', en: 'Engineering & Metal' },
+    { ar: 'المنسوجات والملابس', en: 'Textiles & Garments' },
+    { ar: 'الصناعات الغذائية', en: 'Food Industries' },
+    { ar: 'مواد البناء والسيراميك', en: 'Building Materials & Ceramics' },
+    { ar: 'الورق والتغليف', en: 'Paper & Packaging' },
+    { ar: 'الأخشاب والأثاث', en: 'Wood & Furniture' },
+    { ar: 'الأدوية والمستحضرات الطبية', en: 'Pharmaceuticals & Medical' },
   ];
 
   const sectionTitle: React.CSSProperties = {
@@ -129,17 +91,19 @@ export const PlatformAbout: React.FC = () => {
         </div>
       </section>
 
-      {/* الأهداف الرئيسية */}
-      <section aria-label={isAr ? 'الأهداف الرئيسية' : 'Key objectives'} className="home-section">
+      {/* البانر الإعلاني */}
+      <HomeBanners placement="before_steps" />
+
+      {/* القطاعات المستهدفة */}
+      <section aria-label={isAr ? 'القطاعات المستهدفة' : 'Target sectors'} className="home-section">
         <div className="section-anchor">
-          <h2 style={sectionTitle}>{isAr ? 'الأهداف الرئيسية' : 'Key objectives'}</h2>
+          <h2 style={sectionTitle}>{isAr ? 'القطاعات المستهدفة' : 'Target sectors'}</h2>
         </div>
-        <div className="home-grid home-grid-3">
-          {goals.map(g => (
-            <div key={g.titleEn} className="home-card">
-              <span className="home-card-icon">{g.icon}</span>
-              <h3 className="home-card-title">{isAr ? g.titleAr : g.titleEn}</h3>
-              <p className="home-card-desc">{isAr ? g.descAr : g.descEn}</p>
+        <div className="home-grid home-grid-4">
+          {sectors.map(s => (
+            <div key={s.en} className="home-card sector-card">
+              <span className="home-card-icon sector-card-icon"><Database size={16} /></span>
+              <h3 className="home-card-title">{isAr ? s.ar : s.en}</h3>
             </div>
           ))}
         </div>

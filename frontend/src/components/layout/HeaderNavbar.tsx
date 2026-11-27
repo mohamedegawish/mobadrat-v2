@@ -81,7 +81,7 @@ export const HeaderNavbar: React.FC = () => {
         {/* Top bar */}
         <div className="gov-topbar" style={{ background: '#F8F8F8', borderBottom: '1px solid var(--border-subtle)' }}>
           <div className="container-custom" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.4rem 0' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+            <div className="gov-topbar-title" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
               <span style={{ fontWeight: 700 }}>{isAr ? 'جمهورية مصر العربية' : 'Arab Republic of Egypt'}</span>
               <span style={{ opacity: 0.5 }}>|</span>
               <span>{isAr ? 'وزارة الصناعة' : 'Ministry of Industry'}</span>
@@ -131,39 +131,31 @@ export const HeaderNavbar: React.FC = () => {
         {/* Main Header Bar */}
         <div className="container-custom">
           <div className="header-main">
-            {/* Brand cluster — Ministry logo far-left, eagle opposite in the identity lockup */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-              {/* Ministry logo — أقصى يسار الصفحة */}
-              <div className="gov-emblem ministry-emblem" title={isAr ? 'وزارة الصناعة — جمهورية مصر العربية' : 'Ministry of Industry — Egypt'} style={{ padding: '3px', background: '#FFFFFF' }}>
+            {/* Brand Lockup: Ministry Emblem + جمهورية مصر العربية / وزارة الصناعة + منصة المبادرات الصناعية */}
+            <div 
+              className="gov-brand" 
+              onClick={() => (isLoggedIn ? goToWorkspace() : navigate('home'))}
+            >
+              <div className="gov-brand-cluster">
                 <img
                   src="/ministry-industry-logo.png"
                   alt={isAr ? 'شعار وزارة الصناعة' : 'Ministry of Industry logo'}
-                  width={36}
-                  height={36}
-                  style={{ width: 36, height: 36, objectFit: 'contain', display: 'block', borderRadius: '6px' }}
+                  className="gov-brand-img"
                   loading="eager"
                   decoding="async"
-                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; (e.currentTarget.parentElement as HTMLElement).style.display = 'none'; }}
                 />
+                <div className="gov-brand-titles">
+                  <span className="gov-brand-sub">
+                    {isAr ? 'جمهورية مصر العربية' : 'Arab Republic of Egypt'}
+                  </span>
+                  <span className="gov-brand-sub">
+                    {isAr ? 'وزارة الصناعة' : 'Ministry of Industry'}
+                  </span>
+                </div>
               </div>
 
-              {/* Eagle (Coat of Arms) — Identity lockup */}
-              <div 
-                className="gov-brand" 
-                style={{ cursor: 'pointer' }} 
-                onClick={() => (isLoggedIn ? goToWorkspace() : navigate('home'))}
-              >
-                <div className="gov-emblem" title={isAr ? 'شعار جمهورية مصر العربية' : 'Coat of Arms of Egypt'}>
-                  <EgyptianEagle size={32} />
-                </div>
-                <div>
-                  <div className="gov-brand-title">
-                    {isAr ? 'بوابة مبادرات وزارة الصناعة' : 'Ministry of Industry Initiatives Portal'}
-                  </div>
-                  <div className="gov-brand-sub">
-                    {isAr ? 'نظام التحديث الصناعي الموحد' : 'Unified Industrial Modernization System'}
-                  </div>
-                </div>
+              <div className="gov-brand-main-title">
+                {isAr ? 'منصة المبادرات الصناعية' : 'Industrial Initiatives Platform'}
               </div>
             </div>
 
@@ -190,39 +182,18 @@ export const HeaderNavbar: React.FC = () => {
               {!isLoggedIn || currentUser.id === 'guest' ? (
                 <button
                   onClick={() => setShowRoleDropdown(!showRoleDropdown)}
-                  className="btn btn-secondary"
-                  style={{
-                    padding: '0.35rem 0.85rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.6rem',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid #CBD5E1',
-                    background: '#FFFFFF',
-                    transition: 'all 0.2s ease',
-                  }}
+                  className="btn btn-secondary header-account-btn"
                   title={isAr ? 'تسجيل الدخول للمنصة' : 'Sign in to platform'}
                   data-testid="account-menu"
                 >
-                  <span style={{
-                    width: '30px',
-                    height: '30px',
-                    borderRadius: '50%',
-                    background: '#F1F5F9',
-                    color: '#475569',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                    border: '1px solid #E2E8F0',
-                  }}>
+                  <span className="header-account-icon">
                     <User size={16} />
                   </span>
                   <div style={{ textAlign: isAr ? 'right' : 'left' }}>
-                    <div style={{ fontSize: '0.825rem', fontWeight: 800, color: 'var(--egypt-red)', lineHeight: 1.2 }}>
+                    <div className="account-btn-main" style={{ fontSize: '0.825rem', fontWeight: 800, color: 'var(--egypt-red)', lineHeight: 1.2 }}>
                       {isAr ? 'تسجيل الدخول' : 'Sign In'}
                     </div>
-                    <div style={{ fontSize: '0.68rem', color: '#64748B', fontWeight: 600 }}>
+                    <div className="account-btn-sub" style={{ fontSize: '0.68rem', color: '#64748B', fontWeight: 600 }}>
                       {isAr ? 'منشأة صناعية / جهة' : 'Factory / Official'}
                     </div>
                   </div>
@@ -231,36 +202,13 @@ export const HeaderNavbar: React.FC = () => {
               ) : (
                 <button 
                   onClick={() => setShowRoleDropdown(!showRoleDropdown)}
-                  className="btn btn-secondary"
-                  style={{
-                    padding: '0.35rem 0.85rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.6rem',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid #E2E8F0',
-                    background: '#FFFFFF',
-                    position: 'relative',
-                  }}
+                  className="btn btn-secondary header-account-btn"
                   title={isAr ? 'الملف الشخصي والحساب' : 'Profile & Account'}
                   data-testid="account-menu"
                 >
-                  <span style={{
-                    position: 'relative',
-                    width: '30px',
-                    height: '30px',
-                    borderRadius: '50%',
-                    background: '#0F172A',
-                    color: '#FFFFFF',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '0.725rem',
-                    fontWeight: 800,
-                    flexShrink: 0
-                  }}>
+                  <span className="header-account-avatar">
                     {currentUser.avatar || 'AM'}
-                    {/* عداد الإشعارات غير المقروءة — فوق الصورة الرمزية بلا أي عرض إضافي في الهيدر */}
+                    {/* عداد الإشعارات غير المقروءة */}
                     <UnreadBadge />
                     <span style={{
                       position: 'absolute',
@@ -274,10 +222,10 @@ export const HeaderNavbar: React.FC = () => {
                     }} />
                   </span>
                   <div style={{ textAlign: isAr ? 'right' : 'left' }}>
-                    <div style={{ fontSize: '0.825rem', fontWeight: 700, color: '#101828', lineHeight: 1.2 }}>
+                    <div className="account-btn-main" style={{ fontSize: '0.825rem', fontWeight: 700, color: '#101828', lineHeight: 1.2 }}>
                       {isAr ? currentUser.name : currentUser.nameEn}
                     </div>
-                    <div style={{ fontSize: '0.7rem', color: '#667085', fontWeight: 500 }}>
+                    <div className="account-btn-sub" style={{ fontSize: '0.7rem', color: '#667085', fontWeight: 500 }}>
                       {isAr ? currentUser.organizationNameAr : currentUser.organizationNameEn}
                     </div>
                   </div>

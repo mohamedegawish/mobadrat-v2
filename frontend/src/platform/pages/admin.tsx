@@ -335,20 +335,56 @@ export const AdminBanners: React.FC = () => {
   };
   return (
     <div className="pf-gap">
-      <div className="pf-section-head"><h2>{t('بانرات الصفحة الرئيسية', 'Home banners')}</h2><button type="button" className="btn btn-primary" onClick={() => setEdit({ linkType: 'none', active: true })}>{t('بانر جديد', 'New banner')}</button></div>
+      <div className="pf-section-head">
+        <h2>{t('بانرات الصفحة الرئيسية', 'Home banners')}</h2>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button type="button" className="btn btn-secondary" onClick={() => setEdit({
+            titleAr: 'شمس الصناعة',
+            titleEn: 'Shams El-Senaa',
+            subtitleAr: 'البرنامج القومي للطاقة الشمسية\nطاقة أنظف - صناعة أكثر تنافسية - مستقبل أكثر استدامة',
+            subtitleEn: 'National Solar Program\nCleaner energy - More competitive industry - Sustainable future',
+            ctaLabelAr: 'طاقة متجددة 100% | تخفيض تكاليف التشغيل',
+            ctaLabelEn: '100% Renewable Energy | Reduced Operating Costs',
+            linkType: 'initiative',
+            linkTarget: 'shams',
+            placement: 'before_steps',
+            imageUrl: '/covers/shams-banner-full.jpg',
+            active: true,
+          })}>
+            {t('إضافة نموذج شمس الصناعة', 'Add Shams Banner Preset')}
+          </button>
+          <button type="button" className="btn btn-primary" onClick={() => setEdit({ linkType: 'initiative', linkTarget: 'shams', placement: 'before_steps', active: true })}>
+            {t('بانر جديد', 'New banner')}
+          </button>
+        </div>
+      </div>
       {msg ? <Alert tone={msg.ok ? 'ok' : 'err'}>{msg.text}</Alert> : null}
       {edit ? (
         <div className="pf-box pf-gap">
           <div className="pf-row">
-            <div className="pf-field"><label>{t('العنوان (عربي)', 'Title (Arabic)')}</label><input value={edit.titleAr ?? ''} onChange={(e) => setEdit({ ...edit, titleAr: e.target.value })} /></div>
-            <div className="pf-field"><label>{t('العنوان (إنجليزي)', 'Title (English)')}</label><input value={edit.titleEn ?? ''} onChange={(e) => setEdit({ ...edit, titleEn: e.target.value })} /></div>
-            <div className="pf-field"><label>{t('النص (عربي)', 'Text (Arabic)')}</label><input value={edit.subtitleAr ?? ''} onChange={(e) => setEdit({ ...edit, subtitleAr: e.target.value })} /></div>
-            <div className="pf-field"><label>{t('النص (إنجليزي)', 'Text (English)')}</label><input value={edit.subtitleEn ?? ''} onChange={(e) => setEdit({ ...edit, subtitleEn: e.target.value })} /></div>
-            <div className="pf-field"><label>{t('الرابط', 'Link')}</label>
+            <div className="pf-field"><label>{t('مكان العرض', 'Placement')}</label>
+              <select value={edit.placement ?? 'before_steps'} onChange={(e) => setEdit({ ...edit, placement: e.target.value })}>
+                <option value="before_steps">{t('بين عن المنصة والقطاعات المستهدفة', 'Between About & Target Sectors')}</option>
+                <option value="before_about">{t('أعلى قسم عن المنصة', 'Above About Platform')}</option>
+                <option value="before_cta">{t('قبل الدعوة الختامية', 'Before Closing CTA')}</option>
+              </select>
+            </div>
+            <div className="pf-field"><label>{t('العنوان الرئيسي (عربي)', 'Main Title (Arabic)')}</label><input value={edit.titleAr ?? ''} onChange={(e) => setEdit({ ...edit, titleAr: e.target.value })} /></div>
+            <div className="pf-field"><label>{t('العنوان الرئيسي (إنجليزي)', 'Main Title (English)')}</label><input value={edit.titleEn ?? ''} onChange={(e) => setEdit({ ...edit, titleEn: e.target.value })} /></div>
+            <div className="pf-field" style={{ gridColumn: 'span 2' }}><label>{t('النص التوضيحي والشعار (عربي) - يمكنك كتابة أكثر من سطر', 'Subtitle & Tagline (Arabic) - multiline supported')}</label>
+              <textarea rows={2} style={{ width: '100%', padding: '0.5rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-medium)' }} value={edit.subtitleAr ?? ''} onChange={(e) => setEdit({ ...edit, subtitleAr: e.target.value })} />
+            </div>
+            <div className="pf-field" style={{ gridColumn: 'span 2' }}><label>{t('النص التوضيحي (إنجليزي)', 'Subtitle & Tagline (English)')}</label>
+              <textarea rows={2} style={{ width: '100%', padding: '0.5rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-medium)' }} value={edit.subtitleEn ?? ''} onChange={(e) => setEdit({ ...edit, subtitleEn: e.target.value })} />
+            </div>
+            <div className="pf-field"><label>{t('الشارات / المزايا (عربي) - افصل بـ |', 'Badges (Arabic) - separate with |')}</label><input placeholder="طاقة متجددة 100% | تخفيض تكاليف التشغيل" value={edit.ctaLabelAr ?? ''} onChange={(e) => setEdit({ ...edit, ctaLabelAr: e.target.value })} /></div>
+            <div className="pf-field"><label>{t('الشارات / المزايا (إنجليزي)', 'Badges (English)')}</label><input placeholder="100% Renewable Energy | Reduced Operating Costs" value={edit.ctaLabelEn ?? ''} onChange={(e) => setEdit({ ...edit, ctaLabelEn: e.target.value })} /></div>
+            <div className="pf-field"><label>{t('الرابط عند الضغط', 'Link on click')}</label>
               <select value={edit.linkType} onChange={(e) => setEdit({ ...edit, linkType: e.target.value as Banner['linkType'], linkTarget: '' })}><option value="none">{t('بلا رابط', 'None')}</option><option value="initiative">{t('مبادرة', 'Initiative')}</option><option value="url">URL</option></select></div>
             {edit.linkType === 'initiative' ? <div className="pf-field"><label>{t('المبادرة', 'Initiative')}</label><select value={edit.linkTarget ?? ''} onChange={(e) => setEdit({ ...edit, linkTarget: e.target.value })}><option value="" />{(initiatives ?? []).map((i) => <option key={i.id} value={i.slug}>{i.titleAr}</option>)}</select></div>
               : edit.linkType === 'url' ? <div className="pf-field"><label>URL</label><input dir="ltr" value={edit.linkTarget ?? ''} onChange={(e) => setEdit({ ...edit, linkTarget: e.target.value })} /></div> : null}
-            <div className="pf-field"><label>{t('الصورة', 'Image')}</label><input type="file" accept="image/*" onChange={(e) => onImage(e.target.files?.[0])} /></div>
+            <div className="pf-field"><label>{t('الصورة أو مسارها', 'Image or Path')}</label><input value={edit.imageUrl ?? ''} placeholder="/covers/shams-banner-full.jpg" onChange={(e) => setEdit({ ...edit, imageUrl: e.target.value })} /></div>
+            <div className="pf-field"><label>{t('رفع صورة جديدة', 'Upload new image')}</label><input type="file" accept="image/*" onChange={(e) => onImage(e.target.files?.[0])} /></div>
             <div className="pf-field"><label>{t('ظاهر', 'Visible')}</label><select value={edit.active ? '1' : '0'} onChange={(e) => setEdit({ ...edit, active: e.target.value === '1' })}><option value="1">{t('نعم', 'Yes')}</option><option value="0">{t('لا', 'No')}</option></select></div>
           </div>
           {edit.imageUrl ? <img src={edit.imageUrl} alt="" style={{ maxHeight: 140, borderRadius: 10, objectFit: 'cover' }} /> : null}

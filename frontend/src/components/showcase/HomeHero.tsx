@@ -35,7 +35,7 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
     },
   ];
 
-  const partners = ['IDA', 'IMC', 'NBE'];
+
 
   return (
     <section
@@ -70,79 +70,21 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
         }}
       >
         {/* النص التحريري */}
-        <div
-          style={{
-            padding: '2.4rem 2rem 1.6rem 2.25rem',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            gap: '1.05rem',
-          }}
-        >
-          <h1
-            style={{
-              fontFamily: isAr ? 'var(--font-display-ar)' : 'var(--font-display-en)',
-              fontSize: 'clamp(1.7rem, 2.6vw, 2.35rem)',
-              fontWeight: 800,
-              lineHeight: 1.35,
-              color: 'var(--text-main)',
-              margin: 0,
-              textWrap: 'balance',
-              letterSpacing: '-0.02em',
-            }}
-          >
+        <div className="hero-editorial-col">
+          <h1 className="hero-editorial-title">
             {isAr
-              ? 'بوابة مبادرات وزارة الصناعة'
-              : 'Ministry of Industry Initiatives Portal'}
+              ? 'مبادراتنا الصناعية'
+              : 'Our Industrial Initiatives'}
           </h1>
 
-          <p
-            style={{
-              fontSize: '0.94rem',
-              lineHeight: 1.8,
-              color: 'var(--text-secondary)',
-              margin: 0,
-              maxWidth: '54ch',
-            }}
-          >
+          <p className="hero-editorial-desc">
             {isAr
-              ? 'منصة موحدة تجمع المبادرات الوطنية: حلول طاقة شمسية تخفض التكلفة، وبرامج تحديث لخطوط الإنتاج وتعميق المكوّن المحلي.'
-              : 'One national portal for cost-cutting solar programs and production-line modernization with deeper local content.'}
+              ? 'منصة موحدة تجمع مبادرات وزارة الصناعة دعما للصناعة المصرية'
+              : 'A unified platform bringing together Ministry of Industry initiatives in support of Egyptian industry.'}
           </p>
 
-          {/* شارات الجهات */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-            <span
-              style={{
-                fontSize: '0.70rem',
-                fontWeight: 700,
-                color: 'var(--text-muted)',
-                letterSpacing: '0.03em',
-              }}
-            >
-              {isAr ? 'بشراكة:' : 'In partnership:'}
-            </span>
-            {partners.map(k => (
-              <span
-                key={k}
-                style={{
-                  fontSize: '0.68rem',
-                  fontWeight: 750,
-                  letterSpacing: '0.02em',
-                  padding: '0.18rem 0.5rem',
-                  borderRadius: '9999px',
-                  background: '#F8FAFC',
-                  border: '1px solid #E2E8F0',
-                  color: '#334155',
-                }}
-              >
-                {k}
-              </span>
-            ))}
-          </div>
-
           {/* الزرّان */}
-          <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', marginTop: '0.2rem' }}>
+          <div className="hero-btn-row">
             <button
               className="btn btn-primary btn-lg"
               onClick={() => navigate('initiatives')}
@@ -176,14 +118,7 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
           </div>
 
           {/* شريط الإحصاءات */}
-          <div
-            style={{
-              display: 'flex',
-              gap: '0.6rem',
-              flexWrap: 'wrap',
-              marginTop: '0.6rem',
-            }}
-          >
+          <div className="hero-stats-row">
             {stats.map(s => (
               <div
                 key={isAr ? s.labelAr : s.labelEn}

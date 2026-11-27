@@ -1,12 +1,32 @@
 import React, { useEffect, useState } from 'react';
 import { usePlatformStore } from '../../store/state';
 import { resolveApiAssetUrl, type Banner } from '../../platform/api';
-import { ChevronLeft, ChevronRight, ArrowLeft, ArrowRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ArrowLeft, ArrowRight, Sun, Factory, TrendingDown } from 'lucide-react';
 
 type BannerPlacement = Banner['placement'];
 type HomeBannerShape = Banner;
 
 const ROTATE_MS = 6000;
+
+export const DEFAULT_BANNERS: HomeBannerShape[] = [
+  {
+    id: 'banner-shams-default',
+    imageUrl: '/covers/shams-banner-full.jpg',
+    titleAr: 'شمس الصناعة',
+    titleEn: 'Shams El-Senaa',
+    subtitleAr: 'البرنامج القومي للطاقة الشمسية\nطاقة أنظف - صناعة أكثر تنافسية - مستقبل أكثر استدامة',
+    subtitleEn: 'National Solar Program\nCleaner energy - More competitive industry - Sustainable future',
+    ctaLabelAr: 'طاقة متجددة 100% | تخفيض تكاليف التشغيل',
+    ctaLabelEn: '100% Renewable Energy | Reduced Operating Costs',
+    linkType: 'initiative',
+    linkTarget: 'shams',
+    placement: 'before_steps',
+    sortOrder: 1,
+    active: true,
+    startsAt: '',
+    endsAt: '',
+  },
+];
 
 type BannerContent = Pick<HomeBannerShape, 'imageUrl' | 'titleAr' | 'titleEn' | 'subtitleAr' | 'subtitleEn' | 'ctaLabelAr' | 'ctaLabelEn'>;
 
@@ -27,31 +47,60 @@ export const BannerVisual: React.FC<{
 }> = ({ banner, isAr, showCta, eager, onImageError }) => {
   const title = pick(isAr, banner.titleAr, banner.titleEn);
   const sub = pick(isAr, banner.subtitleAr, banner.subtitleEn);
-  const cta = showCta ? pick(isAr, banner.ctaLabelAr, banner.ctaLabelEn) : '';
+  const cta = pick(isAr, banner.ctaLabelAr, banner.ctaLabelEn);
+
+  // إذا كانت الصورة هي البانر المصمم المكتمل مسبقاً، تُعرض مباشرة بدون تكرار النص
+  const isFullGraphic = banner.imageUrl?.includes('shams-banner-full') && 
+    (title === 'شمس الصناعة' || !title);
+
+  // تحليل أسطر النص التوضيحي (العنوان الفرعي + الشعار)
+  const subLines = sub.split('\n').map(l => l.trim()).filter(Boolean);
+
+  // تحليل شارات المزايا المفصولة بـ | أو فاصلة
+  const badges = cta.includes('|')
+    ? cta.split('|').map(b => b.trim()).filter(Boolean)
+    : (cta ? [cta] : []);
+
   return (
     <>
       {banner.imageUrl && (
         <img
           className="home-feature-img"
           src={resolveApiAssetUrl(banner.imageUrl)}
-          alt=""
+          alt={title || ''}
           loading={eager ? 'eager' : 'lazy'}
           decoding="async"
           onError={e => { e.currentTarget.style.visibility = 'hidden'; onImageError?.(); }}
           onLoad={e => { e.currentTarget.style.visibility = ''; }}
         />
       )}
-      {(title || sub || cta) && (
+      {!isFullGraphic && (title || sub || badges.length > 0) && (
         <>
           <div className="home-feature-shade" aria-hidden style={{ '--shade-dir': isAr ? '270deg' : '90deg' } as React.CSSProperties} />
-          <div className="home-feature-text">
-            {title && <strong className="home-feature-title">{title}</strong>}
-            {sub && <p className="home-feature-sub">{sub}</p>}
-            {cta && (
-              <span className="home-feature-cta">
-                {cta}
-                {isAr ? <ArrowLeft size={14} /> : <ArrowRight size={14} />}
-              </span>
+          <div className="home-feature-text shams-banner-content">
+            {title && (
+              <div className="shams-banner-title-row">
+                <span className="shams-banner-logo" aria-hidden>
+                  <Sun size={24} style={{ color: '#E5A93C' }} />
+                  <Factory size={20} style={{ color: '#E5A93C' }} />
+                </span>
+                <strong className="home-feature-title shams-banner-title">{title}</strong>
+              </div>
+            )}
+            {subLines.map((line, idx) => (
+              <p key={idx} className={idx === 0 ? 'shams-sub-primary' : 'shams-sub-tagline'}>
+                {line}
+              </p>
+            ))}
+            {badges.length > 0 && (
+              <div className="shams-banner-badges">
+                {badges.map((b, idx) => (
+                  <span key={idx} className="shams-banner-pill">
+                    {idx === 0 ? <Sun size={13} style={{ color: '#38BDF8' }} /> : <TrendingDown size={13} style={{ color: '#38BDF8' }} />}
+                    <span>{b}</span>
+                  </span>
+                ))}
+              </div>
             )}
           </div>
         </>
@@ -62,14 +111,16 @@ export const BannerVisual: React.FC<{
 
 /**
  * HomeBanners — بانرات الإعلانات لمكان واحد في الصفحة الرئيسية (تُدار من «بانرات الرئيسية» في الإدارة).
- * لا شيء إن لم توجد بانرات؛ أكثر من بانر = سلايدر يتقلب تلقائياً (يتوقف عند المرور/التركيز وعند prefers-reduced-motion).
+ * تدعم سلايدر يتقلب تلقائياً مع إمكانية التنقل والتوقف عند المرور والتحويل عند النقر.
  */
 export const HomeBanners: React.FC<{ placement: BannerPlacement }> = ({ placement }) => {
   const { language, homeBanners, initiatives, navigate } = usePlatformStore();
   const isAr = language === 'ar';
-  // بانر صورته لا تُحمَّل يُستبعد بدل مربع رمادي فارغ في الصفحة الرئيسية.
   const [failed, setFailed] = useState<ReadonlySet<string>>(() => new Set());
-  const slides = homeBanners.filter(b => b.placement === placement && !failed.has(b.id));
+  
+  const userSlides = homeBanners.filter(b => b.placement === placement && !failed.has(b.id));
+  const fallback = placement === 'before_steps' ? DEFAULT_BANNERS : [];
+  const slides = userSlides.length > 0 ? userSlides : fallback;
   const count = slides.length;
 
   const [index, setIndex] = useState(0);
@@ -90,8 +141,7 @@ export const HomeBanners: React.FC<{ placement: BannerPlacement }> = ({ placemen
   const renderSlide = (b: HomeBannerShape, i: number) => {
     const isActive = i === active;
     const className = `home-feature-slide${isActive ? ' is-active' : ''}`;
-    // مبادرة مخفية عن الزائر (مسودة/مؤرشفة/محذوفة) = بانر بلا رابط بدل صفحة «غير موجودة».
-    const toInitiative = b.linkType === 'initiative' && initiatives.some(x => x.id === b.linkTarget || x.slug === b.linkTarget);
+    const toInitiative = b.linkType === 'initiative' && Boolean(b.linkTarget);
     const linked = b.linkType === 'url' || toInitiative;
     const content = (
       <BannerVisual banner={b} isAr={isAr} showCta={linked} eager={i === 0}
