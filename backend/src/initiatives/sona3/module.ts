@@ -70,12 +70,12 @@ export const sona3Module: InitiativeModule = {
   subject: 'person',
   requirements,
   catalogDefaults: {
-    slug: 'sona3', titleAr: 'صُنّاع المستقبل', titleEn: 'Future Makers (Sona\'a El-Mostaqbal)', status: 'active', registrationOpen: true,
+    slug: 'sona3', titleAr: 'صُنّاع المستقبل', titleEn: 'Future Makers (Sona\'a El-Mostaqbal)', status: 'coming_soon', registrationOpen: false,
     taglineAr: 'تمويل ومرافقة رواد الأعمال الشباب لإطلاق مشروعات صناعية', taglineEn: 'Funding and mentoring young founders to launch industrial projects',
     descriptionAr: 'مبادرة صُنّاع المستقبل لاكتشاف ورعاية المشروعات الصناعية الواعدة للشباب: تقديم وفحص أهلية، ثم دراسة جدوى، وتقييم لجنة متخصصة، واختيار، وموافقة، وربط بجهات التمويل، ثم متابعة التنفيذ والتشغيل وقياس الأثر.',
     descriptionEn: 'The Future Makers initiative discovers and supports promising youth industrial projects: application and eligibility, feasibility study, committee evaluation, selection, approval, funder matching, then implementation follow-up and impact measurement.',
     category: 'ريادة الأعمال', categoryEn: 'Entrepreneurship', coverImage: '/covers/sona3.jpg', themeColor: '#123A78', accentColor: '#F7941D',
-    badgeTextAr: 'الدورة مفتوحة', badgeTextEn: 'Cohort open', sortOrder: 2,
+    badgeTextAr: 'قريبًا', badgeTextEn: 'Coming soon', sortOrder: 2,
   },
 
   publicRouter() {
