@@ -25,17 +25,29 @@ import type { FormFieldKey } from '../config/shamsPolicy.js';
 
 /** I5: هل حُددت أي مهلة؟ لا مهلة = لا معنى لعدّ «متأخرة: 0». */
 export function slaConfigured(): boolean {
-  return Object.values(shamsPolicy.slaDays).some((d) => d !== null && d !== undefined);
+  return [...Object.values(shamsPolicy.slaDays), ...Object.values(shamsPolicy.slaPhases).map((p) => p.days)].some((d) => d !== null && d !== undefined);
+}
+
+/** D12: the multi-state deadline this state belongs to, if any. */
+function slaPhaseOf(state: ApplicationState) {
+  return Object.values(shamsPolicy.slaPhases).find((p) => p.states.includes(state)) ?? null;
+}
+
+/** `slaStartedAt` after a move to `to`: kept while the application stays inside one phase, otherwise it starts now. */
+export function nextSlaStart(app: Pick<AppRow, 'state' | 'stateEnteredAt' | 'slaStartedAt'>, to: ApplicationState, now: string): string {
+  const phase = slaPhaseOf(to);
+  return phase && slaPhaseOf(app.state) === phase ? (app.slaStartedAt ?? app.stateEnteredAt) : now;
 }
 
 export interface SlaInfo { slaDays: number | null; dueAt: string | null; overdue: boolean; daysInState: number }
 
-export function slaInfo(app: Pick<AppRow, 'state' | 'stateEnteredAt'>, now = Date.now()): SlaInfo {
+export function slaInfo(app: Pick<AppRow, 'state' | 'stateEnteredAt' | 'slaStartedAt'>, now = Date.now()): SlaInfo {
   const entered = Date.parse(app.stateEnteredAt);
   const daysInState = Math.max(0, Math.floor((now - entered) / 86_400_000));
-  const days = isTerminal(app.state) ? null : (shamsPolicy.slaDays[app.state] ?? null);
+  const phase = slaPhaseOf(app.state);
+  const days = isTerminal(app.state) ? null : phase ? phase.days : (shamsPolicy.slaDays[app.state] ?? null);
   if (days === null || days === undefined) return { slaDays: null, dueAt: null, overdue: false, daysInState };
-  const due = entered + days * 86_400_000;
+  const due = (phase ? Date.parse(app.slaStartedAt ?? app.stateEnteredAt) : entered) + days * 86_400_000;
   return { slaDays: days, dueAt: new Date(due).toISOString(), overdue: now > due, daysInState };
 }
 

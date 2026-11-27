@@ -234,9 +234,20 @@ test('M5/I6: PMU work queue excludes drafts (counted separately) and "awaiting m
 });
 
 test('I5: without any SLA the summary says so instead of "overdue: 0"', async () => {
-  const s = (await c.pmu.get('/reports/summary')).json.data;
-  assert.equal(s.slaConfigured, false);
-  assert.equal((await c.pmu.get('/meta')).json.data.policy.slaConfigured, false);
+  const { shamsPolicy } = await import('../config/shamsPolicy.js');
+  const days = { ...shamsPolicy.slaDays };
+  const offer = shamsPolicy.slaPhases.offer.days;
+  for (const k of Object.keys(shamsPolicy.slaDays)) shamsPolicy.slaDays[k as keyof typeof shamsPolicy.slaDays] = null;
+  shamsPolicy.slaPhases.offer.days = null;
+  try {
+    const s = (await c.pmu.get('/reports/summary')).json.data;
+    assert.equal(s.slaConfigured, false);
+    assert.equal((await c.pmu.get('/meta')).json.data.policy.slaConfigured, false);
+  } finally {
+    Object.assign(shamsPolicy.slaDays, days);
+    shamsPolicy.slaPhases.offer.days = offer;
+  }
+  assert.equal((await c.pmu.get('/meta')).json.data.policy.slaConfigured, true, 'D12 deadlines are set');
 });
 
 test('I7: the Excel sheet has Arabic headers, readable names, Cairo time and yes/no', async () => {

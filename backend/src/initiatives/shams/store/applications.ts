@@ -8,6 +8,8 @@ export interface AppRow {
   providerId: string | null; bankOrgId: string | null; companyName: string; governorate: string; industrialZone: string;
   industrialRegistryNumber: string | null; totalRoofArea: number; registryVerificationId: string | null; verifiedRegistryNumber: string | null;
   createdBy: string | null; submittedAt: string | null; stateEnteredAt: string; closedAt: string | null; createdAt: string; updatedAt: string;
+  /** D12: when the current SLA phase started (null on rows older than the column). */
+  slaStartedAt: string | null;
   /** مسار التعاقد بعد قبول موافقة الكهرباء: null = لم يُختر بعد. */
   contractPath: ContractPath | null;
 }
@@ -25,6 +27,7 @@ function mapApp(r: Record<string, unknown>): AppRow {
     createdBy: (r.createdBy as string | null) ?? null, submittedAt: (r.submittedAt as string | null) ?? null,
     stateEnteredAt: String(r.stateEnteredAt), closedAt: (r.closedAt as string | null) ?? null,
     createdAt: String(r.createdAt), updatedAt: String(r.updatedAt),
+    slaStartedAt: (r.slaStartedAt as string | null) ?? null,
     contractPath: (r.contractPath as ContractPath | null) ?? null,
   };
 }

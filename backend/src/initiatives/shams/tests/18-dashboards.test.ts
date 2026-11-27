@@ -138,8 +138,8 @@ test('PMU: stage cards, the bank-choice and outcome stage, closed groups, attent
   const req = await c.admin.post('/admin/users', { email: 'dash.imc@shams.local', nameAr: 'مراجع', role: 'imc_reviewer', organizationId: 'org-imc' });
   assert.equal(req.status, 202);
   assert.equal(att('accounts'), undefined, 'IMC account requests are approved by IMC, not PMU');
-  // لا يظهر «متأخر» مختلق بلا مهل
-  assert.equal(d6.slaConfigured, false);
+  // لا يظهر «متأخر» مختلق: المهل محددة (D12) ولا طلب تجاوزها
+  assert.equal(d6.slaConfigured, true);
   assert.equal(att('overdue'), undefined);
 });
 

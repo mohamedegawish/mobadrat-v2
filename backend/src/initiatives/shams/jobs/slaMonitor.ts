@@ -16,8 +16,10 @@ import { trackJob } from './inflight.js';
 let timer: NodeJS.Timeout | null = null;
 
 export async function runSlaSweep(now = Date.now()): Promise<number> {
-  const states = (Object.entries(shamsPolicy.slaDays) as Array<[ApplicationState, number | null]>)
-    .filter(([, d]) => d !== null && d !== undefined).map(([s]) => s);
+  const states = [...new Set([
+    ...(Object.entries(shamsPolicy.slaDays) as Array<[ApplicationState, number | null]>).filter(([, d]) => d !== null && d !== undefined).map(([s]) => s),
+    ...Object.values(shamsPolicy.slaPhases).filter((p) => p.days !== null).flatMap((p) => p.states),
+  ])];
   if (!states.length) return 0;
   const rows = await getDb().prepare(`SELECT id FROM shams_applications WHERE state IN (${states.map(() => '?').join(',')})`).all(...states) as Array<{ id: string }>;
   let n = 0;

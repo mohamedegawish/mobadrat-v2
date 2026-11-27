@@ -39,6 +39,7 @@ metaRouter.get('/meta', ah(async (_req, res) => okMessage(res, 200, 'ok', {
     withdrawFrom: shamsPolicy.withdrawFrom,
     bankSelection: shamsPolicy.bankSelection,
     slaDays: shamsPolicy.slaDays,
+    slaPhases: shamsPolicy.slaPhases,
     slaConfigured: slaConfigured(),
     contractAmountAlertEGP: shamsPolicy.contractAmountAlertEGP,
     imcRejectReasonCodes: shamsPolicy.imcRejectReasonCodes,

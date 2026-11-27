@@ -32,7 +32,7 @@ import {
 } from './shamsWorkflow.js';
 import { FORM_SECTIONS, ELECTRICITY_DEFICIENCY_FIELDS } from './applicationForm.js';
 import { ALL_FORM_FIELD_KEYS, completenessIssues, totalRoofArea, type FormData } from './validate.js';
-import { actionBlock, deficiencyLabels } from './applicationView.js';
+import { actionBlock, deficiencyLabels, nextSlaStart } from './applicationView.js';
 import { syncProfileAfterSubmit } from '../profileSync.js';
 
 interface Deficiency { field: string; note: string }
@@ -356,8 +356,8 @@ export async function performAction(user: UserInternal, appId: string, actionRaw
     }
 
     const nextAttempt = bumpsAttempt(def) ? pending : cur.attempt;
-    const sets: string[] = ['state = ?', 'version = version + 1', 'attempt = ?', 'stateEnteredAt = ?', 'updatedAt = ?'];
-    const vals: Array<string | number | null> = [def.to, nextAttempt, now, now];
+    const sets: string[] = ['state = ?', 'version = version + 1', 'attempt = ?', 'stateEnteredAt = ?', 'updatedAt = ?', 'slaStartedAt = ?'];
+    const vals: Array<string | number | null> = [def.to, nextAttempt, now, now, nextSlaStart(cur, def.to, now)];
     if (isTerminal(def.to)) { sets.push('closedAt = ?'); vals.push(now); }
 
     let verificationId: string | null = null;

@@ -49,17 +49,27 @@ export const shamsPolicy = {
   /**
    * ★ المهل بالأيام لكل حالة انتظار (مراجعة الجهات أو رد المصنع). `null` = غير محددة → لا يُعرض تجاوز.
    * تُحسب من `stateEnteredAt`. عند التجاوز: إشعار وعلامة تأخر فقط — لا رفض ولا إغلاق تلقائي.
+   * D12 (2026-11-27): IMC يومان، وENCPC ثلاثة أيام (أيام تقويمية). مهلة العرض الفني في `slaPhases`.
    */
   slaDays: {
     DRAFT: null,
-    IMC_REVIEW: null, IMC_CORRECTION: null,
-    ENCPC_REVIEW: null, ENCPC_CORRECTION: null,
+    IMC_REVIEW: 2, IMC_CORRECTION: null,
+    ENCPC_REVIEW: 3, ENCPC_CORRECTION: null,
     PROVIDER_SELECTION: null, OFFER_UPLOAD: null,
     OFFER_REVIEW: null, OFFER_CORRECTION: null,
     ELECTRICITY_UPLOAD: null, ELECTRICITY_REVIEW: null,
     BANK_STUDY: null, CONTRACT_OUTCOME: null,
     DISTRIBUTION_UPLOAD: null, DISTRIBUTION_REVIEW: null,
   } as Partial<Record<ApplicationState, number | null>>,
+
+  /**
+   * D12: one deadline shared by several states, counted from the moment the application entered the first of them
+   * (`slaStartedAt`) and not restarted when it moves between them. Offer phase: from ENCPC's technical acceptance
+   * until PMU accepts the offer, revisions included.
+   */
+  slaPhases: {
+    offer: { states: ['OFFER_UPLOAD', 'OFFER_REVIEW', 'OFFER_CORRECTION'], days: 9 },
+  } as Record<string, { states: ApplicationState[]; days: number | null }>,
 
   // ── القرارات المفتوحة (القسم 12) ──
   /** حد مرات الإرجاع لكل مرحلة. null = بلا حد (ويُعرض العدد لـ PMU). */

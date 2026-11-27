@@ -197,6 +197,7 @@ export interface Meta {
   banks: { id: string; nameAr: string; nameEn: string }[];
   policy: {
     maxReturnsPerStage: number | null; withdrawFrom: string; bankSelection: string; slaDays: Partial<Record<ApplicationState, number | null>>;
+    slaPhases: Record<string, { states: ApplicationState[]; days: number | null }>;
     slaConfigured: boolean; contractAmountAlertEGP: number; imcRejectReasonCodes: string[]; adminCanViewApplicationDocuments: boolean;
   };
   /** قناة الاستفسار الرسمية — null عند عدم الضبط. */

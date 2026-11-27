@@ -10,33 +10,27 @@ let c: Awaited<ReturnType<typeof clients>>;
 before(async () => { srv = await startServer(); c = await clients(srv.base); });
 after(async () => { await srv.close(); await env.cleanup(); });
 
-test('SLA: null = no overdue; configured SLA → overdue flag + one notification to org and PMU, no auto-close', async () => {
+test('SLA: IMC has 2 days (D12) → overdue flag + one notification to org and PMU, no auto-close', async () => {
   const id = await advanceTo('IMC_REVIEW', c, 'IND-SLA-1');
   let v = await getApp(c.imc, id);
   assert.equal(v.overdue, false);
-  assert.equal(v.currentTask.dueAt, null, 'undefined SLA → no overdue display');
-  const { shamsPolicy } = await import('../config/shamsPolicy.js');
+  assert.equal(v.currentTask.slaDays, 2);
+  assert.equal(Date.parse(v.currentTask.dueAt) - Date.parse(v.stateEnteredAt), 2 * 86_400_000);
   const { runSlaSweep } = await import('../jobs/slaMonitor.js');
-  shamsPolicy.slaDays.IMC_REVIEW = 2;
-  try {
-    const { getDb } = await import('../db/database.js');
-    await getDb().prepare("UPDATE shams_applications SET stateEnteredAt = '2020-01-01T00:00:00.000Z' WHERE id = ?").run(id);
-    v = await getApp(c.imc, id);
-    assert.equal(v.overdue, true);
-    assert.ok(v.currentTask.dueAt);
-    const n1 = await runSlaSweep();
-    const n2 = await runSlaSweep();
-    assert.ok(n1 > 0);
-    assert.equal(n2, 0, 'notified once per state entry');
-    const rows = await q<{ recipientAddress: string }>("SELECT recipientAddress FROM notification_outbox WHERE applicationId = ? AND templateKey = 'app.sla_overdue' AND channel = 'email'", id);
-    const to = rows.map((r) => r.recipientAddress);
-    assert.ok(to.includes('imc1@shams.local') && to.includes('pmu@shams.local'));
-    assert.equal((await getApp(c.imc, id)).state, 'IMC_REVIEW', 'no automatic rejection or closure');
-    const overdueList = await c.pmu.get('/applications?overdue=1');
-    assert.ok(overdueList.json.data.items.some((a: any) => a.id === id));
-  } finally {
-    shamsPolicy.slaDays.IMC_REVIEW = null;
-  }
+  const { getDb } = await import('../db/database.js');
+  await getDb().prepare("UPDATE shams_applications SET stateEnteredAt = '2020-01-01T00:00:00.000Z' WHERE id = ?").run(id);
+  v = await getApp(c.imc, id);
+  assert.equal(v.overdue, true);
+  const n1 = await runSlaSweep();
+  const n2 = await runSlaSweep();
+  assert.ok(n1 > 0);
+  assert.equal(n2, 0, 'notified once per state entry');
+  const rows = await q<{ recipientAddress: string }>("SELECT recipientAddress FROM notification_outbox WHERE applicationId = ? AND templateKey = 'app.sla_overdue' AND channel = 'email'", id);
+  const to = rows.map((r) => r.recipientAddress);
+  assert.ok(to.includes('imc1@shams.local') && to.includes('pmu@shams.local'));
+  assert.equal((await getApp(c.imc, id)).state, 'IMC_REVIEW', 'no automatic rejection or closure');
+  const overdueList = await c.pmu.get('/applications?overdue=1');
+  assert.ok(overdueList.json.data.items.some((a: any) => a.id === id));
 });
 
 test('reports: PMU sees everything; IMC only its stage; factory only its own; bank only its referrals', async () => {
