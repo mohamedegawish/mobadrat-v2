@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Download } from 'lucide-react';
 import { api, type AccountRequest, type IntegrationKey, type RecoveryRequest } from '../../api';
-import { errorText, useStore } from '../../store/state';
+import { errorText, useStore, store } from '../../store/state';
 import { useAsync, formatDate } from '../../hooks/useAsync';
 import { Loading, Empty, ErrorState } from '../common/StateViews';
 import { AdminPageHeader } from '../admin/AdminLayout';
@@ -53,6 +53,9 @@ export const ApprovalsView: React.FC = () => {
   const { isAr, t, user } = useStore();
   const { toast } = useToast();
   const isPmu = user?.role === 'pmu_reviewer';
+  const isImc = user?.role === 'imc_reviewer';
+  // IMC: the applications awaiting its own decision (the server's «mine» queue).
+  const queue = useAsync(() => (isImc ? api.listApplications({ mine: '1', pageSize: 50 }) : Promise.resolve(null)), [isImc]);
   const accounts = useAsync(() => api.accountRequests(), []);
   const recoveries = useAsync(() => (isPmu ? api.recoveryRequests() : Promise.resolve([] as RecoveryRequest[])), [isPmu]);
   const keys = useAsync(() => (isPmu ? api.pendingIntegrationKeys() : Promise.resolve([] as IntegrationKey[])), [isPmu]);
@@ -92,10 +95,36 @@ export const ApprovalsView: React.FC = () => {
     <>
       <AdminPageHeader
         title={t('الموافقات', 'Approvals')}
-        description={t('قرارات لا يتخذها من قدّم الطلب: حسابات جهتك الجديدة وتغيير بريدها'
+        description={t((isImc ? 'الطلبات بانتظار مراجعتكم، و' : '') + 'قرارات لا يتخذها من قدّم الطلب: حسابات جهتك الجديدة وتغيير بريدها'
           + (isPmu ? '، ونزاعات أرقام السجل، واسترداد حسابات المصانع، ومفاتيح الربط ذات نطاقات البيانات.' : '.'),
-        'Decisions the requester cannot take: new accounts of your organization and email changes'
+        (isImc ? 'Applications awaiting your review, and ' : '') + 'decisions the requester cannot take: new accounts of your organization and email changes'
           + (isPmu ? ', registry number disputes, factory account recovery, and integration keys with data scopes.' : '.'))} />
+
+      {isImc ? (
+        <section className="card" style={{ padding: 0, marginBottom: '1rem' }} aria-labelledby="ap-apps" data-testid="imc-review-queue">
+          <h2 id="ap-apps" className="section-title" style={{ padding: '0.9rem 1rem 0' }}>{t('طلبات بانتظار مراجعة IMC', 'Applications awaiting IMC review')}</h2>
+          {queue.loading && !queue.data ? <div style={{ padding: '1rem' }}><Loading variant="table" /></div> : queue.error ? <ErrorState message={queue.error} onRetry={queue.reload} />
+            : !queue.data?.items.length ? <Empty title={t('لا توجد طلبات بانتظار مراجعتكم', 'No applications awaiting your review')} /> : (
+              <div className="table-responsive">
+                <table className="eng-table">
+                  <thead><tr><th>{t('رقم الطلب', 'Number')}</th><th>{t('المصنع', 'Factory')}</th><th>{t('المحافظة', 'Governorate')}</th><th>{t('الحالة', 'Status')}</th><th>{t('منذ', 'Since')}</th><th /></tr></thead>
+                  <tbody>
+                    {queue.data.items.map((a) => (
+                      <tr key={a.id}>
+                        <td dir="ltr">{a.number ?? '—'}</td>
+                        <td><b>{a.companyName}</b></td>
+                        <td>{a.governorate}</td>
+                        <td><Badge status={a.state}>{isAr ? a.stateLabelAr : a.stateLabelEn}</Badge>{a.overdue ? <div className="doc-meta">{t('متأخر', 'Overdue')}</div> : null}</td>
+                        <td>{formatDate(a.stateEnteredAt, isAr, true)}</td>
+                        <td><button type="button" className="btn btn-primary btn-sm" onClick={() => store.navigate('application', a.id)}>{t('مراجعة', 'Review')}</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+        </section>
+      ) : null}
 
       <section className="card" style={{ padding: 0, marginBottom: '1rem' }} aria-labelledby="ap-accounts">
         <h2 id="ap-accounts" className="section-title" style={{ padding: '0.9rem 1rem 0' }}>{t('طلبات الحسابات', 'Account requests')}</h2>

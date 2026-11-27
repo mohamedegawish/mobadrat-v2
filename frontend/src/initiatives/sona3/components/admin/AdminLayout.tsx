@@ -1,15 +1,7 @@
 import React from 'react';
-import { AdminSidebar } from './AdminSidebar';
 
-/** غلاف صفحات الإدارة: سايد بار مثبت في الجانب بطول الشاشة + محتوى */
-export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  return (
-    <div className="admin-layout">
-      <AdminSidebar />
-      <div className="admin-content">{children}</div>
-    </div>
-  );
-};
+/** غلاف صفحات الإدارة: القائمة الجانبية الموحدة تعرضها المنصة (نفس قائمة لوحة المستخدم)، فيبقى هنا المحتوى فقط. */
+export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => <>{children}</>;
 
 /** ترويسة موحدة لصفحات الإدارة: عنوان + وصف + إجراءات (RTL-safe، هوية مصرية عبر gov tokens) */
 export const AdminPageHeader: React.FC<{

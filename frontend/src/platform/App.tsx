@@ -9,7 +9,7 @@ import { VerifyEmailPage, ForgotPasswordPage, ResetPasswordPage, ChangePasswordP
 import { ProfilePage, ApplyPage, NotificationsPage } from './pages/account';
 import { AdminDashboard, AdminInitiative, AdminUsers, AdminCatalog, AdminBanners, AdminAudit, AdminOutbox, AdminReadiness } from './pages/admin';
 import { AdminBodies, AdminBody } from './pages/bodies';
-import { WorkspacePage } from './pages/workspace';
+import { WorkspacePage, WorkspaceSidebarAuto } from './pages/workspace';
 import { moduleOf, type ModuleEntry } from '../initiatives/registry';
 import { getShellWorkspace, onShellWorkspace } from '../core/shell';
 import { ToastProvider, useToast } from '../components/common/ToastSystem';
@@ -72,7 +72,14 @@ const PlatformShell: React.FC<{ module: ModuleEntry | null }> = ({ module }) => 
   if (module) {
     // An initiative's screens (its own routes, guards and stylesheet) inside the platform page.
     const Module = module.load;
-    body = me?.user.mustChangePassword ? <ChangePasswordPage /> : <Suspense fallback={<Loading />}><Module /></Suspense>;
+    const page = me?.user.mustChangePassword ? <ChangePasswordPage /> : <Suspense fallback={<Loading />}><Module /></Suspense>;
+    // Every page of an initiative's staff area gets the dashboard's own sidebar (one menu, whichever page is open).
+    body = moduleWorkspace && me ? (
+      <div className="admin-layout">
+        <WorkspaceSidebarAuto initiativeId={module.id} />
+        <div className="admin-content" lang={isAr ? 'ar' : 'en'}>{page}</div>
+      </div>
+    ) : page;
   } else if (booting && needsAuth) body = <Loading />;
   else if (view === 'hub' && !me) body = <MyInitiativesView />; // its own «sign in» card
   else if (needsAuth && !me) body = <SignInRequired />;

@@ -4,7 +4,7 @@
  * my decision · all applications · overdue · monitoring (and readiness for the system admin). Decisions and tool screens
  * stay in each initiative (a row opens its application page there). Data: GET /me/workspace/<type>.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import {
   AlertTriangle, BarChart3, Bell, CheckCircle2, ChevronsLeft, ChevronsRight, ClipboardCheck, Clock, Gavel, Globe, Inbox, Layers,
   LayoutDashboard, ListChecks, RefreshCw, Search, Wrench, XCircle,
@@ -153,8 +153,9 @@ const WorkspaceBell: React.FC<{ initiativeIds: string[] }> = ({ initiativeIds })
 
 const SIDEBAR_KEY = 'mobadrat_ws_sidebar_v1';
 
-const WorkspaceSidebar: React.FC<{ type: UserType; types: UserType[]; parts: OkPart[] }> = ({ type, types, parts }) => {
+const WorkspaceSidebar: React.FC<{ type: UserType; types: UserType[]; parts: OkPart[]; onDashboard?: boolean }> = ({ type, types, parts, onDashboard = true }) => {
   const { isAr, t, me } = usePlatform();
+  const hash = useSyncExternalStore((cb) => { window.addEventListener('hashchange', cb); return () => window.removeEventListener('hashchange', cb); }, () => window.location.hash);
   const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem(SIDEBAR_KEY) === '1'; } catch { return false; } });
   const toggle = () => setCollapsed((c) => { try { localStorage.setItem(SIDEBAR_KEY, c ? '0' : '1'); } catch { /* private mode */ } return !c; });
   const Collapse = collapsed ? (isAr ? ChevronsLeft : ChevronsRight) : (isAr ? ChevronsRight : ChevronsLeft);
@@ -182,19 +183,40 @@ const WorkspaceSidebar: React.FC<{ type: UserType; types: UserType[]; parts: OkP
       <nav className="admin-side-nav">
         <div className="admin-side-group">
           {!collapsed && <div className="admin-side-group-title">{t('لوحاتي', 'My dashboards')}</div>}
-          {types.map((x) => <Item key={x} href={`workspace/${x}`} label={isAr ? TYPE_TEXT[x].shortAr : TYPE_TEXT[x].shortEn} icon={<LayoutDashboard size={17} />} active={x === type} />)}
+          {types.map((x) => <Item key={x} href={`workspace/${x}`} label={isAr ? TYPE_TEXT[x].shortAr : TYPE_TEXT[x].shortEn} icon={<LayoutDashboard size={17} />} active={onDashboard && x === type} />)}
           {hasApplicant ? <Item href="hub" label={t('مبادراتي', 'My initiatives')} icon={<Inbox size={17} />} /> : null}
         </div>
         {tools.map((p) => (
           <div key={p.initiativeId} className="admin-side-group">
             {!collapsed && <div className="admin-side-group-title">{isAr ? p.titleAr : p.titleEn}</div>}
-            {p.data.tools.map((tool) => <Item key={tool.view} href={`i/${p.initiativeId}/${tool.view}`} label={isAr ? tool.labelAr : tool.labelEn} icon={<ToolIcon view={tool.view} />} />)}
+            {p.data.tools.map((tool) => <Item key={tool.view} href={`i/${p.initiativeId}/${tool.view}`} label={isAr ? tool.labelAr : tool.labelEn} icon={<ToolIcon view={tool.view} />} active={hash.replace(/^#\/?/, '').split('?')[0] === `i/${p.initiativeId}/${tool.view}`} />)}
           </div>
         ))}
       </nav>
       {!collapsed && <div className="admin-side-foot">{t('القرارات تُتخذ من صفحة كل طلب داخل مبادرته.', 'Decisions are taken on each application\'s page in its initiative.')}</div>}
     </aside>
   );
+};
+
+/**
+ * The same sidebar for the pages of an initiative's staff workspace (approvals, accounts, audit…): it loads the dashboard's
+ * tools itself, so every page of the staff area shows exactly the menu of the dashboard.
+ */
+export const WorkspaceSidebarAuto: React.FC<{ initiativeId: string }> = ({ initiativeId }) => {
+  const { me } = usePlatform();
+  const types = workspaceTypesOf(me);
+  const own = me?.memberships.find((m) => m.initiativeId === initiativeId && m.userType)?.userType
+    ?? me?.adminEntries.find((a) => a.initiativeId === initiativeId && a.userType)?.userType;
+  const type = (own && types.includes(own) ? own : types[0]) as UserType | undefined;
+  const [parts, setParts] = useState<OkPart[]>([]);
+  useEffect(() => {
+    if (!type) return;
+    let alive = true;
+    api.workspace(type, { tab: 'mine', pageSize: 1 }).then((d) => { if (alive) setParts(d.parts.filter((p): p is OkPart => p.ok)); }).catch(() => { /* the sidebar still lists the dashboards */ });
+    return () => { alive = false; };
+  }, [type]);
+  if (!type) return null;
+  return <WorkspaceSidebar type={type} types={types} parts={parts} onDashboard={false} />;
 };
 
 // ── the board (also embedded in the platform administration for the super admin) ──
