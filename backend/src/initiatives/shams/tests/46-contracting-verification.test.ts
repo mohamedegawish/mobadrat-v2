@@ -4,9 +4,9 @@
 // historical document access, and direct-API abuse.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import {
+import { electricityAccept, uploadProof,
   isolateTestEnv, startServer, clients, Client, act, getApp, q, pdfVariant, sentMails, registerFactory, registrationPayload, activationTokenFor,
-  BANK_A, PROVIDER_OK, type Started,
+  BANK_A, type Started,
 } from './helpers.js';
 
 const env = isolateTestEnv('verify');
@@ -63,12 +63,11 @@ async function toContractOutcome(tag: string, loops: boolean) {
   f = await new Client(srv.base).login(email, PASSWORD);
   f.autoRelogin = true;
   if (loops) {
-    ok(await act(c.encpc, appId, 'non_compliant', { deficiencies: [{ field: 'address', note: 'العنوان لا يطابق الموقع' }] }), 'ENCPC correction');
-    assert.equal((await f.put(`/applications/${appId}/data/general`, { address: 'العنوان المصحح فنيًا' })).status, 200);
+    ok(await act(c.encpc, appId, 'non_compliant', { reason: 'العنوان لا يطابق الموقع' }), 'ENCPC rejection');
+    await uploadProof(f, appId, `${tag}-proof-1`);
     ok(await act(f, appId, 'resubmit'), 'factory resubmits to ENCPC');
   }
   ok(await act(c.encpc, appId, 'compliant'), 'ENCPC compliant');
-  ok(await act(f, appId, 'select_provider', { providerId: PROVIDER_OK }), 'select provider');
   assert.equal((await upload(f, appId, 'technicalOfferFile', `${tag}-offer-1`)).status, 201);
   ok(await act(f, appId, 'submit_offer'), 'submit offer');
   if (loops) {
@@ -78,15 +77,13 @@ async function toContractOutcome(tag: string, loops: boolean) {
     ok(await act(f, appId, 'resubmit'), 'revised offer');
   }
   ok(await act(c.pmu, appId, 'accept'), 'PMU accepts offer');
-  assert.equal((await upload(f, appId, 'electricityApprovalFile', `${tag}-elec-1`)).status, 201);
-  ok(await act(f, appId, 'submit_electricity', { distributionCompany: 'شركة شمال القاهرة لتوزيع الكهرباء' }), 'submit electricity');
   if (loops) {
-    ok(await act(c.pmu, appId, 'request_correction', { reason: 'الموافقة غير مختومة' }), 'PMU electricity re-upload');
+    ok(await act(c.electricity, appId, 'request_correction', { reason: 'الرسم غير مختوم' }), 'ministry rejection');
     assert.equal((await getApp(f, appId)).state, 'ELECTRICITY_UPLOAD');
-    assert.equal((await upload(f, appId, 'electricityApprovalFile', `${tag}-elec-2`)).status, 201);
-    ok(await act(f, appId, 'submit_electricity', { distributionCompany: 'شركة شمال القاهرة لتوزيع الكهرباء' }), 'resubmit electricity');
+    await uploadProof(f, appId, `${tag}-proof-2`);
+    ok(await act(f, appId, 'resubmit'), 'answer to the ministry');
   }
-  ok(await act(c.pmu, appId, 'accept'), 'PMU accepts electricity');
+  ok(await electricityAccept(c.electricity, appId, `${tag}-elec`), 'ministry approves');
   const app = await getApp(f, appId);
   assert.equal(app.state, 'CONTRACT_OUTCOME');
   return { email, appId, company, f, number: app.number as string };
@@ -125,13 +122,13 @@ test('V1 registration → every correction loop → bank chosen → evidence re-
   const steps = app.transitions.map((t: any) => `${t.fromState}>${t.action}`);
   assert.deepEqual(steps, [
     'DRAFT>submit', 'IMC_REVIEW>request_correction', 'IMC_CORRECTION>resubmit', 'IMC_REVIEW>accept', 'ENCPC_REVIEW>non_compliant', 'ENCPC_CORRECTION>resubmit',
-    'ENCPC_REVIEW>compliant', 'PROVIDER_SELECTION>select_provider', 'OFFER_UPLOAD>submit_offer', 'OFFER_REVIEW>request_correction', 'OFFER_CORRECTION>resubmit',
-    'OFFER_REVIEW>accept', 'ELECTRICITY_UPLOAD>submit_electricity', 'ELECTRICITY_REVIEW>request_correction', 'ELECTRICITY_UPLOAD>submit_electricity',
+    'ENCPC_REVIEW>compliant', 'OFFER_UPLOAD>submit_offer', 'OFFER_REVIEW>request_correction', 'OFFER_CORRECTION>resubmit',
+    'OFFER_REVIEW>accept', 'ELECTRICITY_REVIEW>request_correction', 'ELECTRICITY_UPLOAD>resubmit',
     'ELECTRICITY_REVIEW>accept', 'CONTRACT_OUTCOME>select_bank', 'CONTRACT_OUTCOME>record_contract',
   ]);
   assert.ok(app.transitions.every((t: any) => t.actorName && t.createdAt));
   // every version of every re-uploaded document is kept, and stays downloadable by its owner after closure
-  for (const kind of ['technicalOfferFile', 'electricityApprovalFile', 'contractFile']) {
+  for (const kind of ['technicalOfferFile', 'correctionProofFile', 'contractFile']) {
     assert.equal(app.documents.filter((d: any) => d.kind === kind).length, 2, `${kind}: both versions kept`);
   }
   for (const d of [ev1, ev2]) assert.equal((await f.get(`/applications/${appId}/documents/${d.id}/download`)).status, 200);

@@ -63,24 +63,24 @@ test('IMC استيفاء and رفض, ENCPC غير مطابق: the reason reaches
 
   const b = await advanceTo('ENCPC_REVIEW', c, reg());
   const r9 = 'مساحات الأسطح لا تطابق الرسومات المرفقة';
-  assert.equal((await act(c.encpc, b, 'non_compliant', { deficiencies: [{ field: 'roofAreas', note: r9 }], reason: r9 })).status, 200);
-  assertReason(await channels(c.factory, b, 'app.correction_requested'), r9, 'T9');
+  assert.equal((await act(c.encpc, b, 'non_compliant', { reason: r9 })).status, 200);
+  assertReason(await channels(c.factory, b, 'app.encpc_rejected'), r9, 'T9');
 });
 
-test('a long field label does not crowd the reviewer\'s own words out of the SMS (E2E re-run 2026-11-25, T9 roof areas)', async () => {
+test('a long field label does not crowd the reviewer\'s own words out of the SMS (E2E re-run 2026-11-25, roof areas)', async () => {
   await closeOpen();
-  const b = await advanceTo('ENCPC_REVIEW', c, reg());
-  // the note's opening words are not part of the field label (the T9 case above passes on a shared word, «مساحات»)
+  const b = await advanceTo('IMC_REVIEW', c, reg());
+  // the note's opening words are not part of the field label
   const note = 'السطح الشمالي غير مذكور في الرسومات — أرفق مخططًا معتمدًا من المهندس الاستشاري';
-  assert.equal((await act(c.encpc, b, 'non_compliant', { deficiencies: [{ field: 'roofAreas', note }], reason: note })).status, 200);
-  const ch = await channels(c.factory, b, 'app.correction_requested');
-  assert.ok(ch.sms?.includes(note.slice(0, 20)), `the SMS carries the reviewer's words — got «${ch.sms}»`);
-  assert.ok(ch.sms!.length <= smsCapacity(ch.sms!), `still two segments (${ch.sms!.length})`);
-  assert.ok(/https?:\/\//.test(ch.sms!), 'and the link');
-  assert.ok(ch.inbox?.includes('بيان المساحات المتاحة من أسطح المنشأة الصناعية') && ch.inbox.includes(note), 'in-app keeps the field and the whole note');
+  assert.equal((await act(c.imc, b, 'request_correction', { deficiencies: [{ field: 'roofAreas', note }], reason: note })).status, 200);
+  const got = await channels(c.factory, b, 'app.correction_requested');
+  assert.ok(got.sms?.includes(note.slice(0, 20)), `the SMS carries the reviewer's words — got «${got.sms}»`);
+  assert.ok(got.sms!.length <= smsCapacity(got.sms!), `still two segments (${got.sms!.length})`);
+  assert.ok(/https?:\/\//.test(got.sms!), 'and the link');
+  assert.ok(got.inbox?.includes('بيان المساحات المتاحة من أسطح المنشأة الصناعية') && got.inbox.includes(note), 'in-app keeps the field and the whole note');
 });
 
-test('PMU غير مقبول and غير مستوفاة; a withdrawal reaches the reviewer whose turn it was (T14, T18, T23)', async () => {
+test('PMU offer revision and the ministry’s rejection; a withdrawal reaches the reviewer whose turn it was', async () => {
   await closeOpen();
   const a = await advanceTo('OFFER_REVIEW', c, reg());
   const r14 = 'العرض لا يذكر ضمان الألواح وقدرة العاكس';
@@ -90,12 +90,9 @@ test('PMU غير مقبول and غير مستوفاة; a withdrawal reaches the 
   assert.equal(up.status, 201);
   assert.equal((await act(c.factory, a, 'resubmit')).status, 200);
   assert.equal((await act(c.pmu, a, 'accept')).status, 200);
-  const up2 = await c.factory.upload(`/applications/${a}/documents`, { kind: 'electricityApprovalFile' }, pdfVariant('elec'), 'elec.pdf');
-  assert.equal(up2.status, 201);
-  assert.equal((await act(c.factory, a, 'submit_electricity', { distributionCompany: 'شركة القناة' })).status, 200);
-  const r18 = 'موافقة الكهرباء غير مختومة من شركة التوزيع';
-  assert.equal((await act(c.pmu, a, 'request_correction', { reason: r18 })).status, 200);
-  assertReason(await channels(c.factory, a, 'app.correction_requested'), r18, 'T18');
+  const r18 = 'العقد الهندسي غير مختوم من الاستشاري';
+  assert.equal((await act(c.electricity, a, 'request_correction', { reason: r18 })).status, 200);
+  assertReason(await channels(c.factory, a, 'app.electricity_rejected'), r18, 'T18');
 
   await closeOpen();
   const b = await advanceTo('ENCPC_REVIEW', c, reg());

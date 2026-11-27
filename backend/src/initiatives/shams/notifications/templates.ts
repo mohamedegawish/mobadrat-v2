@@ -7,17 +7,17 @@ export const TEMPLATE_KEYS = [
   'auth.verify_email', 'auth.reset_password',
   'app.registry_failed', 'app.review_assigned', 'app.resubmitted', 'app.correction_requested', 'app.rejected',
   'app.encpc_compliant', 'app.offer_accepted', 'app.closed', 'app.sla_overdue',
-  'app.submitted', 'app.imc_accepted', 'app.provider_suspended',
+  'app.submitted', 'app.imc_accepted',
+  // D13–D18 (2026-11-27)
+  'app.encpc_rejected', 'app.provider_offer_accepted', 'app.electricity_rejected', 'ops.electricity_decision', 'app.sla_reminder',
   'auth.email_changed_old', 'auth.email_changed_new',
-  'ops.no_recipients', 'ops.no_providers', 'ops.registry_conflict', 'ops.contract_amount_alert', 'ops.bank_unavailable',
+  'ops.no_recipients', 'ops.registry_conflict', 'ops.contract_amount_alert', 'ops.bank_unavailable',
   // المراجعة الأمنية
   'auth.account_setup', 'ops.account_request', 'ops.account_event', 'auth.suspicious_logins', 'auth.registration_attempt',
   'ops.integration_key', 'registry.blocked', 'registry.released', 'registry.decision_lost', 'ops.registry_objection', 'registry.objection_decided',
   'ops.registry_held_by_inactive', 'app.bank_released', 'auth.recovery_requested', 'ops.recovery_pending', 'auth.recovery_approved', 'auth.recovery_closed',
-  // دليل مقدمي الخدمة
-  'ops.provider_pending', 'ops.provider_changed',
   // إيصالات ونتائج
-  'app.provider_selected', 'app.offer_received', 'app.electricity_received',
+  'app.offer_received', 'app.electricity_received',
   // G-01/G-02: اختيار البنك بعد قبول موافقة الكهرباء، والبنك جهة خارجية.
   'app.electricity_accepted', 'app.bank_selected',
   // مسار التعاقد عن طريق شركة توزيع الكهرباء.
@@ -26,13 +26,6 @@ export const TEMPLATE_KEYS = [
   'account.under_review', 'account.approved', 'account.correction_requested', 'account.rejected',
 ] as const;
 export type TemplateKey = (typeof TEMPLATE_KEYS)[number];
-
-/** بطاقة مقدم خدمة في البريد: الاسم والتفاصيل والموقع، والشعار يُرفق مضمنًا (cid:provider-logo-<id>). */
-export interface ProviderCard { id: string; nameAr: string; description: string; website: string; hasLogo: boolean }
-
-/** أقصى عدد بطاقات في البريد، والباقي في صفحة الاختيار داخل الحساب. */
-export const MAX_PROVIDERS_IN_EMAIL = 30;
-export const LOGO_CID_PREFIX = 'provider-logo-';
 
 export interface TemplateVars {
   name?: string;
@@ -59,14 +52,10 @@ export interface TemplateVars {
   threshold?: number;
   count?: number;
   providerNameAr?: string;
-  /** M6: أُعيد الطلب تلقائيًا إلى رفع العرض بعد إيقاف مقدم الخدمة. */
-  returned?: boolean;
-  /** لقطة دليل مقدمي الخدمة وقت المطابقة الفنية (تُعرض في بريد اختيار المقدم). */
-  providers?: ProviderCard[];
-  /** بعد قبول العرض: تنبيه لـPMU فقط، دون أي إجراء مطلوب أو تغيير في مسار الطلب. */
-  alertOnly?: boolean;
-  /** D6: suspension before the offer was sent — back to provider selection. */
-  reselect?: boolean;
+  /** D13: ENCPC's providers link. */
+  providersLink?: string;
+  /** D17: the ministry's decision, reported to PMU. */
+  approved?: boolean;
   /** H2: سبب رابط تعيين كلمة المرور. */
   purpose?: 'created' | 'reset';
   /** نص الحدث (حسابات/مفاتيح/استرداد) كما يُعرض. */
@@ -134,27 +123,6 @@ function htmlToText(html: string): string {
     .replace(/\n{2,}/g, '\n').trim();
 }
 
-function providersHtml(list: ProviderCard[]): string {
-  if (!list.length) return paragraph('لا يوجد مقدمو خدمة متاحون حاليًا. ستُبلَّغ حين تتوفر القائمة.');
-  const shown = list.slice(0, MAX_PROVIDERS_IN_EMAIL);
-  const cards = shown.map((p) => {
-    const desc = p.description.length > 300 ? `${p.description.slice(0, 297)}…` : p.description;
-    const logo = p.hasLogo
-      ? `<img src="cid:${LOGO_CID_PREFIX}${p.id}" width="56" height="56" alt="${escapeHtml(p.nameAr)}" style="display:block;width:56px;height:56px;object-fit:contain;border:1px solid #E2E8F0;border-radius:8px;background:#FFFFFF;">`
-      : '';
-    return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 10px 0;border:1px solid #E2E8F0;border-radius:10px;border-collapse:separate;"><tr>
-      <td style="padding:12px 14px;text-align:right;vertical-align:top;">
-        <div style="font-size:15px;font-weight:bold;color:#0B2545;">${escapeHtml(p.nameAr)}</div>
-        ${desc ? `<div style="font-size:13px;color:#334155;margin-top:4px;line-height:1.8;">${escapeMultiline(desc)}</div>` : ''}
-        ${p.website ? `<div style="font-size:12px;color:#64748B;margin-top:4px;" dir="ltr">${escapeHtml(p.website)}</div>` : ''}
-      </td>
-      ${logo ? `<td width="72" style="padding:12px 14px 12px 0;vertical-align:top;">${logo}</td>` : ''}
-    </tr></table><br>`;
-  }).join('');
-  const more = list.length > shown.length ? paragraph(`و${list.length - shown.length} مقدم خدمة آخر — القائمة الكاملة في صفحة الاختيار داخل حسابك.`) : '';
-  return sectionTitle('مقدمو الخدمة المتاحون') + cards + more;
-}
-
 function appRows(v: TemplateVars): Array<[string, string]> {
   const rows: Array<[string, string]> = [['رقم الطلب', ref(v)]];
   if (v.companyName) rows.push(['المنشأة', v.companyName]);
@@ -212,6 +180,7 @@ export function renderTemplate(key: TemplateKey, v: TemplateVars): Rendered {
       return build({
         subject: `إعادة تقديم الطلب ${ref(v)} — شمس الصناعة`, heading: 'أعاد المصنع تقديم الطلب', tone: 'info',
         panelTitle: v.stateAr ?? 'مراجعة', panelText: 'استكمل المصنع المطلوب وأعاد التقديم، والطلب عاد لمراجعة جهتكم.', rows: appRows(v),
+        body: v.reason ? paragraph(`<b>ملاحظات المصنع مع الإرسال:</b> ${escapeMultiline(v.reason)}`) : '',
         ctaLabel: 'فتح الطلب', link, english: `Application ${v.number ?? ''} was resubmitted and is back for your review.`,
         sms: `شمس الصناعة: أُعيد تقديم الطلب ${ref(v)} وهو بانتظار مراجعتكم.`,
       });
@@ -233,24 +202,74 @@ export function renderTemplate(key: TemplateKey, v: TemplateVars): Rendered {
         sms: `شمس الصناعة: رُفض الطلب ${ref(v)}.`,
       });
     case 'app.encpc_compliant': {
-      // الرابط يفتح صفحة الاختيار داخل الحساب (يتطلب تسجيل الدخول)؛ لا يختار أحد من الرسالة نفسها ولا يحمل الرابط توكنًا.
-      const selectLink = v.appId ? siteLink(`task/${encodeURIComponent(v.appId)}`) : link;
+      // D13: the button opens ENCPC's providers list; the offer is then uploaded from the account.
       return build({
-        subject: `قبول فني للطلب ${ref(v)} — اختر مقدم الخدمة`, heading: 'تم قبول الطلب فنيًا', tone: 'success',
-        panelTitle: 'مطابق فنيًا',
-        panelText: 'اجتاز طلبك المراجعة الفنية. الخطوة التالية: اختيار مقدم خدمة واحد من القائمة أدناه. يتم الاختيار من داخل حسابك بعد تسجيل الدخول، وتجد القائمة نفسها في لوحتك.',
-        rows: appRows(v), body: v.providers ? providersHtml(v.providers) : '',
-        ctaLabel: 'اختيار مقدم الخدمة', link: selectLink,
-        english: `Application ${v.number ?? ''} is technically compliant. Next: sign in and choose one service provider (${v.providers?.length ?? 0} available) from your dashboard or the link above.`,
-        sms: `شمس الصناعة: قُبل الطلب ${ref(v)} فنيًا. ادخل على حسابك لاختيار مقدم الخدمة.`,
+        subject: `قبول فني للطلب ${ref(v)} — مقدمو الخدمة`, heading: 'تم قبول الطلب فنيًا', tone: 'success',
+        panelTitle: 'قبول فني',
+        panelText: 'اجتاز طلبك المراجعة الفنية. اطّلع على مقدمي الخدمة من الزر أدناه، وتواصل مع من تختاره، ثم ارفع عرضه الفني وبيانات التواصل معه من حسابك.',
+        rows: appRows(v), body: (v.reason ? paragraph(`<b>ملاحظات ENCPC:</b> ${escapeMultiline(v.reason)}`) : '')
+          + (v.appId ? paragraph(`<a href="${escapeHtml(siteLink(`task/${encodeURIComponent(v.appId)}`))}">رفع العرض الفني من حسابك</a>`) : ''),
+        ctaLabel: 'عرض مقدمي الخدمة', link: v.providersLink || link,
+        english: `Application ${v.number ?? ''} is technically accepted. Open the providers list with the button, contact a provider, then upload their technical offer in your account.`,
+        sms: `شمس الصناعة: قُبل الطلب ${ref(v)} فنيًا. رابط مقدمي الخدمة في بريدك.`,
       });
     }
+    case 'app.encpc_rejected':
+      return build({
+        subject: `رفض فني للطلب ${ref(v)} — شمس الصناعة`, heading: 'رفض فني', tone: 'danger',
+        panelTitle: 'مطلوب إثبات حل المشكلة الفنية',
+        panelText: 'لم يُقبل الطلب فنيًا. عالج المشكلة المذكورة، ثم ارفع من حسابك ما يثبت حلها ليعود الطلب للمراجعة الفنية.',
+        rows: appRows(v), body: v.reason ? paragraph(`<b>سبب الرفض الفني:</b> ${escapeMultiline(v.reason)}`) : '',
+        ctaLabel: 'إرفاق إثبات الحل', link: v.appId ? siteLink(`task/${encodeURIComponent(v.appId)}`) : link,
+        english: `Application ${v.number ?? ''} was technically rejected. Fix the issue shown above, then upload proof from your account.`,
+        sms: `شمس الصناعة: رفض فني للطلب ${ref(v)}. ارفع ما يثبت حل المشكلة.`,
+      });
     case 'app.offer_accepted':
       return build({
         subject: `قبول العرض الفني للطلب ${ref(v)} — شمس الصناعة`, heading: 'تم قبول العرض الفني', tone: 'success',
-        panelTitle: 'فتح خطوة موافقة الكهرباء', panelText: 'قبلت وحدة إدارة المبادرة العرض الفني. ارفع الآن موافقة شركة الكهرباء؛ بعد قبولها تختار مسار التعاقد.', rows: appRows(v),
-        ctaLabel: 'رفع موافقة الكهرباء', link, english: `The technical offer for ${v.number ?? ''} was accepted. Please upload the electricity company approval; once it is accepted you will choose the contracting path.`,
-        sms: `شمس الصناعة: قُبل العرض الفني للطلب ${ref(v)}. ارفع موافقة شركة الكهرباء.`,
+        panelTitle: 'أُرسل الطلب إلى وزارة الكهرباء',
+        panelText: `قبلت وحدة إدارة المبادرة العرض الفني${v.providerNameAr ? ` المقدم من «${v.providerNameAr}»` : ''}، وأُبلغ مقدم الخدمة بالقبول. الطلب الآن لدى وزارة الكهرباء: تابع بريدك لرسالة قرارها.`,
+        rows: appRows(v), ctaLabel: 'متابعة الطلب', link,
+        english: `The technical offer for ${v.number ?? ''} was accepted, the provider was notified, and the application is with the Ministry of Electricity. Watch your email for its decision.`,
+        sms: `شمس الصناعة: قُبل العرض الفني للطلب ${ref(v)}. تابع بريد وزارة الكهرباء.`,
+      });
+    case 'app.provider_offer_accepted':
+      // D17: the provider has no account — no button into the platform, only the facts and what comes next.
+      return build({
+        subject: `قبول عرضكم الفني للطلب ${ref(v)} — شمس الصناعة`, heading: 'قُبل العرض الفني المقدم منكم', tone: 'success',
+        panelTitle: v.providerNameAr ?? 'مقدم الخدمة',
+        panelText: 'قبلت وحدة إدارة المبادرة العرض الفني الذي قدمتموه للمنشأة المذكورة، وأُرسل إلى وزارة الكهرباء. يمكنكم التنسيق مع المنشأة بشأن الخطوات التالية.',
+        rows: appRows(v).filter(([k]) => k !== 'الحالة'),
+        english: `The technical offer you prepared for "${v.companyName ?? ''}" (application ${v.number ?? ''}) was accepted and sent to the Ministry of Electricity.`,
+        sms: `شمس الصناعة: قُبل العرض الفني للطلب ${ref(v)}.`,
+      });
+    case 'app.electricity_rejected':
+      return build({
+        subject: `ملاحظات وزارة الكهرباء على الطلب ${ref(v)} — شمس الصناعة`, heading: 'لم تُقبل الموافقة بعد', tone: 'warning',
+        panelTitle: 'مطلوب الرد على ملاحظات وزارة الكهرباء',
+        panelText: 'رفضت وزارة الكهرباء الطلب بملاحظات. عالج الملاحظات، ثم ارفع من حسابك ما يثبت حلها ليعود الطلب إليها.',
+        rows: appRows(v), body: v.reason ? paragraph(`<b>ملاحظات وزارة الكهرباء:</b> ${escapeMultiline(v.reason)}`) : '',
+        ctaLabel: 'الرد على الملاحظات', link: v.appId ? siteLink(`task/${encodeURIComponent(v.appId)}`) : link,
+        english: `The Ministry of Electricity rejected application ${v.number ?? ''} with notes. Resolve them, then upload proof from your account.`,
+        sms: `شمس الصناعة: ملاحظات من وزارة الكهرباء على الطلب ${ref(v)}.`,
+      });
+    case 'ops.electricity_decision':
+      return build({
+        subject: `${v.approved ? 'قبلت' : 'رفضت'} وزارة الكهرباء الطلب ${ref(v)} — للمتابعة`, heading: 'قرار وزارة الكهرباء', tone: v.approved ? 'success' : 'warning',
+        panelTitle: v.approved ? 'قُبلت الموافقة ورُفع ملفها' : 'رُفض الطلب بملاحظات',
+        panelText: v.approved ? 'انتقل الطلب إلى اختيار مسار التعاقد.' : 'عاد الطلب إلى المصنع للرد على الملاحظات.',
+        rows: appRows(v), body: v.reason ? paragraph(`<b>الملاحظات:</b> ${escapeMultiline(v.reason)}`) : '', ctaLabel: 'فتح الطلب', link,
+        english: `The Ministry of Electricity ${v.approved ? 'approved' : 'rejected'} application ${v.number ?? ''}.`,
+        sms: `شمس الصناعة: قرار وزارة الكهرباء في الطلب ${ref(v)}.`,
+      });
+    case 'app.sla_reminder':
+      return build({
+        subject: `تنبيه من وحدة إدارة المبادرة: الطلب ${ref(v)} متأخر`, heading: 'تنبيه: الطلب بانتظار إجرائكم', tone: 'warning',
+        panelTitle: v.stateAr ?? 'طلب متأخر',
+        panelText: `تذكّركم وحدة إدارة المبادرة بأن الطلب تجاوز المهلة المحددة${v.daysOverdue ? ` بنحو ${v.daysOverdue} يوم` : ''} وهو بانتظار إجرائكم. يرجى اتخاذه في أقرب وقت.`,
+        rows: appRows(v), ctaLabel: 'فتح الطلب', link,
+        english: `Reminder from the PMU: application ${v.number ?? ''} is overdue and awaiting your action (${v.stateEn ?? ''}).`,
+        sms: `شمس الصناعة: تذكير — الطلب ${ref(v)} متأخر وبانتظار إجرائكم.`,
       });
     case 'app.closed': {
       const viaDistribution = v.contractPath === 'distribution';
@@ -329,35 +348,6 @@ export function renderTemplate(key: TemplateKey, v: TemplateVars): Rendered {
         rows: appRows(v), ctaLabel: 'متابعة الطلب', link,
         english: `Application ${v.number ?? ''} passed the first review and moved to technical review. No action is needed now.`,
         sms: `شمس الصناعة: قُبل الطلب ${ref(v)} وأُحيل للمراجعة الفنية.`,
-      });
-    case 'app.provider_suspended':
-      return build({
-        subject: `مقدم الخدمة على الطلب ${ref(v)} لم يعد معتمدًا — شمس الصناعة`, heading: 'تغيّر اعتماد مقدم الخدمة', tone: 'warning',
-        panelTitle: v.providerNameAr ?? 'مقدم الخدمة',
-        panelText: v.alertOnly
-          ? 'للعلم فقط: أُوقف اعتماد مقدم الخدمة بعد قبول العرض الفني لهذا الطلب. لا يتغير مسار الطلب ولا يُطلب إجراء من المصنع؛ تظهر حالة المقدم على الطلب.'
-          : v.reselect
-          // D6: الإيقاف قبل إرسال العرض يعيد الطلب لاختيار مقدم الخدمة.
-          ? 'أُوقف اعتماد مقدم الخدمة المختار قبل إرسال العرض الفني، فعاد الطلب تلقائيًا إلى «اختيار مقدم الخدمة». اختر مقدم خدمة معتمدًا آخر ثم ارفع العرض الفني منه.'
-          : v.returned
-          // M6 (القرار 6): الإيقاف أثناء مراجعة العرض أو تصحيحه يعيد الطلب لرفع العرض.
-          ? 'أُوقف اعتماد مقدم الخدمة المختار لهذا الطلب أثناء مراجعة العرض الفني، فأُعيد الطلب تلقائيًا إلى مرحلة رفع العرض. اختر مقدم خدمة معتمدًا آخر وارفع عرضًا فنيًا جديدًا منه.'
-          : 'أُوقف اعتماد مقدم الخدمة المختار لهذا الطلب. إذا لم يُرسل العرض الفني بعد، اختر مقدم خدمة معتمدًا آخر من صفحة المهمة.',
-        rows: appRows(v), ctaLabel: 'فتح الطلب', link,
-        english: v.alertOnly
-          ? `FYI: the service provider on application ${v.number ?? ''} was suspended after its offer was accepted. The application is unchanged.`
-          : v.reselect
-          ? `The service provider on application ${v.number ?? ''} was suspended before the offer was sent; the application returned to provider selection.`
-          : v.returned
-          ? `The service provider on application ${v.number ?? ''} was suspended during offer review; the application returned to offer upload.`
-          : `The service provider on application ${v.number ?? ''} is no longer approved.`,
-        sms: v.returned
-          ? `شمس الصناعة: أُوقف مقدم الخدمة على الطلب ${ref(v)} وأُعيد الطلب لرفع عرض جديد.`
-          : v.reselect
-          ? `شمس الصناعة: أُوقف مقدم الخدمة على الطلب ${ref(v)} وعاد الطلب لاختيار مقدم خدمة آخر.`
-          : v.alertOnly
-          ? `شمس الصناعة: للعلم — أُوقف مقدم الخدمة على الطلب ${ref(v)} بعد قبول العرض، ولا تغيير في مسار الطلب.`
-          : `شمس الصناعة: مقدم الخدمة على الطلب ${ref(v)} لم يعد معتمدًا. ادخل على الموقع.`,
       });
     // ── المراجعة الأمنية: الحسابات (H2) ──
     case 'auth.account_setup': {
@@ -559,15 +549,6 @@ export function renderTemplate(key: TemplateKey, v: TemplateVars): Rendered {
         english: `Operational alert: application ${v.number ?? ''} entered a stage whose organization has no active users.`,
         sms: `شمس الصناعة: تنبيه — الطلب ${ref(v)} أُحيل لجهة بلا مستخدمين نشطين.`,
       });
-    case 'app.provider_selected':
-      return build({
-        subject: `تم تسجيل اختيارك لمقدم الخدمة — الطلب ${ref(v)}`, heading: 'تم تسجيل اختيار مقدم الخدمة', tone: 'success',
-        panelTitle: v.providerNameAr ?? 'مقدم الخدمة',
-        panelText: 'سُجّل اختيارك لمقدم الخدمة المذكور لهذا الطلب. الخطوة التالية: تواصل مع مقدم الخدمة مباشرةً خارج المنصة للحصول على العرض الفني (المنصة لا تدير التفاوض معه)، ثم ارفع العرض الذي أعده لك.',
-        rows: appRows(v), ctaLabel: 'رفع العرض الفني', link: v.appId ? siteLink(`task/${encodeURIComponent(v.appId)}`) : link,
-        english: `Your service provider choice for application ${v.number ?? ''} was recorded. Next: contact the provider directly, outside the platform, to obtain the technical offer, then upload it.`,
-        sms: `شمس الصناعة: سُجّل اختيار مقدم الخدمة للطلب ${ref(v)}. ارفع العرض الفني من الموقع.`,
-      });
     case 'app.offer_received':
       return build({
         subject: `استلمنا العرض الفني للطلب ${ref(v)} — شمس الصناعة`, heading: 'تم استلام العرض الفني', tone: 'info',
@@ -578,22 +559,21 @@ export function renderTemplate(key: TemplateKey, v: TemplateVars): Rendered {
         sms: `شمس الصناعة: استُلم العرض الفني للطلب ${ref(v)} وهو قيد المراجعة.`,
       });
     case 'app.electricity_received':
-      // إيصال للمصنع باستلام موافقة الكهرباء. البنك يُختار بعد قبولها (G-01).
       return build({
-        subject: `استلمنا موافقة الكهرباء للطلب ${ref(v)} — شمس الصناعة`, heading: 'تم استلام موافقة الكهرباء', tone: 'info',
-        panelTitle: 'موافقة الكهرباء قيد المراجعة',
-        panelText: 'أُرسلت موافقة الكهرباء إلى وحدة إدارة المبادرة للمراجعة. ستصلك رسالة بالقرار: قبول الموافقة (ثم تختار مسار التعاقد) أو طلب استكمالها.',
+        subject: `استلمنا ردكم على ملاحظات الكهرباء للطلب ${ref(v)} — شمس الصناعة`, heading: 'تم استلام ردكم', tone: 'info',
+        panelTitle: 'الطلب لدى وزارة الكهرباء',
+        panelText: 'أُرسل ما أرفقتموه إلى وزارة الكهرباء للمراجعة. ستصلك رسالة بالقرار.',
         rows: appRows(v), ctaLabel: 'متابعة الطلب', link,
-        english: `The electricity approval for application ${v.number ?? ''} was received and is under PMU review. After it is accepted you will choose the contracting path.`,
-        sms: `شمس الصناعة: استُلمت موافقة الكهرباء للطلب ${ref(v)} وهي قيد المراجعة.`,
+        english: `Your answer for application ${v.number ?? ''} was received and is with the Ministry of Electricity.`,
+        sms: `شمس الصناعة: استُلم ردكم للطلب ${ref(v)} وهو لدى وزارة الكهرباء.`,
       });
     case 'app.electricity_accepted':
       return build({
         subject: `قبول موافقة الكهرباء للطلب ${ref(v)} — اختر مسار التعاقد`, heading: 'قُبلت موافقة الكهرباء', tone: 'success',
         panelTitle: 'الخطوة التالية: اختيار مسار التعاقد',
-        panelText: 'قبلت وحدة إدارة المبادرة موافقة الكهرباء. اختر الآن من حسابك مسار إتمام التعاقد (اختيار نهائي لا يمكن تغييره).',
+        panelText: 'وافقت وزارة الكهرباء على الطلب. اختر الآن من حسابك مسار إتمام التعاقد (اختيار نهائي لا يمكن تغييره).',
         rows: appRows(v),
-        body: paragraph('<b>1) التعاقد من خلال بنك:</b> تختار البنك من القائمة، وتتواصل معه مباشرةً خارج المنصة، ثم تسجّل نتيجة التعاقد مع مستند الإثبات.')
+        body: (v.reason ? paragraph(`<b>ملاحظات وزارة الكهرباء:</b> ${escapeMultiline(v.reason)}`) : '') + paragraph('<b>1) التعاقد من خلال بنك:</b> تختار البنك من القائمة، وتتواصل معه مباشرةً خارج المنصة، ثم تسجّل نتيجة التعاقد مع مستند الإثبات.')
           + paragraph('<b>2) التعاقد من خلال شركة توزيع الكهرباء:</b> ترفع موافقة شركة التوزيع على التعاقد، وتراجعها وحدة إدارة المبادرة وتتخذ القرار النهائي.'),
         ctaLabel: 'اختيار مسار التعاقد', link: v.appId ? siteLink(`task/${encodeURIComponent(v.appId)}`) : link,
         english: `The electricity approval for application ${v.number ?? ''} was accepted. Next: choose how to complete the contract in your account — through a bank, or through the electricity distribution company.`,
@@ -625,33 +605,6 @@ export function renderTemplate(key: TemplateKey, v: TemplateVars): Rendered {
         rows: appRows(v), body: v.reason ? paragraph(`<b>ملاحظاتك المرفقة:</b> ${escapeMultiline(v.reason)}`) : '', ctaLabel: 'متابعة الطلب', link,
         english: `The distribution company approval for application ${v.number ?? ''} was received and is under PMU review (final decision).`,
         sms: `شمس الصناعة: استُلمت موافقة شركة التوزيع للطلب ${ref(v)} وهي قيد المراجعة.`,
-      });
-    case 'ops.provider_pending':
-      return build({
-        subject: `مقدم خدمة بانتظار اعتمادكم: ${v.providerNameAr ?? ''}`, heading: 'مقدم خدمة جديد بانتظار الاعتماد', tone: 'info',
-        panelTitle: v.providerNameAr ?? 'مقدم الخدمة',
-        panelText: 'فعّلت ENCPC مقدم خدمة في دليل المقدمين، ولا يظهر للمصانع قبل اعتماد وحدة إدارة المبادرة له.',
-        ctaLabel: 'مراجعة مقدمي الخدمة', link: siteLink('providers'),
-        english: `ENCPC activated the service provider "${v.providerNameAr ?? ''}"; it stays hidden from factories until the PMU approves it.`,
-        sms: 'شمس الصناعة: مقدم خدمة جديد بانتظار اعتماد وحدة إدارة المبادرة.',
-      });
-    case 'ops.provider_changed':
-      return build({
-        subject: `تعديل على مقدم خدمة معتمد: ${v.providerNameAr ?? ''}`, heading: 'عُدّلت بيانات مقدم خدمة معتمد', tone: 'warning',
-        panelTitle: v.providerNameAr ?? 'مقدم الخدمة',
-        panelText: `${v.eventAr ?? ''}. حالة الاعتماد وظهور المقدم للمصانع لم يتغيرا، وسجل التدقيق يحفظ القيم قبل التعديل وبعده. راجعوا التعديل، ولكم إيقاف المقدم إن لزم.`,
-        ctaLabel: 'مراجعة مقدمي الخدمة', link: siteLink('providers'),
-        english: `The approved service provider "${v.providerNameAr ?? ''}" was edited — ${v.eventEn ?? ''}. Approval and visibility to factories are unchanged; the audit log keeps the before/after values. Review it, and suspend the provider if needed.`,
-        sms: 'شمس الصناعة: عُدّلت بيانات مقدم خدمة معتمد. راجعوا التعديل في صفحة مقدمي الخدمة.',
-      });
-    case 'ops.no_providers':
-      return build({
-        subject: `تنبيه تشغيلي: لا يوجد مقدمو خدمة معتمدون — الطلب ${ref(v)}`, heading: 'قائمة مقدمي الخدمة فارغة', tone: 'danger',
-        panelTitle: 'لا يوجد مقدم خدمة معتمد',
-        panelText: 'وصل طلب لمرحلة اختيار مقدم الخدمة ولا يوجد أي مقدم خدمة معتمد، فلا يستطيع المصنع المتابعة. اعتمد مقدم خدمة واحدًا على الأقل.',
-        rows: appRows(v), ctaLabel: 'فتح الطلب', link,
-        english: `Operational alert: application ${v.number ?? ''} reached provider selection but no provider is approved.`,
-        sms: `شمس الصناعة: تنبيه — لا يوجد مقدمو خدمة معتمدون (الطلب ${ref(v)}).`,
       });
     case 'ops.registry_conflict':
       return build({

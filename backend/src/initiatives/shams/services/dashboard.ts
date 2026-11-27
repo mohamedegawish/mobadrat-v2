@@ -11,7 +11,6 @@ import { listApplications, type AppRow } from '../store/applications.js';
 import { listScope, visibleTransitions } from '../access/visibility.js';
 import { listFlags, slaConfigured } from '../workflow/applicationView.js';
 import { APPLICATION_STATES, NON_TERMINAL_STATES, STATE_LABELS, TRANSITIONS, RETIRED_ACTION_LABELS, SYSTEM_ACTION_LABELS, type ApplicationState } from '../workflow/shamsWorkflow.js';
-import { listProviders } from '../store/providers.js';
 import { shamsPolicy } from '../config/shamsPolicy.js';
 import { stuckApplications } from './readiness.js';
 import { listDisputes } from './registryDisputes.js';
@@ -24,7 +23,7 @@ export type CardTone = 'pending' | 'correction' | 'approved' | 'rejected' | 'com
 
 /** link.param = معامل #work-queue/<param>: mine | overdue | all | حالات مفصولة بـ«-». null = بلا رابط. */
 export interface DashboardCard { key: string; labelAr: string; labelEn: string; count: number; tone: CardTone; link: { view: 'work-queue'; param: string } | null; hintAr?: string; hintEn?: string }
-export interface AttentionItem { key: string; labelAr: string; labelEn: string; count: number; link: { view: 'work-queue' | 'approvals' | 'providers'; param: string | null } | null }
+export interface AttentionItem { key: string; labelAr: string; labelEn: string; count: number; link: { view: 'work-queue' | 'approvals'; param: string | null } | null }
 export interface RecentItem { at: string; applicationId: string; number: string | null; companyName: string; labelAr: string; labelEn: string; toLabelAr: string; toLabelEn: string }
 
 const ACTION_LABEL = new Map<string, { ar: string; en: string }>();
@@ -81,39 +80,35 @@ export async function buildDashboard(user: UserInternal) {
         card('rejected', 'مرفوضة', 'Rejected', n('REJECTED'), 'rejected', link('REJECTED')),
       );
       break;
-    case 'encpc_reviewer': {
+    case 'encpc_reviewer':
       cards.push(
-        card('correction', 'بانتظار تصحيح المصنع', 'Awaiting factory correction', n('ENCPC_CORRECTION'), 'correction', link('ENCPC_CORRECTION'), { ar: 'طلبات تحتاج متابعة', en: 'Follow-up needed' }),
-        card('compliant', 'مطابقة فنيًا', 'Technically compliant', await countTransitioned(scope.sql, scope.params, 'ENCPC_REVIEW', 'compliant'), 'approved', null, { ar: 'فُتح لها اختيار مقدم الخدمة', en: 'Provider selection unlocked' }),
+        card('correction', 'بانتظار رد المصنع على الرفض الفني', 'Awaiting the factory’s answer', n('ENCPC_CORRECTION'), 'correction', link('ENCPC_CORRECTION'), { ar: 'طلبات تحتاج متابعة', en: 'Follow-up needed' }),
+        card('compliant', 'مقبولة فنيًا', 'Technically accepted', await countTransitioned(scope.sql, scope.params, 'ENCPC_REVIEW', 'compliant'), 'approved', null, { ar: 'أُرسل لها لينك مقدمي الخدمة', en: 'Providers link sent' }),
       );
-      const dir = await listProviders();
-      extra = {
-        providers: {
-          total: dir.length, visible: dir.filter((p) => p.isActive === 1 && (shamsPolicy.providerApprovalRequired ? p.status === 'approved' : p.status !== 'suspended')).length,
-          inactive: dir.filter((p) => p.isActive !== 1).length,
-          awaitingApproval: shamsPolicy.providerApprovalRequired ? dir.filter((p) => p.isActive === 1 && p.status === 'pending').length : 0,
-          approvalRequired: shamsPolicy.providerApprovalRequired,
-        },
-      };
       break;
-    }
+    case 'electricity_reviewer':
+      cards.push(
+        card('electricity', 'طلبات بانتظار قرار الوزارة', 'Awaiting the ministry’s decision', n('ELECTRICITY_REVIEW'), 'pending', link('ELECTRICITY_REVIEW')),
+        card('correction', 'بانتظار رد المصنع على الملاحظات', 'Awaiting the factory’s answer', n('ELECTRICITY_UPLOAD'), 'correction', link('ELECTRICITY_UPLOAD')),
+        card('approved', 'وافقت عليها الوزارة', 'Approved by the ministry', await countTransitioned(scope.sql, scope.params, 'ELECTRICITY_REVIEW', 'accept'), 'approved', null),
+      );
+      break;
     case 'pmu_reviewer': {
       const stuck = await stuckApplications();
       const disputes = (await listDisputes()).filter((d) => d.status === 'open').length;
       const recoveries = (await listRecoveries()).filter((r) => r.status === 'pending_approval').length;
       const accountRequests = (await listAccountRequests(user)).length;
       const keys = (await pendingKeys(user)).length;
-      const providersAwaiting = shamsPolicy.providerApprovalRequired ? (await listProviders()).filter((p) => p.isActive === 1 && p.status === 'pending').length : 0;
       cards.push(
         card('offer', 'عروض فنية بانتظار المراجعة', 'Technical offers to review', n('OFFER_REVIEW'), 'pending', link('OFFER_REVIEW')),
-        card('electricity', 'موافقات كهرباء بانتظار المراجعة', 'Electricity approvals to review', n('ELECTRICITY_REVIEW'), 'pending', link('ELECTRICITY_REVIEW'),
-          { ar: 'قبولها يفتح للمصنع اختيار مسار التعاقد', en: 'Accepting it lets the factory choose the contracting path' }),
+        card('electricity', 'لدى وزارة الكهرباء', 'With the Ministry of Electricity', n('ELECTRICITY_REVIEW'), 'info', link('ELECTRICITY_REVIEW'),
+          { ar: 'للمتابعة — القرار للوزارة', en: 'Follow-up — the ministry decides' }),
         card('distribution', 'موافقات شركة التوزيع بانتظار المراجعة', 'Distribution company approvals to review', n('DISTRIBUTION_REVIEW'), 'pending', link('DISTRIBUTION_REVIEW'),
           { ar: 'قرار نهائي: القبول = تم التعاقد، والرفض يغلق الطلب', en: 'Final decision: accept = contracted, reject closes the application' }),
         card('bank-choice', 'بانتظار اختيار المصنع لمسار التعاقد', 'Awaiting the factory’s contracting path choice', awaitingBankChoice, 'info', null),
         card('distribution-upload', 'بانتظار رفع المصنع لموافقة شركة التوزيع', 'Awaiting the factory’s distribution approval upload', n('DISTRIBUTION_UPLOAD'), 'info', link('DISTRIBUTION_UPLOAD')),
         card('outcome', 'بانتظار تسجيل نتيجة التعاقد (تعامل مع البنك خارج المنصة)', 'Awaiting the contract outcome (bank handled outside the platform)', awaitingOutcome, 'pending', null),
-        card('correction', 'بانتظار تصحيح المصنع', 'Awaiting factory corrections', n('IMC_CORRECTION', 'ENCPC_CORRECTION', 'OFFER_CORRECTION'), 'correction', link('IMC_CORRECTION', 'ENCPC_CORRECTION', 'OFFER_CORRECTION')),
+        card('correction', 'بانتظار تصحيح المصنع', 'Awaiting factory corrections', n('IMC_CORRECTION', 'ENCPC_CORRECTION', 'OFFER_CORRECTION', 'ELECTRICITY_UPLOAD'), 'correction', link('IMC_CORRECTION', 'ENCPC_CORRECTION', 'OFFER_CORRECTION', 'ELECTRICITY_UPLOAD')),
         card('completed', 'مكتملة (تم التعاقد)', 'Completed (contracted)', n('CONTRACTED'), 'completed', link('CONTRACTED')),
         card('rejected', 'مرفوضة', 'Rejected', n('REJECTED'), 'rejected', link('REJECTED')),
         card('closed', 'مغلقة بلا تعاقد أو منسحبة', 'Closed without contract or withdrawn', n('CLOSED_NOT_CONTRACTED', 'WITHDRAWN'), 'closed', link('CLOSED_NOT_CONTRACTED', 'WITHDRAWN')),
@@ -121,7 +116,6 @@ export async function buildDashboard(user: UserInternal) {
       if (sla && overdue) attention.push({ key: 'overdue', labelAr: 'طلبات متأخرة عن المهلة', labelEn: 'Overdue applications', count: overdue, link: { view: 'work-queue', param: 'overdue' } });
       if (stuck.length) attention.push({ key: 'stuck', labelAr: 'طلبات عالقة بلا جهة تعمل عليها', labelEn: 'Stuck applications (no one can act)', count: stuck.length, link: null });
       if (disputes) attention.push({ key: 'disputes', labelAr: 'نزاعات أرقام سجل مفتوحة', labelEn: 'Open registry-number disputes', count: disputes, link: { view: 'approvals', param: null } });
-      if (providersAwaiting) attention.push({ key: 'providers', labelAr: 'مقدمو خدمة بانتظار اعتمادكم', labelEn: 'Providers awaiting your approval', count: providersAwaiting, link: { view: 'providers', param: null } });
       if (recoveries) attention.push({ key: 'recovery', labelAr: 'طلبات استرداد حسابات بانتظار موافقتكم', labelEn: 'Account recovery requests awaiting approval', count: recoveries, link: { view: 'approvals', param: null } });
       if (accountRequests) attention.push({ key: 'accounts', labelAr: 'طلبات حسابات بانتظار موافقتكم', labelEn: 'Account requests awaiting approval', count: accountRequests, link: { view: 'approvals', param: null } });
       if (keys) attention.push({ key: 'keys', labelAr: 'مفاتيح ربط بانتظار الاعتماد', labelEn: 'Integration keys awaiting approval', count: keys, link: { view: 'approvals', param: null } });

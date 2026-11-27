@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Building, Building2, FileStack, Gavel, Landmark, ShieldAlert } from 'lucide-react';
+import { Bell, Building, Building2, FileStack, Gavel, Landmark, ShieldAlert, Wrench } from 'lucide-react';
 import { api, type AllowedAction, type ApplicationDetail } from '../../api';
 import { errorText, store, useStore } from '../../store/state';
 import { useAsync, formatDate, formatNumber } from '../../hooks/useAsync';
@@ -9,6 +9,7 @@ import { ErrorBox } from '../ui/ErrorBox';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { DataSections, DocumentsList, FinalOutcomeCard, StageTracker, TaskCard, contractPathLabel, factoryTarget } from '../application/shared';
 import { useToast } from '../common/ToastSystem';
+import { PdfUploader } from '../ui/PdfUploader';
 
 type Tab = 'data' | 'documents';
 
@@ -25,7 +26,7 @@ export const ApplicationDetailView: React.FC = () => {
   if (res.error || !app) return <div className="container-custom page"><ErrorState message={res.error} onRetry={res.reload} /></div>;
 
   const isFactory = user?.role === 'factory_owner';
-  // المصنع لا يرى هنا إلا الانسحاب: باقي إجراءاته (إرسال، اختيار مقدم الخدمة، رفع العرض/الكهرباء، التعاقد) تحتاج مدخلات
+  // المصنع لا يرى هنا إلا الانسحاب: باقي إجراءاته (إرسال، رفع العرض، الرد على الملاحظات، التعاقد) تحتاج مدخلات
   // لا تعرضها هذه اللوحة، فتُنفَّذ من صفحاتها عبر «تنفيذ المطلوب» — وإلا أُرسلت فارغة وفشلت في السيرفر.
   const decisions = app.allowedActions.filter((a) => (isFactory ? a.action === 'withdraw' : a.action !== 'withdraw'));
   const back = () => store.navigate(isFactory ? 'factory-dashboard' : 'work-queue');
@@ -43,7 +44,10 @@ export const ApplicationDetailView: React.FC = () => {
           </div>
           <p className="page-sub">{app.companyName} · {t('المحاولة', 'Attempt')} {formatNumber(app.attempt, isAr)} · {t('دخل المرحلة', 'In stage since')} {formatDate(app.stateEnteredAt, isAr, true)}</p>
         </div>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={back}>{t('رجوع', 'Back')}</button>
+        <div className="row" style={{ gap: '0.4rem' }}>
+          {user?.role === 'pmu_reviewer' && app.overdue ? <RemindButton app={app} /> : null}
+          <button type="button" className="btn btn-secondary btn-sm" onClick={back}>{t('رجوع', 'Back')}</button>
+        </div>
       </div>
 
       {app.closedAt ? (
@@ -61,7 +65,7 @@ export const ApplicationDetailView: React.FC = () => {
       ) : null}
       <div className="card" style={{ marginBottom: '1rem' }}><StageTracker step={app.step} state={app.state} /></div>
       <div style={{ marginBottom: '1rem' }}>
-        <TaskCard task={app.currentTask} onAct={isFactory ? () => store.navigate(factoryTarget(app.state), app.id) : undefined} actLabel={t('تنفيذ المطلوب', 'Do it now')} />
+        <TaskCard task={app.currentTask} returnReason={app.returnDecision?.reason} onAct={isFactory ? () => store.navigate(factoryTarget(app.state), app.id) : undefined} actLabel={t('تنفيذ المطلوب', 'Do it now')} />
       </div>
 
       {app.metadataOnly ? (
@@ -81,6 +85,8 @@ export const ApplicationDetailView: React.FC = () => {
 
       {/* مراجعة موافقة شركة التوزيع: المستند ونسخه وتاريخ الإرسال أمام المراجع مباشرةً فوق القرار */}
       {app.state === 'DISTRIBUTION_REVIEW' && app.distributionContract ? <div style={{ marginBottom: '1rem' }}><DistributionPanel app={app} /></div> : null}
+
+      {!isFactory && !app.metadataOnly ? <ReviewContext app={app} /> : null}
 
       {decisions.length ? <DecisionPanel app={app} actions={decisions} onDone={async () => res.setData(await api.getApplication(app.id))} /> : null}
 
@@ -103,10 +109,53 @@ export const ApplicationDetailView: React.FC = () => {
   );
 };
 
-export const ProviderStatus: React.FC<{ status: 'pending' | 'approved' | 'suspended' }> = ({ status }) => {
+/** D17: PMU's reminder to the late party — once a day per stage (the server says when it was already sent). */
+const RemindButton: React.FC<{ app: ApplicationDetail }> = ({ app }) => {
+  const { isAr, t } = useStore();
+  const { toast } = useToast();
+  const [busy, setBusy] = useState(false);
+  const send = async () => {
+    setBusy(true);
+    try { await api.remindResponsible(app.id); toast('success', t('أُرسل التنبيه للجهة المتأخرة.', 'The late party was reminded.')); }
+    catch (e) { toast('error', errorText(e, isAr)); } finally { setBusy(false); }
+  };
+  return <button type="button" className="btn btn-primary btn-sm" onClick={() => void send()} disabled={busy} data-testid="remind-responsible"><Bell size={14} /> {t('إرسال تنبيه للجهة المتأخرة', 'Remind the late party')}</button>;
+};
+
+/** What the reviewer of the current stage needs in front of the decision: the provider, the offer, the factory's proof. */
+const ReviewContext: React.FC<{ app: ApplicationDetail }> = ({ app }) => {
   const { t } = useStore();
-  const m = { approved: ['badge-approved', t('معتمد', 'Approved')], suspended: ['badge-rejected', t('موقوف', 'Suspended')], pending: ['badge-pending', t('بانتظار الاعتماد', 'Pending')] }[status];
-  return <span className={`badge ${m[0]}`} data-testid="provider-status">{m[1]}</span>;
+  const reviewing = app.state === 'ENCPC_REVIEW' || app.state === 'OFFER_REVIEW' || app.state === 'ELECTRICITY_REVIEW';
+  const proofs = reviewing && app.documents.some((d) => d.kind === 'correctionProofFile');
+  // The factory's comment sent with its latest answer to a rejection.
+  const answer = [...app.transitions].reverse().find((x) => x.action === 'resubmit' && x.toState === app.state)?.reason;
+  const offer = app.state !== 'ENCPC_REVIEW' && app.documents.some((d) => d.kind === 'technicalOfferFile');
+  if (!app.providerInfo && !app.encpcAcceptance && !proofs && !offer) return null;
+  return (
+    <div className="card" style={{ marginBottom: '1rem' }} data-testid="review-context">
+      {app.providerInfo ? (
+        <>
+          <h3 style={{ marginTop: 0, fontSize: '0.98rem' }}><Wrench size={16} style={{ verticalAlign: '-3px' }} /> {t('مقدم الخدمة', 'Service provider')}</h3>
+          <dl className="kv" data-testid="provider-info"><dt>{t('الاسم', 'Name')}</dt><dd>{app.providerInfo.name}</dd>
+            <dt>{t('التواصل', 'Contact')}</dt><dd dir="ltr">{[app.providerInfo.email, app.providerInfo.phone].filter(Boolean).join(' · ') || '—'}</dd></dl>
+        </>
+      ) : null}
+      {app.encpcAcceptance ? (
+        <p className="form-helper" style={{ whiteSpace: 'pre-line' }}>
+          {t('قبول ENCPC الفني', 'ENCPC technical acceptance')}: <a href={app.encpcAcceptance.providersLink} target="_blank" rel="noopener noreferrer" data-testid="providers-link">{t('لينك مقدمي الخدمة', 'Providers link')}</a>
+          {app.encpcAcceptance.note ? ` — ${app.encpcAcceptance.note}` : ''}
+        </p>
+      ) : null}
+      {offer ? <div data-testid="stage-files-technicalOfferFile"><div className="form-label">{t('العرض الفني', 'Technical offer')}</div><DocumentsList app={app} kinds={['technicalOfferFile']} /></div> : null}
+      {proofs ? (
+        <div data-testid="stage-files-correctionProofFile">
+          <div className="form-label">{t('مرفقات المصنع لإثبات حل المشكلة', 'The factory’s proof that the issue is fixed')}</div>
+          {answer ? <p className="form-helper" style={{ whiteSpace: 'pre-line' }}>{t('تعليق المصنع', 'Factory comment')}: {answer}</p> : null}
+          <DocumentsList app={app} kinds={['correctionProofFile']} />
+        </div>
+      ) : null}
+    </div>
+  );
 };
 
 /** I3: تعارض رقم السجل مع طلب مصنع آخر — يظهر لـ IMC وPMU أعلى الطلب. */
@@ -224,25 +273,31 @@ const DecisionPanel: React.FC<{ app: ApplicationDetail; actions: AllowedAction[]
   const [reason, setReason] = useState('');
   const [defs, setDefs] = useState<Array<{ field: string; note: string }>>([{ field: '', note: '' }]);
   const [reasonCode, setReasonCode] = useState<'' | 'registry_ownership_mismatch' | 'other'>('');
+  const [providersLink, setProvidersLink] = useState('');
+  const [distributionCompany, setDistributionCompany] = useState('');
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
   const formFields = (meta?.form.fields ?? []).map((f) => ({ key: f.key, label: isAr ? f.labelAr : f.labelEn }));
-  const electricityFields = [
-    { key: 'electricityApprovalFile', label: t('ملف موافقة الكهرباء', 'Electricity approval file') },
-    { key: 'distributionCompany', label: t('شركة التوزيع', 'Distribution company') },
-  ];
-  const isElectricity = app.state === 'ELECTRICITY_REVIEW';
   const needDefs = Boolean(active?.requires.deficiencies);
-  const showReason = active ? (active.requires.reason || needDefs || ['accept', 'compliant'].includes(active.action) || isElectricity) : false;
+  const needLink = Boolean(active?.requires.providersLink);
+  const needApproval = Boolean(active?.requires.electricity);
+  const hasApproval = app.documents.some((d) => d.kind === 'electricityApprovalFile' && d.isCurrent);
+  const showReason = active ? (active.requires.reason || needDefs || ['accept', 'compliant'].includes(active.action)) : false;
   const cleanDefs = defs.filter((d) => d.field && d.note.trim());
   const valid = !active ? false
     : needDefs ? cleanDefs.length > 0
+    : needLink ? /^https?:\/\/[^\s]+\.[^\s]+$/.test(providersLink.trim())
+    : needApproval ? hasApproval && distributionCompany.trim().length >= 2
     : active.action === 'reject' ? Boolean(reasonCode) && reason.trim().length >= 3
     : active.requires.reason ? reason.trim().length >= 3 : true;
 
   const choose = (a: AllowedAction) => { setActive(a); setError(''); setReason(''); setDefs([{ field: '', note: '' }]); setReasonCode(''); };
+
+  const uploadApproval = async (file: File) => {
+    try { await api.uploadDocument(app.id, 'electricityApprovalFile', file); toast('success', t('تم رفع الملف.', 'File uploaded.')); await onDone(); } catch (e) { toast('error', errorText(e, isAr)); }
+  };
 
   const submit = async () => {
     if (!active) return;
@@ -250,8 +305,12 @@ const DecisionPanel: React.FC<{ app: ApplicationDetail; actions: AllowedAction[]
     const body: Record<string, unknown> = { expectedVersion: app.version };
     if (active.action === 'reject') Object.assign(body, { reason: reason.trim(), reasonCode });
     else if (needDefs) Object.assign(body, { deficiencies: cleanDefs.map((d) => ({ field: d.field, note: d.note.trim() })), reason: reason.trim() || undefined });
-    else if (active.requires.reason) Object.assign(body, { reason: reason.trim(), ...(isElectricity && cleanDefs.length ? { deficiencies: cleanDefs } : {}) });
-    else if (reason.trim()) body.note = reason.trim();
+    else if (active.requires.reason) body.reason = reason.trim();
+    else {
+      if (needLink) body.providersLink = providersLink.trim();
+      if (needApproval) body.distributionCompany = distributionCompany.trim();
+      if (reason.trim()) body.note = reason.trim();
+    }
     try {
       await api.performAction(app.id, active.action, body as never);
       toast('success', t('تم تسجيل القرار.', 'Decision recorded.'));
@@ -266,7 +325,9 @@ const DecisionPanel: React.FC<{ app: ApplicationDetail; actions: AllowedAction[]
 
   const danger = active ? ['reject', 'withdraw', 'record_no_contract', 'reject_distribution'].includes(active.action) : false;
   const finalDistribution = app.state === 'DISTRIBUTION_REVIEW';
-  const fieldsForDefs = isElectricity ? electricityFields : formFields;
+  const reasonLabel = active?.action === 'non_compliant' ? t('سبب الرفض الفني', 'Technical rejection reason')
+    : active?.action === 'request_correction' && app.state === 'ELECTRICITY_REVIEW' ? t('ملاحظات الرفض', 'Rejection notes')
+    : active?.requires.reason ? t('السبب', 'Reason') : needLink || needApproval ? t('ملاحظات (اختيارية)', 'Notes (optional)') : t('ملاحظة (اختيارية)', 'Note (optional)');
 
   return (
     <div className="decision-panel" data-testid="decision-panel">
@@ -281,14 +342,31 @@ const DecisionPanel: React.FC<{ app: ApplicationDetail; actions: AllowedAction[]
       </div>
       {active ? (
         <div className="stack" style={{ marginTop: '1rem' }}>
-          {needDefs || (isElectricity && active.action === 'request_correction') ? (
+          {needLink ? (
+            <div className="form-group">
+              <label className="form-label required" htmlFor="providersLink">{t('لينك مقدمي الخدمة (يُرسل للمصنع بالبريد)', 'Providers link (e-mailed to the factory)')}</label>
+              <input id="providersLink" type="url" dir="ltr" className="form-control" value={providersLink} onChange={(e) => setProvidersLink(e.target.value)} placeholder="https://" maxLength={2000} data-testid="providers-link-input" />
+            </div>
+          ) : null}
+          {needApproval ? (
+            <div className="stack" data-testid="electricity-approval">
+              <div className="form-label required">{t('ملف الموافقة', 'Approval file')}</div>
+              <DocumentsList app={app} kinds={['electricityApprovalFile']} />
+              <PdfUploader onFile={uploadApproval} testId="upload-electricityApprovalFile" label={hasApproval ? t('رفع نسخة جديدة', 'Upload a new version') : undefined} />
+              <div className="form-group">
+                <label className="form-label required" htmlFor="distributionCompany">{t('شركة التوزيع المصدِرة للموافقة', 'Issuing distribution company')}</label>
+                <input id="distributionCompany" className="form-control" value={distributionCompany} onChange={(e) => setDistributionCompany(e.target.value)} maxLength={200} data-testid="distribution-company" />
+              </div>
+            </div>
+          ) : null}
+          {needDefs ? (
             <div>
               <div className="form-label required">{t('قائمة النواقص (الحقل والملاحظة)', 'Deficiency list (field and note)')}</div>
               {defs.map((d, i) => (
                 <div key={i} className="roof-row">
                   <select className="form-control" value={d.field} aria-label={t('الحقل', 'Field')} data-testid={`def-field-${i}`} onChange={(e) => setDefs(defs.map((x, j) => (j === i ? { ...x, field: e.target.value } : x)))}>
                     <option value="">{t('— الحقل —', '— Field —')}</option>
-                    {fieldsForDefs.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
+                    {formFields.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
                   </select>
                   <input className="form-control" value={d.note} placeholder={t('الملاحظة', 'Note')} aria-label={t('الملاحظة', 'Note')} data-testid={`def-note-${i}`} onChange={(e) => setDefs(defs.map((x, j) => (j === i ? { ...x, note: e.target.value } : x)))} />
                   <button type="button" className="btn btn-ghost btn-sm" onClick={() => setDefs(defs.length > 1 ? defs.filter((_, j) => j !== i) : [{ field: '', note: '' }])}>✕</button>
@@ -310,7 +388,7 @@ const DecisionPanel: React.FC<{ app: ApplicationDetail; actions: AllowedAction[]
           ) : null}
           {showReason ? (
             <div className="form-group">
-              <label className={`form-label${active.requires.reason ? ' required' : ''}`} htmlFor="reason">{active.requires.reason ? t('السبب', 'Reason') : t('ملاحظة (اختيارية)', 'Note (optional)')}</label>
+              <label className={`form-label${active.requires.reason ? ' required' : ''}`} htmlFor="reason">{reasonLabel}</label>
               <textarea id="reason" rows={3} className="form-control" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={2000} data-testid="decision-reason" />
             </div>
           ) : null}

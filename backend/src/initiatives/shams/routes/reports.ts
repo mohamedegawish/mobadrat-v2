@@ -37,5 +37,5 @@ reportsRouter.get('/reports/applications', ah(async (req, res) => {
  * لوحة الدور (IMC / ENCPC / PMU / البنك): أرقام حقيقية بنطاق رؤية الدور، وروابط إلى قائمة العمل بفلتر صادق.
  * المصنع له «لوحتي»، والأدمن له لوحة الجاهزية.
  */
-reportsRouter.get('/dashboard', requireRole('imc_reviewer', 'encpc_reviewer', 'pmu_reviewer'), ah(async (req, res) =>
+reportsRouter.get('/dashboard', requireRole('imc_reviewer', 'encpc_reviewer', 'pmu_reviewer', 'electricity_reviewer'), ah(async (req, res) =>
   okMessage(res, 200, 'ok', await buildDashboard(currentUser(req)))));

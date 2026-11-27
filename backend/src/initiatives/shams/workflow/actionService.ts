@@ -5,14 +5,13 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { tx, nowIso, getDb } from '../db/database.js';
 import { AppError, Errors, type ErrorDetail } from '../http/errors.js';
-import { isIsoDate, isObj, onlyKeys, type Obj } from '../http/validate.js';
+import { isEmail, isIsoDate, isObj, isPhone, normalizeDigits, onlyKeys, type Obj } from '../http/validate.js';
 import type { UserInternal } from '../store/users.js';
 import {
   getApplication, getSection, writeSection, insertTransition, insertDeficiency, openDeficiencies, resolveDeficiencies,
   nextApplicationNumber, insertRegistryVerification, findOpenSubmittedByRegistry, type AppRow,
 } from '../store/applications.js';
 import { countActiveByKind, hasNewVersionAt, activeDocsAt, discardUnsentVersions } from '../store/documents.js';
-import { getProvider, isSelectable } from '../store/providers.js';
 import { getOrganization, isBankAvailable } from '../store/organizations.js';
 import { insertBlock, recordConflict, registryAccess } from '../store/registry.js';
 import { renameFactory } from '../store/factories.js';
@@ -30,7 +29,7 @@ import {
   ACTIONS, TRANSITIONS, transitionsFrom, pickTransition, actorOwnsRow, isTerminal, STATE_LABELS,
   type ActionName, type TransitionDef, type ApplicationState,
 } from './shamsWorkflow.js';
-import { FORM_SECTIONS, ELECTRICITY_DEFICIENCY_FIELDS } from './applicationForm.js';
+import { FORM_SECTIONS } from './applicationForm.js';
 import { ALL_FORM_FIELD_KEYS, completenessIssues, totalRoofArea, type FormData } from './validate.js';
 import { actionBlock, deficiencyLabels, nextSlaStart } from './applicationView.js';
 import { syncProfileAfterSubmit } from '../profileSync.js';
@@ -43,7 +42,8 @@ interface Payload {
   reasonCode?: (typeof shamsPolicy.imcRejectReasonCodes)[number];
   note?: string;
   deficiencies?: Deficiency[];
-  providerId?: string;
+  providersLink?: string;
+  provider?: { providerName: string; providerEmail: string; providerPhone: string };
   distributionCompany?: string;
   bankOrgId?: string;
   contractDate?: string;
@@ -51,18 +51,17 @@ interface Payload {
   contractNotes?: string;
 }
 
+const PROVIDER_FIELDS = ['providerName', 'providerEmail', 'providerPhone'];
+
 const ACTION_FIELDS: Record<ActionName, string[]> = {
   submit: [],
-  resubmit: ['note'],
-  accept: ['note'],
-  compliant: ['note'],
+  resubmit: ['note', ...PROVIDER_FIELDS],
+  accept: ['note', 'distributionCompany'],
+  compliant: ['note', 'providersLink'],
   request_correction: ['deficiencies', 'reason'],
-  non_compliant: ['deficiencies', 'reason'],
+  non_compliant: ['reason'],
   reject: ['reason', 'reasonCode'],
-  select_provider: ['providerId'],
-  submit_offer: ['note'],
-  // G-01: لا بنك في إرسال موافقة الكهرباء — حقل bankOrgId هنا يُرفض كحقل غير معروف.
-  submit_electricity: ['distributionCompany'],
+  submit_offer: ['note', ...PROVIDER_FIELDS],
   select_bank: ['bankOrgId'],
   record_contract: ['contractDate', 'contractAmount', 'contractNotes'],
   record_no_contract: ['reason', 'contractNotes'],
@@ -72,9 +71,24 @@ const ACTION_FIELDS: Record<ActionName, string[]> = {
   reject_distribution: ['reason'],
 };
 
-/** الأفعال التي يرسل فيها المصنع بيانات/مستندات جديدة → تزيد رقم المحاولة. */
+/**
+ * الأفعال التي تُرسل فيها بيانات/مستندات جديدة → تزيد رقم المحاولة: أفعال المصنع، وقبول وزارة الكهرباء الذي يحمل ملف
+ * موافقتها (المستند لا يراه غير رافعه حتى يُرسل).
+ */
 function bumpsAttempt(def: TransitionDef): boolean {
-  return def.actorRole === 'factory_owner' && def.action !== 'withdraw';
+  return (def.actorRole === 'factory_owner' && def.action !== 'withdraw') || Boolean(def.requires?.document);
+}
+
+/** D13: the providers list ENCPC sends — a web address only (it is placed in an e-mail as a link). */
+function webLink(v: unknown, field: string, details: ErrorDetail[]): string | undefined {
+  const t = text(v, field, details, { required: true, max: 2000 });
+  if (!t) return t;
+  let url: URL | null = null;
+  try { url = new URL(t); } catch { url = null; }
+  if (!url || !['http:', 'https:'].includes(url.protocol) || !url.hostname.includes('.') || /\s/.test(t)) {
+    details.push({ field, issue: 'must be a http(s) link' });
+  }
+  return t;
 }
 
 function text(v: unknown, field: string, details: ErrorDetail[], opts: { required?: boolean; min?: number; max?: number }): string | undefined {
@@ -119,15 +133,12 @@ function parsePayload(action: ActionName, from: ApplicationState, body: unknown)
   if (ACTION_FIELDS[action].includes('reason')) p.reason = text(b.reason, 'reason', details, { required: Boolean(req.reason), min: req.reason ? 3 : undefined });
   if (ACTION_FIELDS[action].includes('note')) p.note = text(b.note, 'note', details, { max: 2000 });
 
-  if (action === 'request_correction' || action === 'non_compliant') {
-    if (from === 'IMC_REVIEW' || from === 'ENCPC_REVIEW') {
+  if (action === 'request_correction') {
+    if (from === 'IMC_REVIEW') {
       p.deficiencies = parseDeficiencies(b.deficiencies, ALL_FORM_FIELD_KEYS, details);
-    } else if (from === 'ELECTRICITY_REVIEW') {
-      p.deficiencies = b.deficiencies === undefined ? [{ field: 'electricityApprovalFile', note: p.reason ?? '' }]
-        : parseDeficiencies(b.deficiencies, new Set(ELECTRICITY_DEFICIENCY_FIELDS), details);
-    } else if (from === 'OFFER_REVIEW') {
-      if (b.deficiencies !== undefined) details.push({ field: 'deficiencies', issue: 'not allowed — the technical offer is the subject of correction' });
-      p.deficiencies = [{ field: 'technicalOfferFile', note: p.reason ?? '' }];
+    } else {
+      if (b.deficiencies !== undefined) details.push({ field: 'deficiencies', issue: from === 'OFFER_REVIEW' ? 'not allowed — the technical offer is the subject of correction' : 'not allowed — give the reason' });
+      else if (from === 'OFFER_REVIEW') p.deficiencies = [{ field: 'technicalOfferFile', note: p.reason ?? '' }];
     }
   }
   if (action === 'reject' && b.reasonCode !== undefined) {
@@ -135,10 +146,20 @@ function parsePayload(action: ActionName, from: ApplicationState, body: unknown)
     else p.reasonCode = b.reasonCode as Payload['reasonCode'];
   }
   if (action === 'select_bank') p.bankOrgId = text(b.bankOrgId, 'bankOrgId', details, { required: true, max: 100 });
-  if (action === 'select_provider') p.providerId = text(b.providerId, 'providerId', details, { required: true, max: 100 });
-  if (action === 'submit_electricity') {
-    p.distributionCompany = text(b.distributionCompany, 'distributionCompany', details, { required: true, min: 2, max: 200 });
+  if (action === 'compliant') p.providersLink = webLink(b.providersLink, 'providersLink', details);
+  if (req.providerInfo) {
+    const providerName = text(b.providerName, 'providerName', details, { required: true, min: 2, max: 200 });
+    const providerEmail = text(b.providerEmail, 'providerEmail', details, { required: true, max: 254 });
+    const phoneRaw = text(b.providerPhone, 'providerPhone', details, { max: 20 });
+    const providerPhone = phoneRaw === undefined ? '' : normalizeDigits(phoneRaw);
+    if (providerEmail && !isEmail(providerEmail)) details.push({ field: 'providerEmail', issue: 'invalid email' });
+    if (providerPhone && !isPhone(providerPhone)) details.push({ field: 'providerPhone', issue: 'invalid phone number' });
+    p.provider = { providerName: providerName ?? '', providerEmail: (providerEmail ?? '').toLowerCase(), providerPhone };
+  } else {
+    for (const f of PROVIDER_FIELDS) if (b[f] !== undefined) details.push({ field: f, issue: 'unknown field' });
   }
+  if (req.electricity) p.distributionCompany = text(b.distributionCompany, 'distributionCompany', details, { required: true, min: 2, max: 200 });
+  else if (b.distributionCompany !== undefined) details.push({ field: 'distributionCompany', issue: 'unknown field' });
   if (action === 'record_contract') {
     if (!isIsoDate(b.contractDate)) details.push({ field: 'contractDate', issue: 'required date YYYY-MM-DD' }); else p.contractDate = b.contractDate;
     const amt = typeof b.contractAmount === 'number' ? b.contractAmount : NaN;
@@ -205,10 +226,6 @@ function duplicateRegistryError(): AppError {
     `يوجد طلب مفتوح آخر بنفس رقم السجل الصناعي، ولم يُرسل طلبك. أُبلغت IMC ووحدة إدارة المبادرة بالتعارض لمراجعة ملكية الرقم. إذا كان الرقم لمنشأتك فاعترض بإرسال صورة السجل الصناعي وما يثبت تفويضك عن المنشأة مع رقم مسودتك.${supportHintAr()} بياناتك محفوظة.`,
     'Another open application uses this industrial registry number, so yours was not submitted. IMC and the PMU were notified to review ownership. If the number belongs to your facility, object by sending the registry certificate and proof of authorization with your draft reference.',
     [{ field: 'industrialRegistryNumber', issue: 'duplicate' }]);
-}
-
-function providerNotSelectable(): AppError {
-  return new AppError(422, 'PROVIDER_NOT_APPROVED', 'مقدم الخدمة غير متاح للاختيار حاليًا.', 'The service provider is not available for selection.', [{ field: 'providerId', issue: 'not approved' }]);
 }
 
 function bankInvalid(): AppError {
@@ -293,10 +310,6 @@ export async function performAction(user: UserInternal, appId: string, actionRaw
       if (app.version !== p.expectedVersion) throw versionConflict();
     }
   }
-  if (action === 'select_provider') {
-    const sp = await getProvider(p.providerId!);
-    if (!isSelectable(sp)) throw providerNotSelectable();
-  }
   if (action === 'select_bank') {
     // البنك جهة خارجية (G-02): يكفي أن يكون بنكًا مُعرَّفًا ونشطًا في المنصة.
     const bank = await getOrganization(p.bankOrgId!);
@@ -305,11 +318,16 @@ export async function performAction(user: UserInternal, appId: string, actionRaw
   const open = await openDeficiencies(app.id);
   if (primary.requires?.newDocument) {
     const kind = primary.requires.newDocument;
-    const mustBeNew = app.state === 'OFFER_UPLOAD' || app.state === 'OFFER_CORRECTION' || kind === 'contractFile' || kind === 'distributionApprovalFile' || open.some((d) => d.field === kind);
+    const mustBeNew = app.state === 'OFFER_UPLOAD' || app.state === 'OFFER_CORRECTION' || kind === 'contractFile' || kind === 'distributionApprovalFile' || kind === 'correctionProofFile' || open.some((d) => d.field === kind);
     const ok = mustBeNew ? await hasNewVersionAt(app.id, kind, pending) : (await activeDocsAt(app.id, pending)).some((d) => d.kind === kind);
     if (!ok) {
       throw new AppError(422, 'DOCUMENT_REQUIRED', 'يجب رفع نسخة جديدة من المستند المطلوب قبل الإرسال.', 'Upload a new version of the required document before submitting.', [{ field: kind, issue: 'new version required' }]);
     }
+  }
+  // D18: the approval is recorded only with its file — the ministry's upload (or, for applications that were already under
+  // review before the change, the file the factory had submitted).
+  if (primary.requires?.document && !(await activeDocsAt(app.id, pending)).some((d) => d.kind === primary.requires!.document)) {
+    throw new AppError(422, 'DOCUMENT_REQUIRED', 'ارفع ملف الموافقة قبل تسجيل القبول.', 'Upload the approval file before recording the acceptance.', [{ field: primary.requires.document, issue: 'required' }]);
   }
 
   // 'manual' (REGISTRY_ADAPTER=manual, no registry API yet) lets the submission through like 'valid', recorded as 'manual':
@@ -334,8 +352,7 @@ export async function performAction(user: UserInternal, appId: string, actionRaw
       if (!access.allowed) throw registryBlockedError(access.reason);
       if (await findOpenSubmittedByRegistry(regNumber, cur.id)) throw duplicateRegistryError();
     }
-    // PR-C2: مقدم الخدمة والبنك فُحصا قبل المعاملة؛ عملية أخرى قد توقف أحدهما قبل أخذ القفل. يُعاد الفحص هنا قبل أي كتابة.
-    if (action === 'select_provider' && !isSelectable(await getProvider(p.providerId!))) throw providerNotSelectable();
+    // PR-C2: البنك فُحص قبل المعاملة؛ عملية أخرى قد توقفه قبل أخذ القفل. يُعاد الفحص هنا قبل أي كتابة.
     if (action === 'select_bank' && !await isBankAvailable(p.bankOrgId!)) throw bankInvalid();
 
     // ── السجل غير صحيح/متعذر: يبقى الطلب كما هو مع حفظ التحقق والسجل والإشعار ──
@@ -380,14 +397,11 @@ export async function performAction(user: UserInternal, appId: string, actionRaw
       if (!cur.number) { sets.push('number = ?'); vals.push(await nextApplicationNumber()); }
       sets.push('submittedAt = COALESCE(submittedAt, ?)'); vals.push(now);
     }
-    if (action === 'select_provider') { sets.push('providerId = ?'); vals.push(p.providerId!); }
     // اختيار البنك = اختيار المسار البنكي (يثبّته)، واختيار شركة التوزيع يثبّت مسارها؛ قيود CHECK تمنع الجمع بينهما.
     if (action === 'select_bank') { sets.push('bankOrgId = ?', "contractPath = 'bank'"); vals.push(p.bankOrgId!); }
     if (action === 'select_distribution_path') sets.push("contractPath = 'distribution'");
-    // F-07: عرض رُفع لمقدم لم يعد متاحًا ولم يُرسل — لا يصل المراجعين بعد أن تُحتسب المحاولة مُرسلة (يبقى للمصنع، دون حذف).
-    // F-07 + D6: an offer uploaded for a provider that became unavailable and never sent is discarded when the factory re-picks
-    // (from offer upload, or from provider selection after the automatic return).
-    const discardedOffers = action === 'select_provider' && (cur.state === 'OFFER_UPLOAD' || cur.state === 'PROVIDER_SELECTION') ? await discardUnsentVersions(cur.id, 'technicalOfferFile', pending) : [];
+    // D18: an approval file the ministry uploaded and then did not use (it rejected instead) is never sent.
+    if (cur.state === 'ELECTRICITY_REVIEW' && action === 'request_correction') await discardUnsentVersions(cur.id, 'electricityApprovalFile', pending);
 
     // المستند المُرسل لشركة التوزيع: النسخة السارية في المحاولة التي تُرسل الآن (يُثبَّت معرّفها في النتيجة والسجل).
     const distributionDoc = action === 'submit_distribution_approval'
@@ -410,14 +424,13 @@ export async function performAction(user: UserInternal, appId: string, actionRaw
       reason: p.reason ?? p.note ?? '', attempt: nextAttempt,
       payload: {
         ...(p.deficiencies ? { deficiencies: p.deficiencies } : {}),
-        ...(p.providerId ? { providerId: p.providerId } : {}),
+        ...(p.providersLink ? { providersLink: p.providersLink } : {}),
+        ...(p.provider ? { providerName: p.provider.providerName, providerEmail: p.provider.providerEmail } : {}),
         ...(p.bankOrgId ? { bankOrgId: p.bankOrgId } : {}),
         ...(p.reasonCode ? { reasonCode: p.reasonCode } : {}),
         ...(action === 'select_bank' || action === 'select_distribution_path' ? { contractPath: action === 'select_bank' ? 'bank' : 'distribution' } : {}),
         ...(distributionDoc ? { contractPath: 'distribution', documentId: distributionDoc.id, documentVersion: distributionDoc.version } : {}),
         ...(distributionDecision ? { contractPath: 'distribution', decision: action === 'accept' ? 'approved' : 'rejected' } : {}),
-        ...(action === 'select_provider' && cur.providerId ? { previousProviderId: cur.providerId } : {}),
-        ...(discardedOffers.length ? { discardedUnsentOfferIds: discardedOffers } : {}),
         ...(verificationId ? { registryResult: verifiedAs, registryVerificationId: verificationId } : {}),
       },
     });
@@ -425,14 +438,14 @@ export async function performAction(user: UserInternal, appId: string, actionRaw
     // قبول حساب المصنع المسجَّل ذاتيًا يتبع قرار IMC على الطلب نفسه (نفس المعاملة) — services/factoryAccount.ts.
     const accountEvent = await syncFactoryAccount(cur, cur.state, def.to, action, user, ctx.ip);
 
-    if (p.deficiencies && (action === 'request_correction' || action === 'non_compliant')) {
+    if (p.deficiencies && action === 'request_correction') {
       for (const d of p.deficiencies) await insertDeficiency(cur.id, t.id, cur.state, d.field, d.note || (p.reason ?? ''));
     }
     if (def.actorRole === 'factory_owner' && action !== 'withdraw' && open.length) await resolveDeficiencies(cur.id, t.id);
 
     // بيانات المراحل: نسخة لكل محاولة في application_data + أعمدة حقيقية للاستعلام.
-    if (action === 'select_provider') await writeSection(cur.id, 'provider', nextAttempt, { providerId: p.providerId }, user.id);
-    if (action === 'submit_electricity') await writeSection(cur.id, 'electricity', nextAttempt, { distributionCompany: p.distributionCompany }, user.id);
+    if (p.provider) await writeSection(cur.id, 'provider', nextAttempt, p.provider, user.id);
+    if (p.distributionCompany) await writeSection(cur.id, 'electricity', nextAttempt, { distributionCompany: p.distributionCompany }, user.id);
     if (action === 'select_bank') {
       // سجل البنك المختار ونتيجة التعاقد (جدول bank_referrals يحفظ اختيار المصنع؛ لا إحالة ولا دراسة داخل المنصة — G-02).
       await db.prepare(`INSERT INTO shams_bank_referrals (id, applicationId, bankOrgId, referredAt, referredBy) VALUES (?, ?, ?, ?, ?)
@@ -485,9 +498,13 @@ export async function performAction(user: UserInternal, appId: string, actionRaw
     });
     await notifyTransition({
       // مسار شركة التوزيع: ملاحظة المصنع عند الإرسال وملاحظة PMU عند القبول تظهر في الرسالة (بقية المراحل كما كانت: السبب فقط).
-      app: after, def, transition: t, reason: p.reason ?? (cur.state === 'DISTRIBUTION_UPLOAD' || cur.state === 'DISTRIBUTION_REVIEW' ? p.note : undefined), accountEvent,
-      deficiencies: p.deficiencies && (action === 'request_correction' || action === 'non_compliant') ? deficiencyLabels(p.deficiencies) : undefined,
-      isResubmission: action === 'resubmit' || (action === 'submit_electricity' && t.attempt > 0 && cur.state === 'ELECTRICITY_UPLOAD' && await hasPriorReview(cur.id)),
+      app: after, def, transition: t,
+      // The factory's note is shown to the reviewer on the stages where it explains what was sent; the ENCPC and the
+      // ministry's notes with an acceptance are shown to the factory. Elsewhere only the decision's reason travels.
+      reason: p.reason ?? (['ENCPC_REVIEW', 'ENCPC_CORRECTION', 'ELECTRICITY_REVIEW', 'ELECTRICITY_UPLOAD', 'DISTRIBUTION_UPLOAD', 'DISTRIBUTION_REVIEW'].includes(cur.state) ? p.note : undefined),
+      accountEvent, providersLink: p.providersLink,
+      deficiencies: p.deficiencies && action === 'request_correction' ? deficiencyLabels(p.deficiencies) : undefined,
+      isResubmission: action === 'resubmit',
       bankNameAr: after.bankOrgId ? (await getOrganization(after.bankOrgId))?.nameAr : undefined,
     });
     if (action === 'record_contract' && p.contractAmount! > shamsPolicy.contractAmountAlertEGP) {
@@ -546,8 +563,4 @@ export async function recordRegistryConflict(user: UserInternal, app: AppRow, ho
     }, [...await orgRecipients(ORG_IDS.imc, 'imc_reviewer'), ...await orgRecipients(ORG_IDS.pmu, 'pmu_reviewer')], { dedupePrefix: `conflict:${c.id}`, applicationId: holder.id, channels: ['email'] });
   });
   kickNotificationWorker();
-}
-
-async function hasPriorReview(appId: string): Promise<boolean> {
-  return Boolean(await getDb().prepare("SELECT 1 FROM shams_application_transitions WHERE applicationId = ? AND fromState = 'ELECTRICITY_REVIEW' LIMIT 1").get(appId));
 }

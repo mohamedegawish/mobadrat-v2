@@ -3,7 +3,7 @@ import { getDb, nowIso } from '../db/database.js';
 import { newId, mapSeq } from '../http/helpers.js';
 import { sha256 } from '../auth/jwt.js';
 
-export const INTEGRATION_SCOPES = ['read', 'read_full', 'read_documents', 'manage_users', 'manage_providers', 'read_audit'] as const;
+export const INTEGRATION_SCOPES = ['read', 'read_full', 'read_documents', 'manage_users', 'read_audit'] as const;
 export type IntegrationScope = (typeof INTEGRATION_SCOPES)[number];
 /**
  * H1: نطاقات البيانات — تتجاوز «البيانات الوصفية فقط». معطلة ما دام config.integrationDataScopesEnabled = false

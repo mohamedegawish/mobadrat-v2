@@ -14,7 +14,7 @@ export type Language = 'ar' | 'en';
 export type View =
   | 'home' | 'login' | 'register' | 'verify-email' | 'forgot-password' | 'reset-password' | 'cancel-recovery' | 'notifications'
   | 'factory-dashboard' | 'apply' | 'task' | 'application'
-  | 'dashboard' | 'work-queue' | 'pmu-monitor' | 'providers' | 'approvals'
+  | 'dashboard' | 'work-queue' | 'pmu-monitor' | 'approvals'
   | 'admin-dashboard' | 'admin-accounts' | 'admin-organizations' | 'admin-audit' | 'admin-integration' | 'admin-outbox';
 
 type Access = 'public' | 'guest' | 'auth' | Role[];
@@ -23,13 +23,11 @@ export const VIEW_ACCESS: Record<View, Access> = {
   home: 'public', login: 'guest', register: 'guest', 'verify-email': 'public', 'forgot-password': 'guest', 'reset-password': 'public', 'cancel-recovery': 'public', notifications: 'auth',
   'factory-dashboard': ['factory_owner'], apply: ['factory_owner'], task: ['factory_owner'], application: 'auth',
   // لوحة الدور: IMC وENCPC (PMU تدمجها في «المتابعة»، والأدمن له لوحة الجاهزية). لا حساب للبنك (G-02).
-  dashboard: ['imc_reviewer', 'encpc_reviewer'],
-  'work-queue': ['imc_reviewer', 'encpc_reviewer', 'pmu_reviewer', 'system_admin'],
+  dashboard: ['imc_reviewer', 'encpc_reviewer', 'electricity_reviewer'],
+  'work-queue': ['imc_reviewer', 'encpc_reviewer', 'pmu_reviewer', 'electricity_reviewer', 'system_admin'],
   'pmu-monitor': ['pmu_reviewer'],
   // الموافقات (H1/H2/H4): جهات القرار فقط — الأدمن مقدم الطلب لا موافق.
-  approvals: ['imc_reviewer', 'encpc_reviewer', 'pmu_reviewer'],
-  // دليل مقدمي الخدمة: ENCPC تديره (providerManagerRoles) وPMU تعتمده (providerApproverRoles ★).
-  providers: ['encpc_reviewer', 'pmu_reviewer'],
+  approvals: ['imc_reviewer', 'pmu_reviewer'],
   'admin-dashboard': ['system_admin'], 'admin-accounts': ['system_admin'], 'admin-organizations': ['system_admin'], 'admin-audit': ['system_admin'],
   'admin-integration': ['system_admin'], 'admin-outbox': ['system_admin'],
 };
@@ -38,7 +36,7 @@ export const VIEW_ACCESS: Record<View, Access> = {
  * The platform dashboard of each staff role (#workspace/<type>): one page per user type for every initiative. The role's
  * old dashboard / work queue / monitoring screens redirect there (App.tsx).
  */
-export const USER_TYPE: Partial<Record<Role, string>> = { imc_reviewer: 'imc', encpc_reviewer: 'encpc', pmu_reviewer: 'pmu', system_admin: 'system_admin' };
+export const USER_TYPE: Partial<Record<Role, string>> = { imc_reviewer: 'imc', encpc_reviewer: 'encpc', pmu_reviewer: 'pmu', electricity_reviewer: 'electricity', system_admin: 'system_admin' };
 
 /** The platform dashboard of the role, on this initiative (null for an applicant). */
 export function workspaceHash(role: Role, preset: { tab?: string; state?: string } = {}): string | null {
@@ -53,11 +51,11 @@ export function workspaceHash(role: Role, preset: { tab?: string; state?: string
 export const DEFAULT_VIEW: Record<Role, View> = {
   // bank_reviewer: دور ملغى (G-02) — لا يحصل على جلسة أصلًا؛ القيمة موجودة فقط لاكتمال النوع.
   factory_owner: 'factory-dashboard', imc_reviewer: 'dashboard', encpc_reviewer: 'dashboard', bank_reviewer: 'home',
-  pmu_reviewer: 'pmu-monitor', system_admin: 'admin-dashboard',
+  pmu_reviewer: 'pmu-monitor', electricity_reviewer: 'dashboard', system_admin: 'admin-dashboard',
 };
 
 /** مساحات العمل ذات الشريط الجانبي (وضع الإدارة). */
-export const WORKSPACE_VIEWS: View[] = ['dashboard', 'work-queue', 'pmu-monitor', 'providers', 'approvals', 'admin-dashboard', 'admin-accounts', 'admin-organizations', 'admin-audit', 'admin-integration', 'admin-outbox'];
+export const WORKSPACE_VIEWS: View[] = ['dashboard', 'work-queue', 'pmu-monitor', 'approvals', 'admin-dashboard', 'admin-accounts', 'admin-organizations', 'admin-audit', 'admin-integration', 'admin-outbox'];
 
 /** مصنع لم يُقبل حسابه بعد (طلب تعديل بيانات، أو تعذر إرسال طلب التسجيل): دخول مقيّد بمعالج طلبه فقط — القيد الحقيقي في السيرفر. */
 export function isRestrictedFactory(user: User | null): boolean {

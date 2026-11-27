@@ -1,7 +1,7 @@
 // D12: IMC 2 days, ENCPC 3 days, and one 9-day offer deadline from ENCPC's acceptance until PMU accepts the offer.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { isolateTestEnv, startServer, clients, advanceTo, act, getApp, q, pdfVariant, PROVIDER_OK, type Started } from './helpers.js';
+import { isolateTestEnv, startServer, clients, advanceTo, act, getApp, q, pdfVariant, type Started } from './helpers.js';
 
 const env = isolateTestEnv('sla-phases');
 let srv: Started;
@@ -22,8 +22,7 @@ test('per-stage deadlines: ENCPC 3 days', async () => {
 });
 
 test('offer phase: one 9-day deadline that moving between the offer states does not restart', async () => {
-  const id = await advanceTo('PROVIDER_SELECTION', c, 'IND-D12-2');
-  assert.equal((await act(c.factory, id, 'select_provider', { providerId: PROVIDER_OK })).status, 200);
+  const id = await advanceTo('OFFER_UPLOAD', c, 'IND-D12-2');
   const start = await slaStart(id);
   let v = await getApp(c.pmu, id);
   assert.equal(v.currentTask.slaDays, 9);

@@ -57,12 +57,8 @@ export const FactoryDashboardView: React.FC = () => {
         <div className="final-outcome is-success submit-success" role="status" aria-live="polite" data-testid="submit-success" style={{ marginBottom: '1rem' }}>
           <span className="final-outcome-icon"><CheckCircle2 size={34} /></span>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p className="final-outcome-title">{flash.resubmitted ? t('تمت إعادة تقديم طلبك بنجاح', 'Your application was resubmitted') : t('تم إرسال طلب التسجيل بنجاح', 'Your registration was submitted')}</p>
-            <p className="final-outcome-sub">
-              {flash.resubmitted
-                ? t('عاد الطلب إلى الجهة التي طلبت الاستيفاء لاستكمال مراجعته.', 'The application went back to the reviewer who requested the corrections.')
-                : t('تحقق النظام من رقم السجل الصناعي، وأُحيل الطلب إلى مرحلة المراجعة. لا يُعد المصنع مسجلًا نهائيًا إلا بعد اعتماد المراجعة، وسنُعلمك بأي طلب استيفاء.', 'The industrial registry number was verified and the application was sent for review. The factory is not finally registered until the review approves it; you will be notified of any requested corrections.')}
-            </p>
+            <p className="final-outcome-title">{t('تم إرسال طلب التسجيل بنجاح', 'Your registration was submitted')}</p>
+            <p className="final-outcome-sub">{t('تحقق النظام من رقم السجل الصناعي، وأُحيل الطلب إلى مرحلة المراجعة. لا يُعد المصنع مسجلًا نهائيًا إلا بعد اعتماد المراجعة، وسنُعلمك بأي طلب استيفاء.', 'The industrial registry number was verified and the application was sent for review. The factory is not finally registered until the review approves it; you will be notified of any requested corrections.')}</p>
             <dl className="kv" style={{ marginTop: '0.5rem' }}>
               {flash.number ? <><dt>{t('رقم الطلب', 'Application number')}</dt><dd className="num-ltr" data-testid="submit-success-number">{flash.number}</dd></> : null}
               <dt>{t('الحالة الآن', 'Current status')}</dt><dd>{isAr ? flash.stateLabelAr : flash.stateLabelEn}</dd>
@@ -126,6 +122,7 @@ export const FactoryDashboardView: React.FC = () => {
           </div>
           <TaskCard
             task={app.currentTask}
+            returnReason={app.returnDecision?.reason}
             onAct={() => store.navigate(factoryTarget(app.state), app.id)}
             actLabel={app.state === 'DRAFT' ? t('إكمال الطلب', 'Continue application') : t('تنفيذ المطلوب', 'Do it now')}
           />

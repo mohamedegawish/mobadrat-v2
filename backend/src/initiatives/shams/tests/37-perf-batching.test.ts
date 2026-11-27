@@ -6,7 +6,7 @@
 // (5 req/s ceiling), a 5.8 s export (docs/performance/PERFORMANCE_TEST_REPORT.md).
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { isolateTestEnv, startServer, clients, act, advanceTo, uploadContractFile, PROVIDER_OK, type Started } from './helpers.js';
+import { q, PROVIDER_INFO, isolateTestEnv, startServer, clients, act, advanceTo, uploadContractFile, type Started } from './helpers.js';
 
 const env = isolateTestEnv('perf-batching');
 let srv: Started;
@@ -18,15 +18,15 @@ before(async () => {
   srv = await startServer();
   c = await clients(srv.base);
   // history on both factories (terminal applications) + one open application each, in different stages and banks
-  const a = await advanceTo('CONTRACT_OUTCOME', { factory: c.factory, imc: c.imc, encpc: c.encpc, pmu: c.pmu }, reg());
+  const a = await advanceTo('CONTRACT_OUTCOME', { factory: c.factory, imc: c.imc, encpc: c.encpc, pmu: c.pmu, electricity: c.electricity }, reg());
   await uploadContractFile(c.factory, a);
   assert.equal((await act(c.factory, a, 'record_contract', { contractDate: '2026-10-01', contractAmount: 1200000 })).status, 200);
-  const b = await advanceTo('IMC_REVIEW', { factory: c.factory, imc: c.imc, encpc: c.encpc, pmu: c.pmu }, reg());
+  const b = await advanceTo('IMC_REVIEW', { factory: c.factory, imc: c.imc, encpc: c.encpc, pmu: c.pmu, electricity: c.electricity }, reg());
   assert.equal((await act(c.imc, b, 'request_correction', { reason: 'نواقص', deficiencies: [{ field: 'taxNumber', note: 'تصحيح' }] })).status, 200);
   assert.equal((await act(c.factory, b, 'resubmit')).status, 200);
   assert.equal((await act(c.factory, b, 'withdraw', { reason: 'انسحاب' })).status, 200);
-  await advanceTo('IMC_REVIEW', { factory: c.factory, imc: c.imc, encpc: c.encpc, pmu: c.pmu }, reg());
-  await advanceTo('OFFER_REVIEW', { factory: c.factory2, imc: c.imc, encpc: c.encpc, pmu: c.pmu }, reg());
+  await advanceTo('IMC_REVIEW', { factory: c.factory, imc: c.imc, encpc: c.encpc, pmu: c.pmu, electricity: c.electricity }, reg());
+  await advanceTo('OFFER_REVIEW', { factory: c.factory2, imc: c.imc, encpc: c.encpc, pmu: c.pmu, electricity: c.electricity }, reg());
 });
 after(async () => { await srv.close(); await env.cleanup(); });
 
@@ -69,7 +69,6 @@ test('list items, details and the factory profile carry the same organizations a
 test('the export rows equal the former per-row computation (referral, returns, provider, bank, responsible)', async () => {
   const { reportRows } = await import('../services/reports.js');
   const { listApplications, getBankReferral, listTransitions } = await import('../store/applications.js');
-  const { getProvider } = await import('../store/providers.js');
   const { getOrganization } = await import('../store/organizations.js');
   const { responsibleInfo, returnCounts } = await import('../workflow/applicationView.js');
   const apps = (await listApplications({ scopeSql: '1 = 1', scopeParams: [], includeDrafts: true }, 1, 1, true)).rows;
@@ -82,12 +81,13 @@ test('the export rows equal the former per-row computation (referral, returns, p
     assert.equal(rows[i].responsibleAr, resp.orgNameAr ?? resp.labelAr, a.id);
     assert.equal(rows[i].responsibleEn, resp.orgNameEn ?? resp.labelEn, a.id);
     assert.equal((rows[i] as any).returnsTotal, Object.values(returns).reduce((s, n) => s + (n ?? 0), 0), a.id);
-    assert.equal((rows[i] as any).providerAr, a.providerId ? (await getProvider(a.providerId))?.nameAr ?? '' : '', a.id);
+    const [named] = await q<{ data: string }>("SELECT data FROM shams_application_data WHERE applicationId = ? AND section = 'provider' ORDER BY attempt DESC LIMIT 1", a.id);
+    assert.equal((rows[i] as any).providerAr, named ? JSON.parse(named.data).providerName : '', a.id);
     assert.equal((rows[i] as any).bankAr, a.bankOrgId ? (await getOrganization(a.bankOrgId))?.nameAr ?? '' : '', a.id);
     assert.equal((rows[i] as any).contractStatus, ref?.contractStatus ?? '', a.id);
     assert.equal((rows[i] as any).contractAmount, ref?.contractAmount ?? null, a.id);
   }
-  assert.ok(apps.some((a) => a.providerId === PROVIDER_OK), 'covers an application with a provider');
+  assert.ok((rows as any[]).some((r) => r.providerAr === PROVIDER_INFO.providerName), 'covers an application with a provider');
   assert.ok((rows as any[]).some((r) => r.returnsTotal > 0), 'covers an application with a return');
   assert.ok((rows as any[]).some((r) => r.contractStatus === 'contracted'), 'covers a recorded contract');
   const limited = await reportRows(apps, false);

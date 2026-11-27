@@ -1,7 +1,7 @@
 // اختبارات القبول 4–8: رفض IMC نهائي، إرجاعات تعود لنفس المراجع مع بقاء النسختين، قيود حقول النواقص، ولا رفض لـ ENCPC/PMU.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { isolateTestEnv, startServer, clients, createCompleteDraft, act, getApp, advanceTo, pdfVariant, q, type Started } from './helpers.js';
+import { isolateTestEnv, startServer, clients, createCompleteDraft, uploadProof, act, getApp, advanceTo, pdfVariant, q, type Started } from './helpers.js';
 
 const env = isolateTestEnv('decisions');
 let srv: Started;
@@ -96,17 +96,14 @@ test('7) editing a field outside the deficiencies is rejected', async () => {
 test('5b) ENCPC non-compliance returns to ENCPC; 5c) offer correction returns to PMU with both offer versions', async () => {
   await closeOpen();
   const id = await advanceTo('ENCPC_REVIEW', c, reg());
-  const r = await act(c.encpc, id, 'non_compliant', { deficiencies: [{ field: 'roofAreas', note: 'المساحات غير دقيقة' }] });
+  const r = await act(c.encpc, id, 'non_compliant', { reason: 'المساحات غير دقيقة' });
   assert.equal(r.status, 200, JSON.stringify(r.json));
   assert.equal((await getApp(c.factory, id)).state, 'ENCPC_CORRECTION');
-  assert.equal((await c.factory.put(`/applications/${id}/data/engineering`, { roofAreas: [{ name: 'سطح', area: 2000 }] })).status, 200);
+  await uploadProof(c.factory, id);
   assert.equal((await act(c.factory, id, 'resubmit')).status, 200);
-  const encpcView = await getApp(c.encpc, id);
-  assert.equal(encpcView.state, 'ENCPC_REVIEW');
-  assert.equal(encpcView.totalRoofArea, 2000);
+  assert.equal((await getApp(c.encpc, id)).state, 'ENCPC_REVIEW');
 
   await act(c.encpc, id, 'compliant');
-  await act(c.factory, id, 'select_provider', { providerId: 'sp-demo-1' });
   await c.factory.upload(`/applications/${id}/documents`, { kind: 'technicalOfferFile' }, pdfVariant('offer-v1'));
   await act(c.factory, id, 'submit_offer');
   const noReason = await act(c.pmu, id, 'request_correction', {});
@@ -124,19 +121,18 @@ test('5b) ENCPC non-compliance returns to ENCPC; 5c) offer correction returns to
   assert.equal(pmuView.returnCounts.OFFER_REVIEW, 1);
 });
 
-test('6) electricity approval incomplete → ELECTRICITY_UPLOAD → ELECTRICITY_REVIEW', async () => {
+test('6) the ministry rejects with notes → the factory answers → the ministry reviews again', async () => {
   await closeOpen();
   const id = await advanceTo('ELECTRICITY_REVIEW', c, reg());
-  assert.equal((await act(c.pmu, id, 'request_correction', {})).status, 400, 'reason mandatory');
-  assert.equal((await act(c.pmu, id, 'request_correction', { reason: 'الموافقة غير موقعة' })).status, 200);
+  assert.equal((await act(c.electricity, id, 'request_correction', {})).status, 400, 'notes mandatory');
+  assert.equal((await act(c.electricity, id, 'request_correction', { reason: 'العقد غير موقع' })).status, 200);
   assert.equal((await getApp(c.factory, id)).state, 'ELECTRICITY_UPLOAD');
-  const same = await act(c.factory, id, 'submit_electricity', { distributionCompany: 'شركة توزيع' });
-  assert.equal(same.status, 422, 'new approval document required');
-  await c.factory.upload(`/applications/${id}/documents`, { kind: 'electricityApprovalFile' }, pdfVariant('elec-v2'));
-  assert.equal((await act(c.factory, id, 'submit_electricity', { distributionCompany: 'شركة توزيع' })).status, 200);
-  const v = await getApp(c.pmu, id);
+  assert.equal((await act(c.factory, id, 'resubmit')).status, 422, 'proof document required');
+  await uploadProof(c.factory, id);
+  assert.equal((await act(c.factory, id, 'resubmit')).status, 200);
+  const v = await getApp(c.electricity, id);
   assert.equal(v.state, 'ELECTRICITY_REVIEW');
-  assert.equal(v.documents.filter((d: any) => d.kind === 'electricityApprovalFile').length, 2);
+  assert.equal(v.documents.filter((d: any) => d.kind === 'correctionProofFile').length, 1);
 });
 
 test('8) ENCPC and PMU cannot issue a final rejection', async () => {
@@ -145,7 +141,6 @@ test('8) ENCPC and PMU cannot issue a final rejection', async () => {
   const e = await act(c.encpc, id, 'reject', { reason: 'رفض' });
   assert.ok([403, 409].includes(e.status), `ENCPC reject → ${e.status}`);
   await act(c.encpc, id, 'compliant');
-  await act(c.factory, id, 'select_provider', { providerId: 'sp-demo-1' });
   await c.factory.upload(`/applications/${id}/documents`, { kind: 'technicalOfferFile' }, pdfVariant('offer'));
   await act(c.factory, id, 'submit_offer');
   const p = await act(c.pmu, id, 'reject', { reason: 'رفض' });

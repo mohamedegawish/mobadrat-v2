@@ -66,7 +66,7 @@ export const LoginView: React.FC = () => {
       {flash ? (
         <div className="final-outcome is-success" role="status" data-testid="signed-out-submitted" style={{ marginBottom: '1rem' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p className="final-outcome-title" style={{ fontSize: '1.05rem' }}>{flash.resubmitted ? t('تم إرسال التعديلات للمراجعة', 'Your changes were sent for review') : t('تم إرسال طلب التسجيل للمراجعة', 'Your registration was sent for review')}</p>
+            <p className="final-outcome-title" style={{ fontSize: '1.05rem' }}>{t('تم إرسال طلب التسجيل للمراجعة', 'Your registration was sent for review')}</p>
             <p className="final-outcome-sub">{t('يراجع مركز تحديث الصناعة (IMC) طلبكم الآن، وسيصلكم بريد بالقرار. لا يمكن الدخول حتى قبول الحساب.', 'IMC is reviewing your registration; you will be emailed the decision. Sign-in is available once the account is approved.')}</p>
           </div>
         </div>
@@ -85,7 +85,7 @@ export const LoginView: React.FC = () => {
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => store.navigate('forgot-password')}>{t('نسيت كلمة المرور؟', 'Forgot password?')}</button>
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => store.navigate('register')}>{t('تسجيل مصنع جديد', 'Register a factory')}</button>
       </div>
-      <p className="form-helper" style={{ marginTop: '0.75rem' }}>{t('حسابات الجهات (IMC وENCPC وPMU والبنوك) ينشئها مدير النظام فقط.', 'Accounts for IMC, ENCPC, PMU and banks are created by the system administrator only.')}</p>
+      <p className="form-helper" style={{ marginTop: '0.75rem' }}>{t('حسابات الجهات (IMC وENCPC وPMU ووزارة الكهرباء) ينشئها مدير النظام فقط.', 'Accounts for IMC, ENCPC, PMU and the Ministry of Electricity are created by the system administrator only.')}</p>
     </Shell>
   );
 };

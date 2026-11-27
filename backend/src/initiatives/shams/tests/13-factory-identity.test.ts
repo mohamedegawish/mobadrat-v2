@@ -227,8 +227,9 @@ test('M8: resubmitting a correction with untouched items is flagged (warning onl
   assert.equal((await act(c.factory, id, 'resubmit')).status, 200, 'not blocked');
 });
 
-test('B3: the public journey no longer names the proposed electricity reviewer', () => {
+test('B3 / D18: the public journey names the Ministry of Electricity — never the PMU — as the electricity reviewer', () => {
   const content = fs.readFileSync(path.resolve(import.meta.dirname, '..', '..', '..', '..', '..', 'frontend', 'src', 'initiatives', 'shams', 'content', 'shams.ts'), 'utf8');
   assert.ok(!content.includes('وتراجعها وحدة إدارة المبادرة'));
   assert.ok(!content.includes('reviewed by the PMU'));
+  assert.ok(content.includes('موافقة وزارة الكهرباء'));
 });

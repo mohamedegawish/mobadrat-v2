@@ -53,15 +53,13 @@ test('admin audit-log search works (it used to return 500 for any text) and filt
   assert.ok((await q("SELECT 1 FROM audit_logs LIMIT 1")).length === 1, 'the table is intact');
 });
 
-test('every free-text search box returns 200 (organizations, users, providers, applications)', async () => {
+test('every free-text search box returns 200 (organizations, users, applications)', async () => {
   const org = await c.admin.get(`/admin/organizations?q=${encodeURIComponent('بنك')}`);
   assert.equal(org.status, 200, JSON.stringify(org.json));
   assert.ok(org.json.data.items.length >= 1, 'finds the demo banks by name');
   assert.equal((await c.admin.get(`/admin/organizations?q=${encodeURIComponent('%')}`)).status, 200);
   assert.equal((await c.admin.get(`/admin/users?q=${encodeURIComponent('imc')}`)).status, 200);
   assert.equal((await c.admin.get(`/admin/users?q=${encodeURIComponent('_')}`)).json.data.items.every((u: any) => /_/.test(`${u.nameAr}${u.nameEn}${u.email}`)), true);
-  assert.equal((await c.encpc.get(`/service-providers?q=${encodeURIComponent('تجريبي')}`)).status, 200);
-  assert.ok((await c.encpc.get(`/service-providers?q=${encodeURIComponent('تجريبي')}`)).json.data.items.length >= 1);
   assert.equal((await c.pmu.get(`/applications?q=${encodeURIComponent('%')}`)).status, 200);
   assert.equal((await c.pmu.get(`/applications?q=${encodeURIComponent("o'brien")}`)).status, 200);
 });

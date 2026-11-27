@@ -3,7 +3,7 @@
  * applicants). Activity per organization:
  *   staff     active accounts with an active Shams membership in it
  *   decisions workflow transitions taken by its staff (shams_application_transitions.actorOrgId)
- *   pending   open applications in a state where its role has an action (IMC, ENCPC, PMU; banks have no account — G-02)
+ *   pending   open applications in a state where its role has an action (IMC, ENCPC, PMU, the Ministry of Electricity; banks have no account — G-02)
  */
 import { getDb } from './db/database.js';
 import { MODULE_ID } from './config.js';
@@ -14,12 +14,13 @@ const TYPE_LABELS: Record<string, { ar: string; en: string }> = {
   imc: { ar: 'مراجعة الطلبات — IMC', en: 'Application review — IMC' },
   encpc: { ar: 'المراجعة الفنية — ENCPC', en: 'Technical review — ENCPC' },
   pmu: { ar: 'وحدة إدارة المبادرة — PMU', en: 'Initiative management unit — PMU' },
+  electricity: { ar: 'وزارة الكهرباء — موافقة الكهرباء', en: 'Ministry of Electricity — electricity approval' },
   bank: { ar: 'بنك (مسار التمويل البنكي)', en: 'Bank (bank financing path)' },
   admin: { ar: 'إدارة النظام', en: 'System administration' },
 };
 const BODY_TYPES = Object.keys(TYPE_LABELS);
 /** The role of each body type in the workflow (types without one never have applications waiting for them). */
-const ROLE_OF_TYPE: Record<string, string> = { imc: 'imc_reviewer', encpc: 'encpc_reviewer', pmu: 'pmu_reviewer' };
+const ROLE_OF_TYPE: Record<string, string> = { imc: 'imc_reviewer', encpc: 'encpc_reviewer', pmu: 'pmu_reviewer', electricity: 'electricity_reviewer' };
 
 function statesAwaiting(role: string): string[] {
   return [...new Set(TRANSITIONS.filter((t) => t.actorRole === role && t.from !== 'ANY_NON_TERMINAL').map((t) => String(t.from)))];

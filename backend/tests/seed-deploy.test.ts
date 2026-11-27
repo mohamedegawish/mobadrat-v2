@@ -1,7 +1,7 @@
 // Deploy seeder (core/seedDeploy.ts, SEED_ON_DEPLOY=1): one account for every role of the platform and of each initiative,
 // usable at once with the fixed seed password (no forced change); creates only what is missing on every run; never changes
 // an existing account — except the one-time reset that puts the seeded accounts back in their first state; next to real
-// reference data it adds no demo banks / providers / cohort / experts; SEED_EMAIL_DOMAIN; legacy ids already taken;
+// reference data it adds no demo banks / cohort / experts; SEED_EMAIL_DOMAIN; legacy ids already taken;
 // production uses the fixed seed password whatever the deployment variables hold.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -18,7 +18,7 @@ const n = async (sql: string, ...p: string[]) => Number(((await (await db()).pre
 const seed = async () => (await import('../src/core/seedDeploy.js')).seedOnDeploy();
 const ROLES: Record<string, string[]> = {
   platform: ['super_admin', 'ministry_viewer', 'auditor', 'catalog_manager'],
-  shams: ['system_admin', 'imc_reviewer', 'encpc_reviewer', 'pmu_reviewer', 'factory_owner'],
+  shams: ['system_admin', 'imc_reviewer', 'encpc_reviewer', 'pmu_reviewer', 'electricity_reviewer', 'factory_owner'],
   sona3: ['system_admin', 'imc_officer', 'evaluator', 'funder_reviewer', 'applicant'],
 };
 const NEW_PW = 'MyOwnPass2026';
@@ -63,7 +63,7 @@ test('SD-1 a fresh database: an account for every role, each usable at once with
 
   // demo reference data — the initiatives had none
   assert.equal(await n("SELECT COUNT(*) AS n FROM shams_organizations WHERE type = 'bank'"), 2);
-  assert.equal(await n("SELECT COUNT(*) AS n FROM shams_service_providers WHERE status = 'approved'"), 2);
+  assert.equal(await n('SELECT COUNT(*) AS n FROM shams_service_providers'), 0, 'D14: no provider directory is seeded');
   assert.equal(await n('SELECT COUNT(*) AS n FROM sona3_cohorts'), 1);
   assert.equal(await n("SELECT COUNT(*) AS n FROM sona3_experts WHERE status = 'approved'"), 2);
   assert.ok(await n('SELECT COUNT(*) AS n FROM platform_bodies') >= 4, 'the directory of bodies');
@@ -75,6 +75,7 @@ const DASHBOARD_ACCOUNTS: Array<[string, string | null]> = [
   ['admin@mobadrat.local', 'system_admin'], ['ministry@mobadrat.local', null], ['auditor@mobadrat.local', null], ['content@mobadrat.local', null],
   ['imc@mobadrat.local', 'imc'], ['encpc@shams.local', 'encpc'], ['pmu@shams.local', 'pmu'], ['funder@sona3.local', 'funder'],
   ['evaluator1@sona3.local', 'evaluator'], ['admin@shams.local', 'system_admin'], ['factory@shams.local', null], ['applicant@sona3.local', null],
+  ['electricity@shams.local', 'electricity'],
 ];
 
 test('SD-1b the accounts of ACCOUNTS.md exist after the deploy seeder, each signs in and opens its dashboard', async () => {
@@ -161,7 +162,6 @@ test('SD-3 SEED_EMAIL_DOMAIN on a database with real data: accounts on the new d
     assert.notEqual((await getUserByEmail('imc1.shams@test.example.gov.eg'))!.id, 'usr-imc-1');
     // reference data already existed: still exactly the first run's
     assert.equal(await n("SELECT COUNT(*) AS n FROM shams_organizations WHERE type = 'bank'"), 2);
-    assert.equal(await n('SELECT COUNT(*) AS n FROM shams_service_providers'), 2);
     assert.equal(await n('SELECT COUNT(*) AS n FROM sona3_cohorts'), 1);
     assert.equal(await n('SELECT COUNT(*) AS n FROM sona3_experts'), 2);
     // the second demo factory / applicant got their own organizations

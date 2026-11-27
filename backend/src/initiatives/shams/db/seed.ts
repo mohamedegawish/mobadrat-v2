@@ -1,5 +1,5 @@
 /**
- * Shams demo data (accounts per role + demo banks, factories and service providers). Explicitly fictitious names.
+ * Shams demo data (accounts per role + demo banks and factories). Explicitly fictitious names.
  * Platform accounts + Shams memberships; the factory owners also get a shared factory profile (to demonstrate reuse).
  * Run by the platform's seed (empty database only; the fixed seed password, config.ts DEFAULT_SEED_PASSWORD).
  */
@@ -20,6 +20,7 @@ export const DEV_ACCOUNTS: Array<{ id: string; email: string; nameAr: string; na
   { id: 'usr-imc-2', email: 'imc2@shams.local', nameAr: 'مراجع IMC الثاني (تجريبي)', nameEn: 'IMC Reviewer 2 (demo)', role: 'imc_reviewer', org: ORG_IDS.imc },
   { id: 'usr-encpc-1', email: 'encpc@shams.local', nameAr: 'مراجع ENCPC (تجريبي)', nameEn: 'ENCPC Reviewer (demo)', role: 'encpc_reviewer', org: ORG_IDS.encpc },
   { id: 'usr-pmu-1', email: 'pmu@shams.local', nameAr: 'مراجع PMU (تجريبي)', nameEn: 'PMU Reviewer (demo)', role: 'pmu_reviewer', org: ORG_IDS.pmu },
+  { id: 'usr-electricity-1', email: 'electricity@shams.local', nameAr: 'مراجع وزارة الكهرباء (تجريبي)', nameEn: 'Ministry of Electricity Reviewer (demo)', role: 'electricity_reviewer', org: ORG_IDS.electricity },
   { id: 'usr-factory-1', email: 'factory@shams.local', nameAr: 'مالك المصنع (تجريبي)', nameEn: 'Factory Owner (demo)', role: 'factory_owner', org: 'org-factory-demo-1', phone: '01000000001' },
   { id: 'usr-factory-2', email: 'factory2@shams.local', nameAr: 'مالك المصنع الثاني (تجريبي)', nameEn: 'Factory Owner 2 (demo)', role: 'factory_owner', org: 'org-factory-demo-2', phone: '01000000002' },
 ];
@@ -53,12 +54,6 @@ export async function seedDevData(password: string): Promise<void> {
       });
       await db.prepare('UPDATE shams_factories SET factoryProfileId = ? WHERE id = ?').run(profile.id, f.fac);
     }
-    const sp = db.prepare(`INSERT OR IGNORE INTO shams_service_providers (id, nameAr, nameEn, contactName, contactPhone, contactEmail, status, approvedBy, approvedAt, createdAt, updatedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-    await sp.run('sp-demo-1', 'مقدم خدمة تجريبي (1)', 'Demo Provider 1', 'مسؤول تجريبي', '01000000101', 'provider1@shams.local', 'approved', 'usr-pmu-1', now, now, now);
-    await sp.run('sp-demo-2', 'مقدم خدمة تجريبي (2)', 'Demo Provider 2', 'مسؤول تجريبي', '01000000102', 'provider2@shams.local', 'approved', 'usr-pmu-1', now, now, now);
-    await sp.run('sp-demo-3', 'مقدم خدمة تجريبي (3) — بانتظار الاعتماد', 'Demo Provider 3 (pending)', '', '', '', 'pending', null, null, now, now);
-    await sp.run('sp-demo-4', 'مقدم خدمة تجريبي (4) — موقوف', 'Demo Provider 4 (suspended)', '', '', '', 'suspended', null, null, now, now);
   });
 }
 
@@ -72,17 +67,15 @@ async function freeId(table: 'shams_organizations' | 'shams_factories', id: stri
 
 /**
  * One account per active role (factory owners with their own demo factory) + the reference data they need, created only
- * when Shams has none of its own: banks, service providers. Never changes an existing account or row (core/seedDeploy.ts).
+ * when Shams has none of its own: banks. Never changes an existing account or row (core/seedDeploy.ts).
  */
 export async function seedDeployData(passwordHash: string): Promise<DeploySeedResult> {
   const db = getDb();
   const now = nowIso();
   const accounts: DeploySeedAccount[] = [];
   const notes: string[] = [];
-  const ids: Record<string, string> = {};
   for (const a of DEV_ACCOUNTS) {
     const u = await ensureSeedAccount(a, passwordHash, MODULE_ID);
-    ids[a.id] = u.id;
     accounts.push({ email: u.email, initiativeId: MODULE_ID, role: a.role, status: accountStatus(u) });
     if (!u.created) continue;
     let orgId: string = a.org;
@@ -109,15 +102,6 @@ export async function seedDeployData(passwordHash: string): Promise<DeploySeedRe
     await org.run(await freeId('shams_organizations', 'org-bank-demo-a'), 'bank', 'بنك تجريبي (أ)', 'Demo Bank A', '', now, now);
     await org.run(await freeId('shams_organizations', 'org-bank-demo-b'), 'bank', 'بنك تجريبي (ب)', 'Demo Bank B', '', now, now);
     notes.push('shams: banks — 2 demo banks added (the initiative had none)');
-  }
-  if (await n('SELECT COUNT(*) AS n FROM shams_service_providers')) notes.push('shams: service providers — the initiative has its own, no demo provider added');
-  else {
-    const sp = db.prepare(`INSERT INTO shams_service_providers (id, nameAr, nameEn, contactName, contactPhone, contactEmail, status, approvedBy, approvedAt, createdAt, updatedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-    const pmu = ids['usr-pmu-1'];
-    await sp.run('sp-demo-1', 'مقدم خدمة تجريبي (1)', 'Demo Provider 1', 'مسؤول تجريبي', '01000000101', '', 'approved', pmu, now, now, now);
-    await sp.run('sp-demo-2', 'مقدم خدمة تجريبي (2)', 'Demo Provider 2', 'مسؤول تجريبي', '01000000102', '', 'approved', pmu, now, now, now);
-    notes.push('shams: service providers — 2 approved demo providers added (the initiative had none)');
   }
   const regs = accounts.filter((a) => a.role === 'factory_owner' && a.status === 'created').length;
   if (regs) notes.push(`shams: ${regs} demo factory(ies) with their profile — submitting to IMC checks the industrial registry, so use a real registry number (or ALLOW_MOCK_REGISTRY_IN_PRODUCTION on a demo server)`);

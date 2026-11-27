@@ -2,7 +2,7 @@
 // عزل المصانع والبنوك في القراءة والتنزيل والإجراءات، تمرير حقول غير مسموحة، وتزامن اختيار مقدم الخدمة.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { isolateTestEnv, startServer, clients, act, getApp, advanceTo, createCompleteDraft, pdfVariant, q, uploadContractFile, PROVIDER_OK, BANK_A, BANK_B, type Started } from './helpers.js';
+import { PROVIDER_INFO, isolateTestEnv, startServer, clients, act, getApp, advanceTo, createCompleteDraft, pdfVariant, q, uploadContractFile, BANK_A, BANK_B, type Started } from './helpers.js';
 
 const env = isolateTestEnv('boundaries');
 let srv: Started;
@@ -59,12 +59,11 @@ test('M8: the admin view carries no deficiency notes, no electricity data and no
   // الكهرباء ومقدم الخدمة
   const b = await advanceTo('ELECTRICITY_REVIEW', c, reg());
   const pmuView = await getApp(c.pmu, b);
-  assert.ok(pmuView.data.electricity, 'control: PMU sees the electricity section');
-  assert.ok(pmuView.provider.contactEmail || pmuView.provider.contactPhone || pmuView.provider.contactName, 'control: PMU sees provider contacts');
+  assert.ok(pmuView.providerInfo.email && pmuView.providerInfo.phone, 'control: PMU sees provider contacts');
   const adminB = await getApp(c.admin, b);
   assert.equal(adminB.data.electricity, undefined, 'no electricity data for the admin');
-  assert.equal(adminB.provider.nameAr, pmuView.provider.nameAr, 'provider name stays visible');
-  assert.deepEqual([adminB.provider.contactName, adminB.provider.contactPhone, adminB.provider.contactEmail], ['', '', ''], 'no provider contacts for the admin');
+  assert.equal(adminB.providerInfo.name, pmuView.providerInfo.name, 'provider name stays visible');
+  assert.deepEqual([adminB.providerInfo.email, adminB.providerInfo.phone], ['', ''], 'no provider contacts for the admin');
   assert.ok(adminB.documents.every((d: any) => d.downloadable === false));
 });
 
@@ -78,8 +77,8 @@ test('IDOR: another factory cannot read, download, edit, act on or upload to a f
   assert.equal((await c.factory2.upload(`/applications/${id}/documents`, { kind: 'taxCardFile' }, pdfVariant('evil'))).status, 404);
   assert.equal((await c.factory2.del(`/applications/${id}/documents/${doc.id}`)).status, 404);
   const v = (await getApp(c.pmu, id)).version;
-  for (const action of ['withdraw', 'submit', 'accept', 'select_provider']) {
-    const r = await c.factory2.post(`/applications/${id}/actions/${action}`, { expectedVersion: v, reason: 'x', providerId: PROVIDER_OK });
+  for (const action of ['withdraw', 'submit', 'accept', 'submit_offer']) {
+    const r = await c.factory2.post(`/applications/${id}/actions/${action}`, { expectedVersion: v, reason: 'x', ...PROVIDER_INFO });
     assert.ok([403, 404].includes(r.status), `${action} -> ${r.status}`);
   }
   assert.ok(!(await c.factory2.get('/applications')).json.data.items.some((a: any) => a.id === id), 'not in the other factory list');
@@ -136,7 +135,7 @@ test('role escalation / mass assignment: unknown or privileged fields are reject
     const r = await c.factory.put(`/applications/${id}/data/general`, body);
     assert.equal(r.status, 400, JSON.stringify(body));
   }
-  assert.equal((await c.factory.put(`/applications/${id}/data/provider`, { providerId: PROVIDER_OK })).status === 200, false, 'the provider section cannot be written directly');
+  assert.equal((await c.factory.put(`/applications/${id}/data/provider`, PROVIDER_INFO)).status === 200, false, 'the provider section cannot be written directly');
   assert.equal((await c.factory.put(`/applications/${id}/data/electricity`, { bankOrgId: BANK_A })).status === 200, false, 'nor the electricity section');
   assert.equal((await getApp(c.factory, id)).state, 'DRAFT');
   // الأدوار الأخرى لا تكتب بيانات الطلب
@@ -150,35 +149,28 @@ test('role escalation / mass assignment: unknown or privileged fields are reject
   assert.equal((await getApp(c.factory, id)).state, 'DRAFT');
 });
 
-test('provider selection: only the owner, only an approved provider, and two concurrent selections produce exactly one transition', async () => {
+test('offer submission: only the owner, with the provider named, and two concurrent submissions produce exactly one transition', async () => {
   await closeOpen();
-  const id = await advanceTo('PROVIDER_SELECTION', c, reg());
+  const id = await advanceTo('OFFER_UPLOAD', c, reg());
+  assert.equal((await c.factory.upload(`/applications/${id}/documents`, { kind: 'technicalOfferFile' }, pdfVariant('o-b'), 'o.pdf')).status, 201);
   const v = (await getApp(c.factory, id)).version;
-  // مصنع آخر لا يختار لهذا الطلب
-  const other = await c.factory2.post(`/applications/${id}/actions/select_provider`, { expectedVersion: v, providerId: PROVIDER_OK });
+  const other = await c.factory2.post(`/applications/${id}/actions/submit_offer`, { expectedVersion: v, ...PROVIDER_INFO });
   assert.ok([403, 404].includes(other.status), `other factory -> ${other.status}`);
-  // مراجعون لا يختارون
-  for (const client of [c.imc, c.pmu, c.admin]) {
-    const r = await client.post(`/applications/${id}/actions/select_provider`, { expectedVersion: v, providerId: PROVIDER_OK });
+  for (const client of [c.imc, c.pmu, c.admin, c.electricity]) {
+    const r = await client.post(`/applications/${id}/actions/submit_offer`, { expectedVersion: v, ...PROVIDER_INFO });
     assert.ok([403, 404, 409].includes(r.status), `reviewer -> ${r.status}`);
   }
-  // اختياران متزامنان بنفس النسخة: واحد ينجح والثاني يُرفض بلا تكرار
-  const body = { expectedVersion: v, providerId: PROVIDER_OK };
-  const results = await Promise.all([c.factory.post(`/applications/${id}/actions/select_provider`, body), c.factory.post(`/applications/${id}/actions/select_provider`, body)]);
-  const codes = results.map((r) => r.status).sort();
-  assert.deepEqual(codes, [200, 409], JSON.stringify(results.map((r) => r.json?.code)));
-  const rows = await q("SELECT 1 FROM shams_application_transitions WHERE applicationId = ? AND action = 'select_provider'", id);
-  assert.equal(rows.length, 1, 'one transition, one timestamp');
-  const view = await getApp(c.factory, id);
-  assert.equal(view.state, 'OFFER_UPLOAD');
-  assert.equal(view.provider.id, PROVIDER_OK);
-  // اختيار ثانٍ بعد الاختيار: مرفوض ما دام المختار معتمدًا
-  const again = await act(c.factory, id, 'select_provider', { providerId: 'sp-demo-2' });
-  assert.equal(again.status, 409);
-  assert.equal((await getApp(c.factory, id)).provider.id, PROVIDER_OK);
+  const bad = await c.factory.post(`/applications/${id}/actions/submit_offer`, { expectedVersion: v, providerName: 'x', providerEmail: 'not-an-email' });
+  assert.equal(bad.status, 400);
+  assert.deepEqual(bad.json.details.map((d: any) => d.field).sort(), ['providerEmail', 'providerName']);
+  const body = { expectedVersion: v, ...PROVIDER_INFO };
+  const results = await Promise.all([c.factory.post(`/applications/${id}/actions/submit_offer`, body), c.factory.post(`/applications/${id}/actions/submit_offer`, body)]);
+  assert.deepEqual(results.map((r) => r.status).sort(), [200, 409], JSON.stringify(results.map((r) => r.json?.code)));
+  assert.equal((await q("SELECT 1 FROM shams_application_transitions WHERE applicationId = ? AND action = 'submit_offer'", id)).length, 1, 'one transition, one timestamp');
+  assert.equal((await getApp(c.factory, id)).providerInfo.name, PROVIDER_INFO.providerName);
 });
 
-test('system admin: no decision on an application, no provider/registry power, and cannot approve account or recovery requests', async () => {
+test('system admin: no decision on an application, no registry power, and cannot approve account or recovery requests', async () => {
   await closeOpen();
   const id = await advanceTo('OFFER_REVIEW', c, reg());
   const v = (await getApp(c.pmu, id)).version;
@@ -187,8 +179,6 @@ test('system admin: no decision on an application, no provider/registry power, a
     assert.ok([403, 404].includes(r.status), `${action} -> ${r.status}`);
   }
   assert.equal((await getApp(c.pmu, id)).state, 'OFFER_REVIEW');
-  assert.equal((await c.admin.post('/service-providers', { nameAr: 'مقدم من الأدمن' })).status, 403);
-  assert.equal((await c.admin.post('/service-providers/sp-demo-3/approve', {})).status, 403);
   assert.equal((await c.admin.get('/registry-blocks')).status, 403);
   assert.equal((await c.admin.post('/account-requests/acr-none/approve', {})).status, 403);
   assert.equal((await c.admin.post('/recovery-requests/rec-none/approve', {})).status, 403);
@@ -199,7 +189,7 @@ test('system admin: no decision on an application, no provider/registry power, a
 test('unauthenticated and malformed tokens get 401 on every protected resource', async () => {
   const { Client } = await import('./helpers.js');
   const anon = new Client(srv.base);
-  for (const p of ['/applications', '/service-providers', '/reports/summary', '/admin/users', '/account-requests', '/recovery-requests', '/registry-blocks']) {
+  for (const p of ['/applications', '/reports/summary', '/admin/users', '/account-requests', '/recovery-requests', '/registry-blocks']) {
     assert.equal((await anon.get(p)).status, 401, p);
   }
   anon.token = 'not.a.jwt';

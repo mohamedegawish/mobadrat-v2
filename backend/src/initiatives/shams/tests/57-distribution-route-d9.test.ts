@@ -39,7 +39,7 @@ test('T28: after مستوفاة the factory picks the distribution company; the 
   assert.equal((await act(c.factory, id, 'select_distribution_path')).status, 200);
   const app = await getApp(c.factory, id);
   assert.equal(app.state, 'DISTRIBUTION_UPLOAD');
-  assert.equal(app.stateLabelAr, 'رفع موافقة شركة توزيع الكهرباء');
+  assert.equal(app.stateLabelAr, 'رفع موافقة شركة توزيع الكهرباء — المصنع');
   assert.ok(!(await actions(c.factory, id)).includes('select_bank'), 'no bank control on this path');
   assert.notEqual((await act(c.factory, id, 'select_bank', { bankOrgId: BANK_A })).status, 200, 'a direct bank choice is refused');
   assert.ok(!(await inQueue(c.pmu, id)), 'not in PMU\'s queue yet');

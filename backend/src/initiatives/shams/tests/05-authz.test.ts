@@ -11,8 +11,8 @@ before(async () => { srv = await startServer(); c = await clients(srv.base); });
 after(async () => { await srv.close(); await env.cleanup(); });
 
 // record_result / reassign_bank: إجراءات ملغاة (G-02) — تبقى في القائمة لإثبات أن الخادم يرفضها لكل دور.
-const ALL_ACTIONS = ['submit', 'resubmit', 'accept', 'request_correction', 'reject', 'compliant', 'non_compliant', 'select_provider',
-  'submit_offer', 'submit_electricity', 'select_bank', 'record_contract', 'record_no_contract', 'withdraw', 'record_result', 'reassign_bank',
+const ALL_ACTIONS = ['submit', 'resubmit', 'accept', 'request_correction', 'reject', 'compliant', 'non_compliant',
+  'submit_offer', 'select_bank', 'record_contract', 'record_no_contract', 'withdraw', 'record_result', 'reassign_bank',
   'select_distribution_path', 'submit_distribution_approval', 'reject_distribution'];
 
 /** الإجراءات المسموحة لكل (دور، حالة) وفق جدول الانتقالات. */
@@ -20,6 +20,7 @@ const EXPECTED: Record<string, Record<string, string[]>> = {
   IMC_REVIEW: { imc: ['accept', 'request_correction', 'reject'], factory: ['withdraw'] },
   ENCPC_REVIEW: { encpc: ['compliant', 'non_compliant'], factory: ['withdraw'] },
   OFFER_REVIEW: { pmu: ['accept', 'request_correction'], factory: ['withdraw'] },
+  ELECTRICITY_REVIEW: { electricity: ['accept', 'request_correction'], factory: ['withdraw'] },
   // G-01/G-02: بعد قبول الكهرباء لا يتصرف إلا المصنع — يختار مسار التعاقد (البنك أو شركة التوزيع)، وعلى مسار البنك يسجل النتيجة.
   BANK_SELECTION: { factory: ['select_bank', 'select_distribution_path', 'withdraw'] },
   CONTRACT_OUTCOME: { factory: ['record_contract', 'record_no_contract', 'withdraw'] },
@@ -39,7 +40,7 @@ test('13) every role is blocked from every action outside the transition table �
     await closeOpen();
     const id = await advanceTo(state as any, c, `IND-AZ-${++n}`);
     const version = (await getApp(c.pmu, id)).version;
-    const roles: Record<string, Client> = { factory: c.factory, imc: c.imc, encpc: c.encpc, pmu: c.pmu, admin: c.admin, factory2: c.factory2 };
+    const roles: Record<string, Client> = { factory: c.factory, imc: c.imc, encpc: c.encpc, pmu: c.pmu, electricity: c.electricity, admin: c.admin, factory2: c.factory2 };
     for (const [role, client] of Object.entries(roles)) {
       // allowedActions من السيرفر يطابق الجدول
       const view = await client.get(`/applications/${id}`);
@@ -93,7 +94,8 @@ test('14) data isolation: factory↔factory, IMC/ENCPC vs later-stage documents,
     const v = await getApp(reviewer, id);
     assert.ok(!v.documents.some((d: any) => ['technicalOfferFile', 'electricityApprovalFile', 'contractFile'].includes(d.kind)));
     assert.equal((await reviewer.get(`/applications/${id}/documents/${contractDoc.id}/download`)).status, 404);
-    assert.equal(v.provider, null);
+    assert.equal(v.providerInfo, null);
+    assert.equal(v.data.provider, undefined);
     assert.equal(v.data.electricity, undefined);
     assert.equal(v.bankReferral, null);
     assert.equal((await reviewer.get(`/applications/${id}/documents/${offerDoc.id}/download`)).status, 404);

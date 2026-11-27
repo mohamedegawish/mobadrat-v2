@@ -329,7 +329,8 @@
       "post": {
         "summary": "رفع مستند PDF (multipart: file + kind) — نسخة جديدة دون حذف السابقة",
         "x-roles": [
-          "factory_owner"
+          "factory_owner",
+          "electricity_reviewer"
         ],
         "x-rate-limit": "30/min/user",
         "requestBody": {
@@ -358,7 +359,8 @@
                       "technicalOfferFile",
                       "electricityApprovalFile",
                       "contractFile",
-                      "distributionApprovalFile"
+                      "distributionApprovalFile",
+                      "correctionProofFile"
                     ]
                   }
                 }
@@ -472,9 +474,7 @@
               "reject",
               "compliant",
               "non_compliant",
-              "select_provider",
               "submit_offer",
-              "submit_electricity",
               "select_bank",
               "record_contract",
               "record_no_contract",
@@ -519,312 +519,6 @@
             "$ref": "#/components/responses/Error"
           },
           "422": {
-            "$ref": "#/components/responses/Error"
-          }
-        }
-      }
-    },
-    "/service-providers": {
-      "get": {
-        "summary": "دليل مقدمي الخدمة: المصنع وباقي الأدوار يرون المتاحين للاختيار فقط (الاسم والتفاصيل والشعار والموقع)؛ ENCPC وPMU يرون كل الحالات بكل الحقول",
-        "x-roles": [
-          "any"
-        ],
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Ok"
-          }
-        }
-      },
-      "post": {
-        "summary": "ENCPC تضيف مقدم خدمة (غير مفعّل وبانتظار الاعتماد): الاسم إجباري، والتفاصيل والموقع والاتصال اختيارية",
-        "x-roles": [
-          "encpc_reviewer"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "nameAr"
-                ],
-                "properties": {
-                  "nameAr": {
-                    "type": "string",
-                    "minLength": 2
-                  },
-                  "nameEn": {
-                    "type": "string"
-                  },
-                  "description": {
-                    "type": "string",
-                    "maxLength": 2000
-                  },
-                  "website": {
-                    "type": "string"
-                  },
-                  "contactName": {
-                    "type": "string"
-                  },
-                  "contactPhone": {
-                    "type": "string"
-                  },
-                  "contactEmail": {
-                    "type": "string",
-                    "format": "email"
-                  },
-                  "notes": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "$ref": "#/components/responses/Ok"
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          }
-        }
-      }
-    },
-    "/service-providers/{id}": {
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/id"
-        }
-      ],
-      "put": {
-        "summary": "ENCPC تعدّل بيانات مقدم الخدمة (الاسم، التفاصيل، الموقع، الاتصال)",
-        "x-roles": [
-          "encpc_reviewer"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [],
-                "properties": {
-                  "nameAr": {
-                    "type": "string",
-                    "minLength": 2
-                  },
-                  "nameEn": {
-                    "type": "string"
-                  },
-                  "description": {
-                    "type": "string",
-                    "maxLength": 2000
-                  },
-                  "website": {
-                    "type": "string"
-                  },
-                  "contactName": {
-                    "type": "string"
-                  },
-                  "contactPhone": {
-                    "type": "string"
-                  },
-                  "contactEmail": {
-                    "type": "string",
-                    "format": "email"
-                  },
-                  "notes": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Ok"
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          }
-        }
-      }
-    },
-    "/service-providers/{id}/activate": {
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/id"
-        }
-      ],
-      "post": {
-        "summary": "ENCPC تفعّل ظهور مقدم الخدمة للمصانع. إن كان اعتماد PMU مطلوبًا (★) فلا يظهر قبله وتُنبَّه PMU",
-        "x-roles": [
-          "encpc_reviewer"
-        ],
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Ok"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          }
-        }
-      }
-    },
-    "/service-providers/{id}/deactivate": {
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/id"
-        }
-      ],
-      "post": {
-        "summary": "ENCPC تلغي تفعيل مقدم الخدمة: يختفي عن المصانع، والطلبات التي اختارته تتبع القاعدة F (قبل العرض: إعادة اختيار، أثناء مراجعته: عودة آلية لرفع العرض، بعد قبوله: تنبيه فقط)",
-        "x-roles": [
-          "encpc_reviewer"
-        ],
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Ok"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          }
-        }
-      }
-    },
-    "/service-providers/{id}/approve": {
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/id"
-        }
-      ],
-      "post": {
-        "summary": "اعتماد PMU لمقدم الخدمة ★ (مطلوب ما دامت shamsPolicy.providerApprovalRequired، وإلا 409)",
-        "x-roles": [
-          "pmu_reviewer"
-        ],
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Ok"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          }
-        }
-      }
-    },
-    "/service-providers/{id}/suspend": {
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/id"
-        }
-      ],
-      "post": {
-        "summary": "إيقاف PMU لمقدم الخدمة ★ — نفس أثر إلغاء التفعيل على الطلبات (القاعدة F)",
-        "x-roles": [
-          "pmu_reviewer"
-        ],
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Ok"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          }
-        }
-      }
-    },
-    "/service-providers/{id}/logo": {
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/id"
-        }
-      ],
-      "get": {
-        "summary": "شعار مقدم الخدمة (صورة): للمستخدمين المسجلين إن كان متاحًا للاختيار، وغير المتاح لـENCPC وPMU فقط (404 لغيرهم)",
-        "x-roles": [
-          "any"
-        ],
-        "responses": {
-          "200": {
-            "description": "image/png | image/jpeg | image/webp"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          }
-        }
-      },
-      "post": {
-        "summary": "ENCPC ترفع الشعار أو تستبدله (multipart: file). PNG/JPEG/WebP فقط بفحص الـmagic bytes وحد 1 ميجابايت؛ SVG مرفوض. الشعار القديم يُحذف",
-        "x-roles": [
-          "encpc_reviewer"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "file"
-                ],
-                "properties": {
-                  "file": {
-                    "type": "string",
-                    "format": "binary"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Ok"
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "413": {
             "$ref": "#/components/responses/Error"
           }
         }
@@ -936,7 +630,7 @@
           "imc_reviewer",
           "encpc_reviewer",
           "pmu_reviewer",
-          "bank_reviewer"
+          "electricity_reviewer"
         ],
         "responses": {
           "200": {
@@ -1303,6 +997,7 @@
           "imc_reviewer",
           "encpc_reviewer",
           "pmu_reviewer",
+          "electricity_reviewer",
           "bank_reviewer",
           "system_admin"
         ],
@@ -1325,6 +1020,7 @@
           "imc_reviewer",
           "encpc_reviewer",
           "pmu_reviewer",
+          "electricity_reviewer",
           "bank_reviewer"
         ],
         "requestBody": {
@@ -1372,6 +1068,7 @@
           "imc_reviewer",
           "encpc_reviewer",
           "pmu_reviewer",
+          "electricity_reviewer",
           "bank_reviewer"
         ],
         "requestBody": {
@@ -2154,6 +1851,54 @@
           }
         }
       }
+    },
+    "/applications/remind-overdue": {
+      "post": {
+        "summary": "D17: تنبيه كل الجهات المتأخرة (مرة واحدة يوميًا لكل طلب ومرحلة)",
+        "x-roles": [
+          "pmu_reviewer"
+        ],
+        "x-rate-limit": "60/min/user",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/applications/{id}/remind": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "post": {
+        "summary": "D17: تنبيه الجهة المتأخرة على هذا الطلب (409 إن لم يتأخر أو نُبّهت اليوم)",
+        "x-roles": [
+          "pmu_reviewer"
+        ],
+        "x-rate-limit": "60/min/user",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2286,9 +2031,6 @@
               }
             }
           },
-          "providerId": {
-            "type": "string"
-          },
           "distributionCompany": {
             "type": "string"
           },
@@ -2305,6 +2047,23 @@
           },
           "contractNotes": {
             "type": "string"
+          },
+          "providersLink": {
+            "type": "string",
+            "format": "uri",
+            "description": "compliant (ENCPC) only"
+          },
+          "providerName": {
+            "type": "string",
+            "description": "submit_offer / offer resubmit only"
+          },
+          "providerEmail": {
+            "type": "string",
+            "description": "submit_offer / offer resubmit only"
+          },
+          "providerPhone": {
+            "type": "string",
+            "description": "submit_offer / offer resubmit only"
           }
         }
       }

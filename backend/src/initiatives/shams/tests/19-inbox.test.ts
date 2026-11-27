@@ -125,20 +125,20 @@ test('no duplicates: re-dispatching with the same key adds no inbox row, and the
   assert.ok((await inbox(c.factory)).total > 0);
 });
 
-test('new events: provider selection, offer receipt, electricity receipt and acceptance, bank choice (factory) reach email and inbox with the application reference', async () => {
+test('new events: ENCPC acceptance, offer receipt and acceptance, electricity decision, bank choice (factory) reach email and inbox with the application reference', async () => {
   await closeOpen();
   const id = await advanceTo('BANK_SELECTION', c, reg());
   const pending = () => q<{ templateKey: string; recipientAddress: string; subject: string }>(
     "SELECT templateKey, recipientAddress, subject FROM notification_outbox WHERE applicationId = ? AND channel = 'email'", id);
   const before = await pending();
-  assert.ok(before.some((m) => m.templateKey === 'app.provider_selected' && m.recipientAddress === 'factory@shams.local'), 'provider selected → factory');
+  assert.ok(before.some((m) => m.templateKey === 'app.encpc_compliant' && m.recipientAddress === 'factory@shams.local'), 'technical acceptance → factory');
   assert.ok(before.some((m) => m.templateKey === 'app.offer_received' && m.recipientAddress === 'factory@shams.local'), 'offer received → factory');
   const f = await inbox(c.factory);
-  assert.ok(byKey(f, 'app.provider_selected').some((i: any) => i.applicationId === id));
+  assert.ok(byKey(f, 'app.encpc_compliant').some((i: any) => i.applicationId === id));
   assert.ok(byKey(f, 'app.offer_received').some((i: any) => i.applicationId === id));
-  const sel = byKey(f, 'app.provider_selected').find((i: any) => i.applicationId === id);
+  const sel = byKey(f, 'app.encpc_compliant').find((i: any) => i.applicationId === id);
   assert.match(sel.title, /SHAMS-\d{4}-\d{5}/);
-  assert.ok(before.some((m) => m.templateKey === 'app.electricity_received' && m.recipientAddress === 'factory@shams.local'), 'electricity receipt → factory');
+  assert.ok(before.some((m) => m.templateKey === 'app.offer_accepted' && m.recipientAddress === 'factory@shams.local'), 'offer accepted → factory');
   assert.ok(before.some((m) => m.templateKey === 'app.electricity_accepted' && m.recipientAddress === 'factory@shams.local'), 'electricity accepted (choose the bank) → factory');
   assert.equal((await act(c.factory, id, 'select_bank', { bankOrgId: 'org-bank-demo-a' })).status, 200);
   const after = await pending();
@@ -150,9 +150,9 @@ test('new events: provider selection, offer receipt, electricity receipt and acc
   const mails = after.filter((m) => m.templateKey === 'app.offer_received').length;
   assert.equal(mails, 1, 'one receipt for the single offer submission');
   const { renderTemplate } = await import('../notifications/templates.js');
-  for (const key of ['app.provider_selected', 'app.offer_received', 'app.electricity_received', 'app.electricity_accepted', 'app.bank_selected'] as const) {
+  for (const key of ['app.encpc_compliant', 'app.offer_accepted', 'app.offer_received', 'app.electricity_received', 'app.electricity_accepted', 'app.bank_selected'] as const) {
     const r = renderTemplate(key, { appId: 'app-1', number: 'SHAMS-2026-00001', companyName: 'مصنع', providerNameAr: 'مقدم', bankNameAr: 'بنك' });
-    assert.ok(r.subject.includes('SHAMS-2026-00001') || key === 'app.provider_selected', key);
+    assert.ok(r.subject.includes('SHAMS-2026-00001'), key);
     assert.match(r.html, /SHAMS-2026-00001/);
     assert.ok((r.html.match(/<a [^>]*href=/g) ?? []).length >= 1);
     assert.ok(r.sms.length > 0 && r.sms.length <= 200, `${key} SMS is short`);

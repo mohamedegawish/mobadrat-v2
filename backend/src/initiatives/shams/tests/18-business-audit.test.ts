@@ -6,7 +6,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
-import { isolateTestEnv, startServer, clients, createCompleteDraft, act, advanceTo, getApp, q, pdfVariant, FORM_DOCS, PDF, PROVIDER_OK, BANK_A, BANK_B, uploadContractFile, type Started, type Client } from './helpers.js';
+import { PROVIDER_INFO, isolateTestEnv, startServer, clients, createCompleteDraft, act, advanceTo, getApp, q, pdfVariant, FORM_DOCS, PDF, BANK_A, BANK_B, uploadContractFile, type Started, type Client } from './helpers.js';
 
 const env = isolateTestEnv('business-audit');
 let srv: Started;
@@ -461,235 +461,11 @@ test('F-05/7) rejected uploads change nothing: invalid PDF, another factory, and
   await assertNoOrphans();
 });
 
-// ══ المرحلة 4 (F-04): تغيير بيانات مقدم خدمة معتمد — فرق منظم في التدقيق + إشعار PMU، بلا تغيير في الاعتماد أو الظهور ═══════════════════
-const PNG_1x1 = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
-const PNG_OTHER = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFklEQVR42mP8z8BQz0AEYBxVSF+FAP5FDvcfRYWgAAAAAElFTkSuQmCC', 'base64');
-
-let provSeq = 0;
-async function approvedProvider(extra: Record<string, unknown> = {}) {
-  const r = await c.encpc.post('/service-providers', { nameAr: `مقدم تدقيق ${++provSeq}`, description: 'وصف أصلي للخدمة', website: 'orig-provider.example', ...extra });
-  assert.equal(r.status, 201, JSON.stringify(r.json));
-  const id = r.json.data.id as string;
-  assert.equal((await c.encpc.post(`/service-providers/${id}/activate`, {})).status, 200);
-  assert.equal((await c.pmu.post(`/service-providers/${id}/approve`, {})).status, 200);
-  return id;
-}
-const providerRow = async (id: string) => (await q<any>('SELECT status, isActive, approvedBy, approvedAt, suspendedAt FROM shams_service_providers WHERE id = ?', id))[0];
-const lastAudit = async (action: string, id: string) => {
-  const r = (await q<any>('SELECT actorType, actorUserId, actorRole, actorOrgId, integrationKeyId, actorName, details FROM audit_logs WHERE action = ? AND entityId = ? ORDER BY at DESC, rowid DESC LIMIT 1', action, id))[0];
-  return r ? { ...r, details: JSON.parse(r.details) } : null;
-};
-const changedNotices = async () => count("SELECT COUNT(*) AS n FROM notification_outbox WHERE templateKey = 'ops.provider_changed' AND channel = 'email'");
-const changedInbox = async () => count("SELECT COUNT(*) AS n FROM user_notifications WHERE templateKey = 'ops.provider_changed'");
-const pmuEmails = async () => count("SELECT COUNT(DISTINCT lower(email)) AS n FROM users u JOIN initiative_memberships m ON m.userId = u.id AND m.initiativeId = 'shams' WHERE m.organizationId = 'org-pmu' AND m.role = 'pmu_reviewer' AND u.isActive = 1 AND m.status = 'active'");
-const visibleToFactory = async (id: string) => ((await c.factory.get('/service-providers')).json.data.items as any[]).some((p) => p.id === id);
-
-test('F-04/1) ENCPC edits an approved provider: structured diff, actor and source in the audit; PMU notified once; approval and visibility unchanged', async () => {
-  const id = await approvedProvider();
-  const before = await providerRow(id);
-  const [n0, i0] = [await changedNotices(), await changedInbox()];
-  const r = await c.encpc.put(`/service-providers/${id}`, { nameAr: 'اسم جديد لمقدم الخدمة', description: 'نطاق خدمة مختلف تمامًا' });
-  assert.equal(r.status, 200, JSON.stringify(r.json));
-  const a = await lastAudit('provider.update', id);
-  assert.deepEqual(a.details.changes, { nameAr: [`مقدم تدقيق ${provSeq}`, 'اسم جديد لمقدم الخدمة'], description: ['وصف أصلي للخدمة', 'نطاق خدمة مختلف تمامًا'] });
-  assert.equal(a.details.classification, 'material');
-  assert.equal(a.details.source, 'encpc');
-  assert.equal(a.details.previousStatus, 'approved');
-  assert.equal(a.details.providerId, id);
-  assert.deepEqual({ type: a.actorType, user: a.actorUserId, role: a.actorRole, org: a.actorOrgId }, { type: 'user', user: c.encpc.user.id, role: 'encpc_reviewer', org: 'org-encpc' });
-  assert.equal((await changedNotices()) - n0, await pmuEmails(), 'PMU is notified by email, once per PMU user');
-  assert.equal((await changedInbox()) - i0, await pmuEmails(), 'and in the platform inbox');
-  assert.deepEqual(await providerRow(id), before, 'approval, activation and timestamps of the approval are unchanged');
-  assert.ok(await visibleToFactory(id), 'still visible to factories');
-});
-
-test('F-04/2) a no-op update, and an identical repeat, produce no diff and no notification', async () => {
-  const id = await approvedProvider();
-  assert.equal((await c.encpc.put(`/service-providers/${id}`, { description: 'وصف أول جديد' })).status, 200);
-  const n1 = await changedNotices();
-  for (let i = 0; i < 2; i++) {
-    const r = await c.encpc.put(`/service-providers/${id}`, { description: 'وصف أول جديد' });
-    assert.equal(r.status, 200);
-    const a = await lastAudit('provider.update', id);
-    assert.deepEqual(a.details.changes, {}, 'nothing changed');
-    assert.equal(a.details.classification, 'none');
-  }
-  assert.equal(await changedNotices(), n1, 'no duplicate notification');
-  assert.equal((await c.encpc.put(`/service-providers/${id}`, {})).status, 200);
-  assert.equal(await changedNotices(), n1, 'an empty body changes nothing either');
-});
-
-test('F-04/3) cosmetic changes (formatting-only description, logo) are classified as cosmetic, audited, and still notify PMU', async () => {
-  const id = await approvedProvider({ description: 'خدمات   الطاقة الشمسية' });
-  const n0 = await changedNotices();
-  assert.equal((await c.encpc.put(`/service-providers/${id}`, { description: 'خدمات الطاقة الشمسية ' })).status, 200);
-  let a = await lastAudit('provider.update', id);
-  assert.equal(a.details.classification, 'cosmetic', 'whitespace-only is formatting');
-  assert.deepEqual(Object.keys(a.details.changes), ['description']);
-  assert.equal((await changedNotices()) - n0, await pmuEmails());
-
-  const n1 = await changedNotices();
-  assert.equal((await c.encpc.upload(`/service-providers/${id}/logo`, {}, PNG_1x1, 'logo.png', 'image/png')).status, 200);
-  a = await lastAudit('provider.logo', id);
-  assert.equal(a.details.classification, 'cosmetic');
-  assert.equal(a.details.changes.logo[0], null, 'no previous logo');
-  assert.match(a.details.changes.logo[1], /^[a-f0-9]{12}$/);
-  assert.equal((await changedNotices()) - n1, await pmuEmails());
-  const firstSha = a.details.changes.logo[1];
-
-  assert.equal((await c.encpc.upload(`/service-providers/${id}/logo`, {}, PNG_OTHER, 'logo2.png', 'image/png')).status, 200);
-  a = await lastAudit('provider.logo', id);
-  assert.equal(a.details.changes.logo[0], firstSha, 'previous logo fingerprint recorded');
-  assert.notEqual(a.details.changes.logo[1], firstSha);
-  assert.equal((await providerRow(id)).status, 'approved');
-  assert.ok(await visibleToFactory(id));
-});
-
-test('F-04/4) contact details and internal notes are recorded as "changed" without their values', async () => {
-  const id = await approvedProvider();
-  const r = await c.encpc.put(`/service-providers/${id}`, { contactEmail: 'private.person@provider.example', contactPhone: '01099887766', contactName: 'اسم شخص خاص', notes: 'ملاحظة داخلية سرية' });
-  assert.equal(r.status, 200, JSON.stringify(r.json));
-  const a = await lastAudit('provider.update', id);
-  assert.deepEqual(a.details.changes, { contactName: 'changed', contactPhone: 'changed', contactEmail: 'changed', notes: 'changed' });
-  assert.equal(a.details.classification, 'cosmetic');
-  const raw = JSON.stringify(a.details);
-  for (const secret of ['private.person@provider.example', '01099887766', 'اسم شخص خاص', 'ملاحظة داخلية سرية']) assert.ok(!raw.includes(secret), `value must not be logged: ${secret}`);
-  const mailBody = (await q<{ body: string; textBody: string }>("SELECT body, textBody FROM notification_outbox WHERE templateKey = 'ops.provider_changed' ORDER BY createdAt DESC LIMIT 1"))[0];
-  for (const secret of ['private.person@provider.example', '01099887766', 'ملاحظة داخلية سرية']) assert.ok(!mailBody.body.includes(secret) && !mailBody.textBody.includes(secret), 'nor in the email');
-});
-
-test('F-04/5) a provider that is not approved yet is audited but PMU is not notified', async () => {
-  const created = await c.encpc.post('/service-providers', { nameAr: `مقدم غير معتمد ${++provSeq}`, description: 'وصف' });
-  const id = created.json.data.id as string;
-  const n0 = await changedNotices();
-  assert.equal((await c.encpc.put(`/service-providers/${id}`, { description: 'وصف معدل' })).status, 200);
-  const a = await lastAudit('provider.update', id);
-  assert.deepEqual(a.details.changes, { description: ['وصف', 'وصف معدل'] });
-  assert.equal(a.details.previousStatus, 'pending');
-  assert.equal(await changedNotices(), n0);
-  assert.equal((await providerRow(id)).status, 'pending');
-});
-
-test('F-04/6) the integration route is audited the same way (source "integration", the key is the actor) and cannot change approval or visibility', async () => {
-  const id = await approvedProvider();
-  const k = await c.admin.post('/admin/integration-keys', { name: 'f04-providers-key', scopes: ['manage_providers'], rateLimitPerMinute: 1000 });
-  assert.equal(k.status, 201, JSON.stringify(k.json));
-  const put = (body: unknown) => fetch(`${srv.integration}/service-providers/${id}`, {
-    method: 'PUT', headers: { Authorization: `Bearer ${k.json.data.plaintextKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-  });
-  const before = await providerRow(id);
-  const n0 = await changedNotices();
-  assert.equal((await put({ nameAr: 'اسم عبر الربط' })).status, 200);
-  const a = await lastAudit('provider.update', id);
-  assert.equal(a.details.changes.nameAr[1], 'اسم عبر الربط');
-  assert.equal(a.details.classification, 'material');
-  assert.equal(a.details.source, 'integration');
-  assert.deepEqual({ type: a.actorType, key: a.integrationKeyId, name: a.actorName }, { type: 'integration_key', key: k.json.data.key.id, name: 'f04-providers-key' });
-  assert.equal((await changedNotices()) - n0, await pmuEmails());
-  // لا تغيير في الاعتماد/التفعيل عبر الربط، وتكرار نفس التعديل بلا أثر
-  assert.equal((await put({ status: 'suspended' })).status, 400);
-  assert.equal((await put({ isActive: false })).status, 400);
-  assert.equal((await put({ nameAr: 'اسم عبر الربط' })).status, 200);
-  assert.equal((await changedNotices()) - n0, await pmuEmails(), 'repeat is a no-op');
-  assert.deepEqual(await providerRow(id), before);
-  assert.ok(await visibleToFactory(id));
-});
-
-test('F-04/7) the notification waits in the outbox for retry when mail cannot be sent, and is never duplicated by a retry run', async () => {
-  const id = await approvedProvider();
-  assert.equal((await c.encpc.put(`/service-providers/${id}`, { website: 'changed-site.example' })).status, 200);
-  const rows = await q<any>("SELECT status, attempts, dedupeKey FROM notification_outbox WHERE templateKey = 'ops.provider_changed' AND dedupeKey LIKE ? ", `spc:${id}:%`);
-  assert.equal(rows.length, await pmuEmails());
-  assert.ok(rows.every((r) => ['pending', 'skipped'].includes(r.status)), 'queued, not lost');
-  const { processNotifications } = await import('../jobs/notificationWorker.js');
-  await processNotifications(200);
-  await processNotifications(200);
-  assert.equal((await q("SELECT 1 FROM notification_outbox WHERE templateKey = 'ops.provider_changed' AND dedupeKey LIKE ?", `spc:${id}:%`)).length, rows.length, 'no duplicates from the worker');
-});
-
-// ══ المرحلة 5 (F-06): مصدر حدث «مقدم الخدمة لم يعد متاحًا» — توثيق فقط، دون تغيير الأثر على الطلبات (القرار D16 مفتوح) ═══════════════════
-// الأثر الحالي الموثق: PMU تُوقف **أو** ENCPC تُلغي التفعيل → OFFER_REVIEW/OFFER_CORRECTION تعود إلى OFFER_UPLOAD؛ قبل إرسال العرض تنبيه؛ بعد القبول تنبيه PMU فقط.
-
-const SNAP_APPROVED_ACTIVE = { status: 'approved', isActive: true };
 async function inFlight(target: Parameters<typeof advanceTo>[0], regNumber: string) {
   const id = await advanceTo(target, c, regNumber);
   opened.push({ cl: c.factory, id });
   return id;
 }
-const returnPayload = async (id: string) =>
-  JSON.parse((await q<{ payload: string }>("SELECT payload FROM shams_application_transitions WHERE applicationId = ? AND action = 'provider_suspended_return'", id))[0].payload);
-const appAudit = async (action: string, id: string) => {
-  const r = (await q<any>('SELECT actorType, actorUserId, actorRole, actorOrgId, details FROM audit_logs WHERE action = ? AND applicationId = ? ORDER BY at DESC, rowid DESC LIMIT 1', action, id))[0];
-  return r ? { ...r, details: JSON.parse(r.details) } : null;
-};
-
-test('F-06/1) PMU suspension during offer review: the automatic return records its source, both provider snapshots and both application states', async () => {
-  const id = await inFlight('OFFER_REVIEW', 'IND-F06-1');
-  assert.equal((await c.pmu.post(`/service-providers/${PROVIDER_OK}/suspend`, {})).status, 200);
-  try {
-    assert.equal((await appRow(id)).state, 'OFFER_UPLOAD', 'current documented behavior is unchanged');
-    const p = await returnPayload(id);
-    assert.deepEqual(p.providerEvent, { source: 'pmu_suspend', providerId: PROVIDER_OK, before: SNAP_APPROVED_ACTIVE, after: { status: 'suspended', isActive: true } });
-    assert.deepEqual({ before: p.stateBefore, after: p.stateAfter }, { before: 'OFFER_REVIEW', after: 'OFFER_UPLOAD' });
-    const a = await appAudit('application.provider_suspended_return', id);
-    assert.deepEqual({ role: a.actorRole, org: a.actorOrgId, user: a.actorUserId }, { role: 'pmu_reviewer', org: 'org-pmu', user: c.pmu.user.id });
-    assert.equal(a.details.source, 'pmu_suspend');
-    assert.deepEqual(a.details.providerEvent.after, { status: 'suspended', isActive: true });
-    assert.deepEqual({ before: a.details.stateBefore, after: a.details.stateAfter }, { before: 'OFFER_REVIEW', after: 'OFFER_UPLOAD' });
-    // سجل التدقيق على مستوى المقدم يربط الحدث بالطلبات المتأثرة
-    const pa = await lastAudit('provider.suspend', PROVIDER_OK);
-    assert.equal(pa.details.source, 'pmu_suspend');
-    assert.deepEqual(pa.details.providerBefore, SNAP_APPROVED_ACTIVE);
-    assert.deepEqual(pa.details.providerAfter, { status: 'suspended', isActive: true });
-    assert.ok(pa.details.effect.returned.includes(id));
-  } finally { assert.equal((await c.pmu.post(`/service-providers/${PROVIDER_OK}/approve`, {})).status, 200); }
-});
-
-test('F-06/2) ENCPC deactivation during offer review: same effect today, but the audit tells the two triggers apart (decision D16 stays open)', async () => {
-  const id = await inFlight('OFFER_REVIEW', 'IND-F06-2');
-  assert.equal((await c.encpc.post(`/service-providers/${PROVIDER_OK}/deactivate`, {})).status, 200);
-  try {
-    assert.equal((await appRow(id)).state, 'OFFER_UPLOAD', 'current documented behavior is unchanged');
-    const p = await returnPayload(id);
-    assert.deepEqual(p.providerEvent, { source: 'encpc_deactivate', providerId: PROVIDER_OK, before: SNAP_APPROVED_ACTIVE, after: { status: 'approved', isActive: false } });
-    const a = await appAudit('application.provider_suspended_return', id);
-    assert.deepEqual({ role: a.actorRole, org: a.actorOrgId, user: a.actorUserId }, { role: 'encpc_reviewer', org: 'org-encpc', user: c.encpc.user.id });
-    assert.equal(a.details.source, 'encpc_deactivate');
-    const pa = await lastAudit('provider.deactivate', PROVIDER_OK);
-    assert.equal(pa.details.source, 'encpc_deactivate');
-    assert.deepEqual(pa.details.providerAfter, { status: 'approved', isActive: false });
-    assert.ok(pa.details.effect.returned.includes(id));
-  } finally { assert.equal((await c.encpc.post(`/service-providers/${PROVIDER_OK}/activate`, {})).status, 200); }
-});
-
-test('F-06/3) D6: before the offer is sent the application returns to provider selection; D7: after acceptance it is not moved — both audited with their source', async () => {
-  const early = await inFlight('PROVIDER_SELECTION', 'IND-F06-3A');
-  assert.equal((await act(c.factory, early, 'select_provider', { providerId: PROVIDER_OK })).status, 200);
-  assert.equal((await c.encpc.post(`/service-providers/${PROVIDER_OK}/deactivate`, {})).status, 200);
-  let pa: any;
-  try {
-    assert.equal((await appRow(early)).state, 'PROVIDER_SELECTION', 'D6: back to provider selection before the offer is sent');
-    const a = await appAudit('application.provider_suspended_reselect', early);
-    assert.deepEqual({ source: a.details.source, from: a.details.fromState, to: a.details.toState },
-      { source: 'encpc_deactivate', from: 'OFFER_UPLOAD', to: 'PROVIDER_SELECTION' });
-    assert.equal(a.actorRole, 'encpc_reviewer');
-    pa = await lastAudit('provider.deactivate', PROVIDER_OK);
-    assert.ok(pa.details.effect.notifiedBeforeOffer.includes(early));
-  } finally { assert.equal((await c.encpc.post(`/service-providers/${PROVIDER_OK}/activate`, {})).status, 200); }
-  assert.equal((await act(c.factory, early, 'withdraw', { reason: 'إنهاء' })).status, 200);
-
-  const accepted = await inFlight('ELECTRICITY_UPLOAD', 'IND-F06-3B');
-  assert.equal((await c.pmu.post(`/service-providers/${PROVIDER_OK}/suspend`, {})).status, 200);
-  try {
-    assert.equal((await appRow(accepted)).state, 'ELECTRICITY_UPLOAD', 'after acceptance: alert only');
-    const a = await appAudit('application.provider_unavailable', accepted);
-    assert.deepEqual({ source: a.details.source, effect: a.details.effect, before: a.details.stateBefore, after: a.details.stateAfter },
-      { source: 'pmu_suspend', effect: 'alert_only', before: 'ELECTRICITY_UPLOAD', after: 'ELECTRICITY_UPLOAD' });
-    assert.equal(a.actorRole, 'pmu_reviewer');
-    const pm = await lastAudit('provider.suspend', PROVIDER_OK);
-    assert.ok(pm.details.effect.alertedAfterAcceptance.includes(accepted));
-  } finally { assert.equal((await c.pmu.post(`/service-providers/${PROVIDER_OK}/approve`, {})).status, 200); }
-});
 
 // ══ المرحلة 6 (F-03): نزاع رقم السجل بعد أن تجاوز الطلب الحاجز مراجعة IMC — يثبّت السلوك الحالي المعتمد فقط ═══════════════════
 // القرار D11 مفتوح: من يملك إيقاف طلب حاجز لرقم سجل بعد IMC؟ لا حل مقترح مُنفَّذ هنا ولا يُرمَّز في الاختبار.
@@ -727,30 +503,6 @@ test('F-03/1) D4 (QA 2026-11-23): after PMU names factory B, factory A\'s applic
 });
 
 // ══ المرحلة 7 (F-07, F-09) ═══════════════════════════════════════════════════════════════════════════════════════════
-test('F-07) an offer uploaded for a provider that became unavailable, and never sent, never reaches PMU after the factory re-selects', async () => {
-  const id = await inFlight('PROVIDER_SELECTION', 'IND-F07-1');
-  assert.equal((await act(c.factory, id, 'select_provider', { providerId: PROVIDER_OK })).status, 200);
-  const up1 = await c.factory.upload(`/applications/${id}/documents`, { kind: 'technicalOfferFile' }, pdfVariant('offer-old-provider'), 'offer-old-provider.pdf');
-  assert.equal(up1.status, 201);
-  const oldDocId = up1.json.data.id as string;
-  assert.equal((await c.pmu.post(`/service-providers/${PROVIDER_OK}/suspend`, {})).status, 200);
-  try {
-    assert.equal((await act(c.factory, id, 'select_provider', { providerId: 'sp-demo-2' })).status, 200);
-    // PMU لا ترى عرضًا لم يُرسل أبدًا (ولا تنزّله)، والمصنع يحتفظ به في تاريخه، والصف لم يُحذف
-    const pmuOffers = (await getApp(c.pmu, id)).documents.filter((d: any) => d.kind === 'technicalOfferFile');
-    assert.deepEqual(pmuOffers, [], 'PMU must not see an offer that was never submitted for review');
-    assert.equal((await c.pmu.get(`/applications/${id}/documents/${oldDocId}/download`)).status, 404);
-    assert.ok((await getApp(c.factory, id)).documents.some((d: any) => d.id === oldDocId), 'the factory keeps it in its history');
-    assert.equal(await count('SELECT COUNT(*) AS n FROM shams_documents WHERE id = ?', oldDocId), 1, 'never deleted');
-    // بعد رفع عرض جديد وإرساله: PMU ترى العرض الجديد وحده
-    assert.equal((await c.factory.upload(`/applications/${id}/documents`, { kind: 'technicalOfferFile' }, pdfVariant('offer-new-provider'), 'offer-new-provider.pdf')).status, 201);
-    assert.equal((await act(c.factory, id, 'submit_offer')).status, 200);
-    const seen = (await getApp(c.pmu, id)).documents.filter((d: any) => d.kind === 'technicalOfferFile');
-    assert.deepEqual(seen.map((d: any) => d.originalName), ['offer-new-provider.pdf']);
-    assert.equal((await getApp(c.factory, id)).documents.filter((d: any) => d.kind === 'technicalOfferFile').length, 2, 'both versions kept for the factory');
-  } finally { assert.equal((await c.pmu.post(`/service-providers/${PROVIDER_OK}/approve`, {})).status, 200); }
-});
-
 test('F-09) a stale expectedVersion from someone who could never perform the action gets 403, not a version conflict; same-organization reviewers still get VERSION_CONFLICT', async () => {
   const id = await inFlight('IMC_REVIEW', 'IND-F09-1');
   const v = (await getApp(c.imc, id)).version;
@@ -843,19 +595,20 @@ const oneWinner = (rs: Array<{ status: number; json: any }>, loserStatuses: numb
 };
 
 test('C1) the same offer submitted twice at once: one review transition, one notification set', async () => {
-  const id = await inFlight('PROVIDER_SELECTION', 'IND-C1');
-  assert.equal((await act(c.factory, id, 'select_provider', { providerId: PROVIDER_OK })).status, 200);
+  const id = await inFlight('OFFER_UPLOAD', 'IND-C1');
   assert.equal((await c.factory.upload(`/applications/${id}/documents`, { kind: 'technicalOfferFile' }, pdfVariant('c1-offer'), 'offer.pdf')).status, 201);
-  const rs = await race([{ cl: c.factory, action: 'submit_offer' }, { cl: c.factory, action: 'submit_offer' }], id, c.factory);
+  const rs = await race([{ cl: c.factory, action: 'submit_offer', body: PROVIDER_INFO }, { cl: c.factory, action: 'submit_offer', body: PROVIDER_INFO }], id, c.factory);
   oneWinner(rs);
   assert.equal(await transitionsOf(id, 'OFFER_UPLOAD', 'OFFER_REVIEW'), 1);
   assert.equal((await appRow(id)).state, 'OFFER_REVIEW');
   assert.deepEqual(await dupRecipients(id, 'app.review_assigned'), []);
 });
 
-test('C2) PMU accepts the electricity approval twice at once: one transition to the bank-choice stage, no referral, no duplicate notices', async () => {
+test('C2) the ministry approves twice at once: one transition to the bank-choice stage, no referral, no duplicate notices', async () => {
   const id = await inFlight('ELECTRICITY_REVIEW', 'IND-C2');
-  const rs = await race([{ cl: c.pmu, action: 'accept' }, { cl: c.pmu, action: 'accept' }], id, c.pmu);
+  assert.equal((await c.electricity.upload(`/applications/${id}/documents`, { kind: 'electricityApprovalFile' }, pdfVariant('c2-elec'), 'approval.pdf')).status, 201);
+  const body = { distributionCompany: 'شركة توزيع' };
+  const rs = await race([{ cl: c.electricity, action: 'accept', body }, { cl: c.electricity, action: 'accept', body }], id, c.electricity);
   oneWinner(rs);
   assert.equal(await transitionsOf(id, 'ELECTRICITY_REVIEW', 'CONTRACT_OUTCOME'), 1);
   assert.equal(await count('SELECT COUNT(*) AS n FROM shams_bank_referrals WHERE applicationId = ?', id), 0, 'G-01: no bank yet — the factory chooses after acceptance');

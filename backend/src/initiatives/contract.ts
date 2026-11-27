@@ -19,9 +19,9 @@ import type { RequirementsManifest } from '../core/profile/requirements.js';
  * The kind of person a role makes you on the platform. The same kind of role in several initiatives (IMC in Shams and in
  * Sona3) shares one dashboard on the platform (core/routes/workspace.ts): one page, every initiative together.
  */
-export type UserType = 'applicant' | 'imc' | 'encpc' | 'pmu' | 'evaluator' | 'funder' | 'system_admin';
+export type UserType = 'applicant' | 'imc' | 'encpc' | 'pmu' | 'electricity' | 'evaluator' | 'funder' | 'system_admin';
 /** The user types that have a platform dashboard (the applicant's single page is «مبادراتي»). */
-export const WORKSPACE_TYPES: UserType[] = ['imc', 'pmu', 'encpc', 'funder', 'evaluator', 'system_admin'];
+export const WORKSPACE_TYPES: UserType[] = ['imc', 'pmu', 'encpc', 'electricity', 'funder', 'evaluator', 'system_admin'];
 
 export interface RoleDef {
   key: string;
@@ -94,7 +94,7 @@ export interface WorkspaceBlock {
   rows: Array<{ key: string; labelAr: string; labelEn: string; value: number; unit?: 'EGP' | 'days'; link?: WorkspaceLink }>;
   noteAr?: string; noteEn?: string;
 }
-/** A side panel of the role (ENCPC: the service provider directory). */
+/** A side panel of the role. */
 export interface WorkspacePanel {
   key: string; titleAr: string; titleEn: string;
   tiles: Array<{ key: string; labelAr: string; labelEn: string; value: number }>;

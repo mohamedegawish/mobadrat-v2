@@ -15,7 +15,6 @@ import { meRouter, publicAuthRouter } from './routes/auth.js';
 import { metaRouter } from './routes/meta.js';
 import { factoryRouter } from './routes/factory.js';
 import { applicationsRouter } from './routes/applications.js';
-import { providersRouter } from './routes/providers.js';
 import { reportsRouter } from './routes/reports.js';
 import { registryRouter } from './routes/registry.js';
 import { approvalsRouter } from './routes/approvals.js';
@@ -42,8 +41,6 @@ import { readinessReport } from './services/readiness.js';
 import { startSlaMonitor, stopSlaMonitor } from './jobs/slaMonitor.js';
 import { startWebhookWorker, stopWebhookWorker } from './jobs/webhookWorker.js';
 import { startRecoveryWorker, stopRecoveryWorker } from './services/accountRecovery.js';
-import { registerCidResolver } from '../../core/mail/mailer.js';
-import { providerLogoAttachments } from './notifications/mailImages.js';
 import { createMembership, getMembership } from '../../core/store/memberships.js';
 import { getFactoryProfile, listCurrentDocuments } from '../../core/profile/store.js';
 import { copyStoredFile } from '../../core/http/upload.js';
@@ -57,12 +54,12 @@ registerShamsFieldLabels();
 
 /** The platform dashboard of each role (bank_reviewer is retired: no account, no dashboard). */
 const USER_TYPE: Partial<Record<Role, UserType>> = {
-  factory_owner: 'applicant', imc_reviewer: 'imc', encpc_reviewer: 'encpc', pmu_reviewer: 'pmu', system_admin: 'system_admin',
+  factory_owner: 'applicant', imc_reviewer: 'imc', encpc_reviewer: 'encpc', pmu_reviewer: 'pmu', electricity_reviewer: 'electricity', system_admin: 'system_admin',
 };
 
 const DEFAULT_VIEW: Record<Role, string> = {
   factory_owner: 'factory-dashboard', imc_reviewer: 'dashboard', encpc_reviewer: 'dashboard', pmu_reviewer: 'pmu-monitor',
-  bank_reviewer: 'home', system_admin: 'admin-dashboard',
+  electricity_reviewer: 'dashboard', bank_reviewer: 'home', system_admin: 'admin-dashboard',
 };
 
 export const shamsModule: InitiativeModule = {
@@ -100,7 +97,6 @@ export const shamsModule: InitiativeModule = {
     r.use(restrictUnapprovedFactory); // a factory not approved yet: edit and resubmit its registration only
     r.use(factoryRouter);
     r.use(applicationsRouter);
-    r.use(providersRouter);
     r.use(reportsRouter);
     r.use(registryRouter);
     r.use(approvalsRouter);
@@ -186,8 +182,7 @@ export const shamsModule: InitiativeModule = {
   bodies: shamsBodies,
   // The dashboards (queue, monitoring, readiness) are the platform's, one per user type (core/routes/workspace.ts).
   staffEntryPoints: [
-    { view: 'providers', labelAr: 'مقدمو الخدمة', labelEn: 'Service providers', roles: ['encpc_reviewer', 'pmu_reviewer'] },
-    { view: 'approvals', labelAr: 'الموافقات', labelEn: 'Approvals', roles: ['imc_reviewer', 'encpc_reviewer', 'pmu_reviewer'] },
+    { view: 'approvals', labelAr: 'الموافقات', labelEn: 'Approvals', roles: ['imc_reviewer', 'pmu_reviewer'] },
     { view: 'admin-accounts', labelAr: 'الحسابات', labelEn: 'Accounts', roles: ['system_admin'] },
     { view: 'admin-organizations', labelAr: 'الجهات والبنوك', labelEn: 'Organizations & banks', roles: ['system_admin'] },
     { view: 'admin-outbox', labelAr: 'سجل الإشعارات', labelEn: 'Notifications log', roles: ['system_admin'] },
@@ -252,7 +247,6 @@ export const shamsModule: InitiativeModule = {
     return s[0];
   },
 
-  registerMail() { registerCidResolver(providerLogoAttachments); },
 };
 
 export { STAFF_ROLES };

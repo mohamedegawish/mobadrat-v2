@@ -32,10 +32,10 @@ test('site API: Express routes ⇔ contracts/openapi.json ⇔ ROUTES', async () 
   // The module's API (mounted at /api/v1/i/shams): its private router and its public router under /public.
   const mods = await Promise.all([
     import('../routes/auth.js'), import('../routes/meta.js'), import('../routes/factory.js'),
-    import('../routes/applications.js'), import('../routes/providers.js'), import('../routes/reports.js'), import('../routes/admin.js'),
+    import('../routes/applications.js'), import('../routes/reports.js'), import('../routes/admin.js'),
     import('../routes/registry.js'), import('../routes/approvals.js'), import('../routes/notifications.js'),
   ]);
-  const routers = [mods[0].meRouter, mods[1].metaRouter, mods[2].factoryRouter, mods[3].applicationsRouter, mods[4].providersRouter, mods[5].reportsRouter, mods[6].adminRouter, mods[7].registryRouter, mods[8].approvalsRouter, mods[9].notificationsRouter];
+  const routers = [mods[0].meRouter, mods[1].metaRouter, mods[2].factoryRouter, mods[3].applicationsRouter, mods[4].reportsRouter, mods[5].adminRouter, mods[6].registryRouter, mods[7].approvalsRouter, mods[8].notificationsRouter];
   const publicRoutes = [mods[0].publicAuthRouter, mods[1].metaRouter].flatMap(routesOf).map((r) => r.replace(' /', ' /public/'));
   const express = [...new Set([...routers.flatMap(routesOf), ...publicRoutes])].sort();
   const documented = specOps('openapi.json');

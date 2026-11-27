@@ -101,7 +101,7 @@ export interface Page<T> { items: T[]; page: number; pageSize: number; total: nu
 
 // ── The platform dashboard of a user type (one page for every initiative) ──
 
-export type UserType = 'imc' | 'pmu' | 'encpc' | 'funder' | 'evaluator' | 'system_admin';
+export type UserType = 'imc' | 'pmu' | 'encpc' | 'electricity' | 'funder' | 'evaluator' | 'system_admin';
 export type WorkspaceTab = 'mine' | 'all' | 'overdue' | 'monitoring' | 'readiness';
 export interface WorkspaceLink { tab?: WorkspaceTab; state?: string; view?: string }
 export type WorkspaceTone = 'pending' | 'correction' | 'approved' | 'rejected' | 'completed' | 'closed' | 'info';
@@ -158,6 +158,8 @@ export const api = {
     setAccessToken(d.accessToken);
   },
   me: () => call<Me>('/me'),
+  /** D17: reminds every party an overdue application of the initiative is waiting for (PMU). */
+  remindOverdue: (initiativeId: string) => call<{ overdue: number; sent: number; alreadyReminded: number; noRecipients: number }>(`/i/${initiativeId}/applications/remind-overdue`, { method: 'POST', body: {} }),
   workspace: (type: UserType, query: Record<string, string | number | undefined>) => call<Workspace>(`/me/workspace/${type}`, { query }),
 
   initiatives: () => call<Initiative[]>('/initiatives'),

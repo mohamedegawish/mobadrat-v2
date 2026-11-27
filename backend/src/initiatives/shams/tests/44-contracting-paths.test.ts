@@ -40,7 +40,7 @@ test('A) bank path: electricity accepted → both paths offered → bank chosen 
   let app = await getApp(c.factory, id);
   assert.equal(app.state, 'CONTRACT_OUTCOME');
   assert.equal(app.contractPath, null, 'no path before the factory chooses');
-  assert.equal(app.step, 8, 'stage 8 = contracting path');
+  assert.equal(app.step, 6, 'stage 6 = contracting path');
   assert.match(app.currentTask.labelAr, /مسار التعاقد/);
   assert.deepEqual(await actionsOf(c.factory, id), ['select_bank', 'select_distribution_path', 'withdraw']);
   const accepted = await emails(id, 'app.electricity_accepted');
@@ -134,7 +134,7 @@ test('B) distribution path: choose path → upload (+ re-upload) → submit with
   assert.equal(app.data.contract.contractStatus, 'contracted');
   // the full journey is in the timeline, with the responsible user for every step
   const journey = app.transitions.map((t: any) => t.action);
-  for (const a of ['submit', 'compliant', 'select_provider', 'submit_offer', 'submit_electricity', 'select_distribution_path', 'submit_distribution_approval']) assert.ok(journey.includes(a), a);
+  for (const a of ['submit', 'compliant', 'submit_offer', 'accept', 'select_distribution_path', 'submit_distribution_approval']) assert.ok(journey.includes(a), a);
   assert.ok(app.transitions.every((t: any) => t.actorName), 'every step names its actor');
   const closed = await emails(id, 'app.closed');
   assert.ok(closed.some((m) => m.recipientAddress === F && /تم التعاقد عن طريق شركة توزيع الكهرباء/.test(m.subject)));

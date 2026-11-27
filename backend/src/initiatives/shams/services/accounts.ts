@@ -31,7 +31,7 @@ export interface AccountsPolicy { allowAdminAccounts: boolean }
 
 const CREATABLE_ORG_TYPES: OrgType[] = ['bank'];
 /** جهات القرار — حساباتها بموافقة الجهة (H2). حسابات الأدمن لا تملك أي قرار على الطلبات. */
-export const DECISION_ROLES: Role[] = ['imc_reviewer', 'encpc_reviewer', 'pmu_reviewer'];
+export const DECISION_ROLES: Role[] = ['imc_reviewer', 'encpc_reviewer', 'pmu_reviewer', 'electricity_reviewer'];
 
 export async function createOrg(actor: AuditActor, body: unknown) {
   const b: Obj = onlyKeys(body, ['type', 'nameAr', 'nameEn', 'contactEmail']);
@@ -107,8 +107,14 @@ export async function pmuRecipients(): Promise<Recipient[]> {
   return await orgRecipients(ORG_IDS.pmu, 'pmu_reviewer');
 }
 
+/** D15 / D18: the requests of an organization without an approvals page are PMU's to decide. */
+function decidedByPmu(org: Organization): boolean {
+  return (shamsPolicy.accountApproval.approvedByPmu as readonly string[]).includes(org.type);
+}
+
 /** من يوافق على طلبات جهة: المستخدمون النشطون بدور الجهة، وللبنوك أيضًا PMU (shamsPolicy.accountApproval). */
 async function approverRecipients(org: Organization, role: Role): Promise<Recipient[]> {
+  if (decidedByPmu(org)) return await pmuRecipients();
   const out = await orgRecipients(org.id, role);
   if (org.type === 'bank' && shamsPolicy.accountApproval.approverRolesForBank.includes('pmu_reviewer')) out.push(...await pmuRecipients());
   return out;
@@ -121,13 +127,14 @@ export async function canApproveAccountRequest(user: UserInternal, r: AccountReq
   if (r.targetUserId && r.targetUserId === user.id) return false; // ولا صاحب الحساب على تغيير حسابه
   const org = await getOrganization(r.organizationId);
   if (!org) return false;
+  if (decidedByPmu(org)) return user.role === 'pmu_reviewer' && user.organizationId === ORG_IDS.pmu;
   if (user.organizationId === org.id && user.role === ROLE_ORG_TYPE_ROLE[org.type]) return true;
   return org.type === 'bank' && user.role === 'pmu_reviewer' && user.organizationId === ORG_IDS.pmu
     && shamsPolicy.accountApproval.approverRolesForBank.includes('pmu_reviewer');
 }
 
 // G-02: لا أدوار للبنوك — لا يوجد من «يوافق من داخل البنك».
-const ROLE_ORG_TYPE_ROLE: Partial<Record<OrgType, Role>> = { imc: 'imc_reviewer', encpc: 'encpc_reviewer', pmu: 'pmu_reviewer' };
+const ROLE_ORG_TYPE_ROLE: Partial<Record<OrgType, Role>> = { imc: 'imc_reviewer', pmu: 'pmu_reviewer' };
 
 function requesterOf(actor: AuditActor): Pick<AccountRequestRow, 'requestedByType' | 'requestedByUserId' | 'requestedByKeyId'> {
   return actor.actorType === 'integration_key'
@@ -217,19 +224,20 @@ function firstUserViaCli(org: Organization): AppError {
 export async function requestStaffAccount(actor: AuditActor, body: unknown, opts: AccountsPolicy) {
   const n = await cleanNewAccount(body, opts);
   if (await getUserByEmail(n.email) || await pendingRequestForEmail(n.email)) throw emailTaken();
-  if (n.role === 'system_admin') {
+  if (n.role === 'system_admin' || (actor.actorType === 'user' && shamsPolicy.accountApproval.adminCreatesDirectly.includes(n.role))) {
     const user = await tx(async () => {
       const u = await createUser({ organizationId: n.org.id, role: n.role, email: n.email, nameAr: n.nameAr, nameEn: n.nameEn, phone: n.phone, passwordHash: '', emailVerified: false, createdBy: actor.actorUserId ?? null });
       await sendSetupLink(u, 'created');
-      await addAuditLog({ ...actor, action: 'user.create', entityType: 'user', entityId: u.id, summaryAr: `إنشاء حساب مدير نظام: ${u.email}`, details: { role: n.role, organizationId: n.org.id } });
-      await notifyAccountEvent(u, 'إنشاء حساب مدير نظام', 'system administrator account created', `acct-created:${u.id}`);
+      await addAuditLog({ ...actor, action: 'user.create', entityType: 'user', entityId: u.id, summaryAr: `إنشاء حساب ${ROLE_LABELS[n.role].ar}: ${u.email}`, details: { role: n.role, organizationId: n.org.id } });
+      await notifyAccountEvent(u, `إنشاء حساب ${ROLE_LABELS[n.role].ar}`, `${ROLE_LABELS[n.role].en} account created`, `acct-created:${u.id}`);
       return u;
     });
     kickNotificationWorker();
     return { user: toPublicUser(user), request: null };
   }
   if (!n.org.isActive) throw Errors.conflict('ORG_INACTIVE', 'الجهة موقوفة.', 'The organization is inactive.');
-  if (shamsPolicy.accountApproval.firstUserViaCliOnly && (await activeUsersOf(n.org.id, n.role)).length === 0) throw firstUserViaCli(n.org);
+  // The command line is for an organization's first user only where nobody else could approve it.
+  if (shamsPolicy.accountApproval.firstUserViaCliOnly && !decidedByPmu(n.org) && (await activeUsersOf(n.org.id, n.role)).length === 0) throw firstUserViaCli(n.org);
   const request = await tx(async () => {
     const r = await insertRequest({ kind: 'create_user', organizationId: n.org.id, role: n.role, targetUserId: null, email: n.email, nameAr: n.nameAr, nameEn: n.nameEn, phone: n.phone, reason: n.reason, ...requesterOf(actor) });
     await addAuditLog({ ...actor, action: 'account_request.create', entityType: 'account_request', entityId: r.id,

@@ -40,7 +40,7 @@ const mailsTo = (emails: string[], key: string) => q<{ body: string; recipientAd
 test('objector authorised after IMC acceptance: frozen while pending, then the holder closes as Rejected (REGISTRY_OWNERSHIP)', async () => {
   await freeFactory2();
   const N = `IND-D4-A-${process.pid}`;
-  const holderId = await advanceTo('ENCPC_REVIEW', { factory: c.factory2, imc: c.imc, encpc: c.encpc, pmu: c.pmu }, N);
+  const holderId = await advanceTo('ENCPC_REVIEW', { factory: c.factory2, imc: c.imc, encpc: c.encpc, pmu: c.pmu, electricity: c.electricity }, N);
   const holderCompany = (await getApp(c.pmu, holderId)).companyName as string;
   const e = await objector(N, 'مصنع المعترض الفائز');
   // frozen
@@ -83,7 +83,7 @@ test('objector authorised after IMC acceptance: frozen while pending, then the h
 test('holder authorised: the objection closes, the holder moves on, the objector stays blocked (no other name in its notice)', async () => {
   await freeFactory2();
   const N = `IND-D4-B-${process.pid}`;
-  const holderId = await advanceTo('IMC_REVIEW', { factory: c.factory2, imc: c.imc, encpc: c.encpc, pmu: c.pmu }, N);
+  const holderId = await advanceTo('IMC_REVIEW', { factory: c.factory2, imc: c.imc, encpc: c.encpc, pmu: c.pmu, electricity: c.electricity }, N);
   const holderCompany = (await getApp(c.pmu, holderId)).companyName as string;
   const e = await objector(N, 'مصنع المعترض الخاسر');
   assert.equal((await act(c.imc, holderId, 'accept')).json.code, 'REGISTRY_DISPUTE_OPEN', 'IMC cannot accept while the dispute is open');

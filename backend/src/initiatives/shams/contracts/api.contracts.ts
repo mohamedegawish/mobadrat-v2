@@ -29,7 +29,7 @@ export const TERMINAL_STATES: readonly ApplicationState[] = ['REJECTED', 'CONTRA
 
 export const ACTIONS = [
   'submit', 'resubmit', 'accept', 'request_correction', 'reject', 'compliant', 'non_compliant',
-  'select_provider', 'submit_offer', 'submit_electricity', 'select_bank', 'record_contract', 'record_no_contract', 'withdraw',
+  'submit_offer', 'select_bank', 'record_contract', 'record_no_contract', 'withdraw',
   'select_distribution_path', 'submit_distribution_approval', 'reject_distribution',
 ] as const;
 export type ActionName = (typeof ACTIONS)[number];
@@ -38,11 +38,11 @@ export type ActionName = (typeof ACTIONS)[number];
 export type ContractPath = 'bank' | 'distribution';
 
 /** bank_reviewer: دور ملغى (G-02) — يبقى في السجل التاريخي فقط؛ لا حسابات للبنوك. */
-export type Role = 'factory_owner' | 'imc_reviewer' | 'encpc_reviewer' | 'pmu_reviewer' | 'bank_reviewer' | 'system_admin';
-export type OrgType = 'factory' | 'imc' | 'encpc' | 'pmu' | 'bank' | 'admin';
-export type ResponsibleType = 'factory' | 'imc' | 'encpc' | 'pmu' | 'bank' | 'none';
+export type Role = 'factory_owner' | 'imc_reviewer' | 'encpc_reviewer' | 'pmu_reviewer' | 'electricity_reviewer' | 'bank_reviewer' | 'system_admin';
+export type OrgType = 'factory' | 'imc' | 'encpc' | 'pmu' | 'electricity' | 'bank' | 'admin';
+export type ResponsibleType = 'factory' | 'imc' | 'encpc' | 'pmu' | 'electricity' | 'bank' | 'none';
 export type FormSection = 'general' | 'contact' | 'company' | 'engineering';
-export type DocumentKind = 'commercialRegisterFile' | 'industrialRegisterFile' | 'taxCardFile' | 'electricityBill' | 'ownershipProofFile' | 'technicalOfferFile' | 'electricityApprovalFile' | 'contractFile' | 'distributionApprovalFile';
+export type DocumentKind = 'commercialRegisterFile' | 'industrialRegisterFile' | 'taxCardFile' | 'electricityBill' | 'ownershipProofFile' | 'technicalOfferFile' | 'electricityApprovalFile' | 'contractFile' | 'distributionApprovalFile' | 'correctionProofFile';
 
 export interface User {
   id: string; email: string; nameAr: string; nameEn: string; phone: string; role: Role; organizationId: string;
@@ -63,8 +63,8 @@ export interface Responsible {
 export interface AllowedAction {
   action: ActionName; labelAr: string; labelEn: string; to: ApplicationState; confirm: boolean;
   requires: {
-    completeForm?: boolean; reason?: boolean; deficiencies?: boolean; providerId?: boolean; bankOrgId?: boolean;
-    newDocument?: 'technicalOfferFile' | 'electricityApprovalFile' | 'contractFile' | 'distributionApprovalFile'; electricity?: boolean; contract?: boolean; bankSelected?: boolean;
+    completeForm?: boolean; reason?: boolean; deficiencies?: boolean; providersLink?: boolean; providerInfo?: boolean; bankOrgId?: boolean;
+    newDocument?: 'technicalOfferFile' | 'correctionProofFile' | 'contractFile' | 'distributionApprovalFile'; document?: 'electricityApprovalFile'; electricity?: boolean; contract?: boolean; bankSelected?: boolean;
   };
 }
 
@@ -127,8 +127,12 @@ export interface ApplicationDetail extends ApplicationListItem {
     registryNumber: string; reason: 'in_use' | 'blocked' | 'reserved';
     objection: { id: string; status: 'pending' | 'accepted' | 'rejected'; decisionReason: string; decisionReference: string } | null;
   } | null;
-  /** selectable =يستطيع المصنع المتابعة معه الآن (مفعّل من ENCPC ومعتمد من PMU إن لزم)؛ false بعد الإيقاف/إلغاء التفعيل. */
-  provider: { id: string; nameAr: string; nameEn: string; description: string; contactName: string; contactPhone: string; contactEmail: string; status: 'pending' | 'approved' | 'suspended'; isActive: boolean; selectable: boolean } | null;
+  /** D13: ENCPC's technical acceptance — the providers link it sent and its note. */
+  encpcAcceptance: { providersLink: string; note: string; at: string } | null;
+  /** D13/D17: the decision that returned the application to the factory (only while it is in that returned state). */
+  returnDecision: { reason: string; at: string } | null;
+  /** D16: the provider the factory named with its offer. */
+  providerInfo: { name: string; email: string; phone: string } | null;
   /** الإحالات السابقة قبل «إعادة الإحالة لبنك آخر» (I4). */
   referralHistory: { bankOrgId: string; bankNameAr: string; bankNameEn: string; referredAt: string; endedAt: string; endReason: string }[];
   bankReferral: {
@@ -164,7 +168,12 @@ export interface RegistryConflict {
 
 export interface ActionBody {
   expectedVersion: number; reason?: string; reasonCode?: 'registry_ownership_mismatch' | 'other'; note?: string; deficiencies?: { field: string; note: string }[];
-  providerId?: string; distributionCompany?: string;
+  /** compliant (ENCPC) only. */
+  providersLink?: string;
+  /** submit_offer / offer resubmit only. */
+  providerName?: string; providerEmail?: string; providerPhone?: string;
+  /** electricity accept only. */
+  distributionCompany?: string;
   /** select_bank فقط — بعد قبول PMU لموافقة الكهرباء (G-01). */
   bankOrgId?: string;
   contractDate?: string; contractAmount?: number; contractNotes?: string;
@@ -212,16 +221,6 @@ export interface FactoryProfile {
   canStartNew: boolean;
 }
 
-/** دليل مقدمي الخدمة. الحقول بعد `status` يرسلها السيرفر لـENCPC وPMU فقط؛ المصنع يرى الاسم والتفاصيل والشعار والموقع. */
-export interface ServiceProvider {
-  id: string; nameAr: string; nameEn: string; description: string; website: string; hasLogo: boolean; logoUrl: string | null;
-  status: 'pending' | 'approved' | 'suspended';
-  contactName?: string; contactPhone?: string; contactEmail?: string; notes?: string;
-  /** ظهور المقدم للمصانع = مفعّل (ENCPC) + معتمد (PMU) إن كان الاعتماد مطلوبًا. */
-  isActive?: boolean; selectable?: boolean; approvalRequired?: boolean;
-  approvedAt?: string | null; approvedBy?: string | null; suspendedAt?: string | null; deactivatedAt?: string | null; createdAt?: string; updatedAt?: string;
-}
-
 export interface Organization {
   id: string; type: OrgType; nameAr: string; nameEn: string; contactEmail: string; isActive: boolean; isStructural: boolean; createdAt: string; updatedAt: string;
 }
@@ -232,7 +231,7 @@ export interface AuditLogEntry {
   applicationId: string | null; summaryAr: string; details: Record<string, unknown>; ip: string;
 }
 
-export type IntegrationScope = 'read' | 'read_documents' | 'manage_users' | 'manage_providers' | 'read_audit';
+export type IntegrationScope = 'read' | 'read_documents' | 'manage_users' | 'read_audit';
 
 export interface IntegrationKey {
   id: string; name: string; keyPrefix: string; scopes: IntegrationScope[]; rateLimitPerMinute: number; createdBy: string | null;
@@ -255,19 +254,17 @@ export interface DashboardCard {
   key: string; labelAr: string; labelEn: string; count: number; tone: 'pending' | 'correction' | 'approved' | 'rejected' | 'completed' | 'closed' | 'info';
   link: { view: 'work-queue'; param: string } | null; hintAr?: string; hintEn?: string;
 }
-export interface DashboardAttention { key: string; labelAr: string; labelEn: string; count: number; link: { view: 'work-queue' | 'approvals' | 'providers'; param: string | null } | null }
+export interface DashboardAttention { key: string; labelAr: string; labelEn: string; count: number; link: { view: 'work-queue' | 'approvals'; param: string | null } | null }
 export interface DashboardRecent { at: string; applicationId: string; number: string | null; companyName: string; labelAr: string; labelEn: string; toLabelAr: string; toLabelEn: string }
 export interface RoleDashboard {
   role: Role; awaitingMe: { count: number; link: { view: 'work-queue'; param: string } }; total: number; slaConfigured: boolean;
   cards: DashboardCard[]; attention: DashboardAttention[]; recent: DashboardRecent[]; generatedAt: string;
-  /** ENCPC فقط */
-  providers?: { total: number; visible: number; inactive: number; awaitingApproval: number; approvalRequired: boolean };
   /** PMU فقط */
   byStage?: Array<{ state: ApplicationState; labelAr: string; labelEn: string; count: number }>; drafts?: number;
   stuck?: Array<{ id: string; number: string | null; companyName: string; reasonAr: string; reasonEn: string }>;
 }
 
-/** إشعار داخل المنصة. link = مسار hash داخلي (application/<id> | approvals | providers) أو فارغ. */
+/** إشعار داخل المنصة. link = مسار hash داخلي (application/<id> | approvals) أو فارغ. */
 export interface InboxNotification {
   id: string; applicationId: string | null; templateKey: string; title: string; body: string; link: string; read: boolean; readAt: string | null; createdAt: string;
 }
@@ -361,15 +358,8 @@ export const ROUTES = {
   removeDocument: 'DELETE /api/v1/i/shams/applications/:id/documents/:docId',
   downloadDocument: 'GET /api/v1/i/shams/applications/:id/documents/:docId/download',
   performAction: 'POST /api/v1/i/shams/applications/:id/actions/:action',
-  listProviders: 'GET /api/v1/i/shams/service-providers',
-  createProvider: 'POST /api/v1/i/shams/service-providers',
-  updateProvider: 'PUT /api/v1/i/shams/service-providers/:id',
-  approveProvider: 'POST /api/v1/i/shams/service-providers/:id/approve',
-  suspendProvider: 'POST /api/v1/i/shams/service-providers/:id/suspend',
-  activateProvider: 'POST /api/v1/i/shams/service-providers/:id/activate',
-  deactivateProvider: 'POST /api/v1/i/shams/service-providers/:id/deactivate',
-  providerLogo: 'GET /api/v1/i/shams/service-providers/:id/logo',
-  uploadProviderLogo: 'POST /api/v1/i/shams/service-providers/:id/logo',
+  remindOverdue: 'POST /api/v1/i/shams/applications/remind-overdue',
+  remindResponsible: 'POST /api/v1/i/shams/applications/:id/remind',
   roleDashboard: 'GET /api/v1/i/shams/dashboard',
   notifications: 'GET /api/v1/i/shams/notifications',
   unreadNotifications: 'GET /api/v1/i/shams/notifications/unread-count',

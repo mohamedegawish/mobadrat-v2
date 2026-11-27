@@ -20,10 +20,10 @@ before(async () => {
   srv = await startServer();
   c = await clients(srv.base);
   // open applications in several stages + one terminal one through the real workflow
-  await advanceTo('IMC_REVIEW', { factory: c.factory, imc: c.imc, encpc: c.encpc, pmu: c.pmu }, reg());
-  const w = await advanceTo('IMC_REVIEW', { factory: c.factory2, imc: c.imc, encpc: c.encpc, pmu: c.pmu }, reg());
+  await advanceTo('IMC_REVIEW', { factory: c.factory, imc: c.imc, encpc: c.encpc, pmu: c.pmu, electricity: c.electricity }, reg());
+  const w = await advanceTo('IMC_REVIEW', { factory: c.factory2, imc: c.imc, encpc: c.encpc, pmu: c.pmu, electricity: c.electricity }, reg());
   assert.equal((await act(c.factory2, w, 'withdraw', { reason: 'انسحاب' })).status, 200);
-  await advanceTo('BANK_SELECTION', { factory: c.factory2, imc: c.imc, encpc: c.encpc, pmu: c.pmu }, reg());
+  await advanceTo('BANK_SELECTION', { factory: c.factory2, imc: c.imc, encpc: c.encpc, pmu: c.pmu, electricity: c.electricity }, reg());
 });
 after(async () => { await srv.close(); await env.cleanup(); });
 
@@ -258,33 +258,3 @@ test('PA-05: outbox retention is off by default and deletes only finished messag
   assert.equal((await q("SELECT id FROM audit_logs WHERE action = 'system.outbox_purged'")).length, 1, 'no audit row for an empty sweep');
 });
 
-test('PA-14: the stuck check loads the chosen providers in one query and still flags an OFFER_UPLOAD whose provider is no longer approved', async () => {
-  const { stuckApplications } = await import('../services/readiness.js');
-  const { listApplications } = await import('../store/applications.js');
-  const { getProvider, isSelectable } = await import('../store/providers.js');
-  const { NON_TERMINAL_STATES } = await import('../workflow/shamsWorkflow.js');
-  // the factory's open application → withdrawn; a new one up to OFFER_UPLOAD with provider sp-demo-2
-  const [open] = await q<{ id: string }>(`SELECT a.id FROM shams_applications a JOIN shams_factories f ON f.id = a.factoryId JOIN initiative_memberships m ON m.organizationId = f.organizationId AND m.initiativeId = 'shams' JOIN users u ON u.id = m.userId
-    WHERE u.email = ? AND a.state NOT IN ('REJECTED','CONTRACTED','CLOSED_NOT_CONTRACTED','WITHDRAWN')`, DEV.factory);
-  if (open) assert.equal((await act(c.factory, open.id, 'withdraw', { reason: 'إعادة تهيئة' })).status, 200);
-  const id = await advanceTo('PROVIDER_SELECTION', { factory: c.factory, imc: c.imc, encpc: c.encpc, pmu: c.pmu }, reg());
-  assert.equal((await act(c.factory, id, 'select_provider', { providerId: 'sp-demo-2' })).status, 200);
-  await q("UPDATE shams_service_providers SET isActive = 0 WHERE id = 'sp-demo-2'");
-  try {
-    const m = await measure(() => stuckApplications());
-    const stuck = m.out;
-    const mine = stuck.find((s) => s.id === id);
-    assert.ok(mine, 'the OFFER_UPLOAD application whose provider is inactive is listed');
-    assert.equal(mine!.reasonEn, 'The chosen provider is no longer approved');
-    // former per-row computation for the same rows → identical list
-    const rows = (await listApplications({ scopeSql: '1 = 1', scopeParams: [], states: [...NON_TERMINAL_STATES] }, 1, 1, true)).rows;
-    const flagged: string[] = [];
-    for (const a of rows) if (a.state === 'OFFER_UPLOAD' && a.providerId && !isSelectable(await getProvider(a.providerId))) flagged.push(a.id);
-    assert.deepEqual(stuck.filter((s) => s.reasonEn === 'The chosen provider is no longer approved').map((s) => s.id), flagged);
-    const providerQueries = m.queries; // one batched provider query regardless of the number of OFFER_UPLOAD rows
-    assert.ok(providerQueries < 20, `stuck check statements: ${providerQueries}`);
-  } finally {
-    await q("UPDATE shams_service_providers SET isActive = 1 WHERE id = 'sp-demo-2'");
-  }
-  assert.ok(!(await stuckApplications()).some((s) => s.id === id), 'not stuck once the provider is active again');
-});

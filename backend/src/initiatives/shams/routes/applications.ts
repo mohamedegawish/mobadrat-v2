@@ -13,6 +13,7 @@ import { createDraft, removeDocument, saveSection, uploadDocument } from '../wor
 import { singlePdfUpload, sendStoredPdf } from '../http/upload.js';
 import { kickNotificationWorker } from '../jobs/notificationWorker.js';
 import { listForUser, parseStates } from '../services/applicationList.js';
+import { remindOverdue, remindResponsible } from '../services/reminders.js';
 
 export const applicationsRouter = Router();
 
@@ -50,7 +51,7 @@ applicationsRouter.put('/applications/:id/data/:section', requireRole('factory_o
   return okMessage(res, 200, 'تم الحفظ.', { section: req.params.section, data });
 }));
 
-applicationsRouter.post('/applications/:id/documents', requireRole('factory_owner'), uploadLimiter, singlePdfUpload, ah(async (req, res) => {
+applicationsRouter.post('/applications/:id/documents', requireRole('factory_owner', 'electricity_reviewer'), uploadLimiter, singlePdfUpload, ah(async (req, res) => {
   const user = currentUser(req);
   const doc = await uploadDocument(user, req.params.id, (req.body as Record<string, unknown>)?.kind, req.file, clientIp(req));
   return okMessage(res, 201, 'تم رفع المستند.', {
@@ -72,6 +73,17 @@ applicationsRouter.get('/applications/:id/documents/:docId/download', ah(async (
   if (!doc || adminMetadataOnly(user) || !visibleDocuments(user, app, await listDocuments(app.id)).some((d) => d.id === doc.id)) throw Errors.notFound('المستند غير موجود.', 'Document not found.');
   await addAuditLog({ ...actorFromReq(req), action: 'document.download', entityType: 'document', entityId: doc.id, applicationId: app.id, summaryAr: `تنزيل مستند (${doc.kind}) نسخة ${doc.version}` });
   sendStoredPdf(res, doc.storedName, doc.originalName, req.query.inline === '1');
+}));
+
+// D17: PMU reminds whoever is late — one application, or every overdue one at once.
+applicationsRouter.post('/applications/remind-overdue', requireRole('pmu_reviewer'), actionLimiter, ah(async (req, res) => {
+  const r = await remindOverdue(currentUser(req), clientIp(req));
+  return okMessage(res, 200, `أُرسل التنبيه لـ ${r.sent} طلب متأخر${r.alreadyReminded ? ` (${r.alreadyReminded} نُبّهوا اليوم بالفعل)` : ''}.`, r);
+}));
+
+applicationsRouter.post('/applications/:id/remind', requireRole('pmu_reviewer'), actionLimiter, ah(async (req, res) => {
+  await remindResponsible(currentUser(req), req.params.id, clientIp(req));
+  return okMessage(res, 200, 'أُرسل التنبيه للجهة المتأخرة.');
 }));
 
 applicationsRouter.post('/applications/:id/actions/:action', actionLimiter, registryLimiter, ah(async (req, res) => {

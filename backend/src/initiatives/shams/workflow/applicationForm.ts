@@ -17,6 +17,8 @@ export const DOCUMENT_KINDS = [
   'contractFile',
   // مسار التعاقد عن طريق شركة توزيع الكهرباء: موافقتها على التعاقد — تراجعها PMU (قرار نهائي).
   'distributionApprovalFile',
+  // D13 / D18: what the factory sends back after a technical or electricity rejection (several files).
+  'correctionProofFile',
 ] as const;
 export type DocumentKind = (typeof DOCUMENT_KINDS)[number];
 
@@ -81,6 +83,7 @@ export const DOCUMENT_SECTION: Record<DocumentKind, DataSection> = {
   commercialRegisterFile: 'company', industrialRegisterFile: 'company', taxCardFile: 'company',
   electricityBill: 'engineering', ownershipProofFile: 'engineering',
   technicalOfferFile: 'offer', electricityApprovalFile: 'electricity', contractFile: 'contract', distributionApprovalFile: 'contract',
+  correctionProofFile: 'general',
 };
 
 export const FORM_DOCUMENT_KINDS: readonly DocumentKind[] = ['commercialRegisterFile', 'industrialRegisterFile', 'taxCardFile', 'electricityBill', 'ownershipProofFile'];
@@ -105,10 +108,8 @@ export const DOCUMENT_LABELS: Record<DocumentKind, { ar: string; en: string }> =
   electricityApprovalFile: { ar: 'موافقة شركة الكهرباء', en: 'Electricity company approval' },
   contractFile: { ar: 'مستند إثبات التعاقد', en: 'Contract evidence' },
   distributionApprovalFile: { ar: 'موافقة شركة توزيع الكهرباء على التعاقد', en: 'Distribution company contracting approval' },
+  correctionProofFile: { ar: 'إثبات حل المشكلة', en: 'Proof that the issue is fixed' },
 };
-
-/** الحقول المسموح بها في قائمة نواقص مرحلة موافقة الكهرباء (G-01: البنك يُختار بعد قبول الموافقة، فليس من بنودها). */
-export const ELECTRICITY_DEFICIENCY_FIELDS = ['electricityApprovalFile', 'distributionCompany'] as const;
 
 export function isRequired(key: FormFieldKey): boolean {
   return shamsPolicy.requiredFields[key];

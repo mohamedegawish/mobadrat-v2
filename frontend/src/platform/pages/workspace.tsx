@@ -20,7 +20,7 @@ import { setShellLang } from '../../core/shell';
 
 // ── user types ──────────────────────────────────────────────────────────
 
-export const TYPE_ORDER: UserType[] = ['imc', 'pmu', 'encpc', 'funder', 'evaluator', 'system_admin'];
+export const TYPE_ORDER: UserType[] = ['imc', 'pmu', 'encpc', 'electricity', 'funder', 'evaluator', 'system_admin'];
 
 export const TYPE_TEXT: Record<UserType, { ar: string; en: string; shortAr: string; shortEn: string; subAr: string; subEn: string }> = {
   imc: {
@@ -34,7 +34,11 @@ export const TYPE_TEXT: Record<UserType, { ar: string; en: string; shortAr: stri
   },
   encpc: {
     ar: 'لوحة المراجعة الفنية (ENCPC)', en: 'Technical review (ENCPC) dashboard', shortAr: 'لوحة ENCPC', shortEn: 'ENCPC dashboard',
-    subAr: 'الملفات الفنية بانتظار قرارك، وما عاد للمصانع للتصحيح، ودليل مقدمي الخدمة.', subEn: 'Technical files awaiting your decision, corrections with factories, and the provider directory.',
+    subAr: 'الملفات الفنية بانتظار قرارك، وما عاد للمصانع للرد على الرفض الفني.', subEn: 'Technical files awaiting your decision and rejections the factories are answering.',
+  },
+  electricity: {
+    ar: 'بوابة وزارة الكهرباء', en: 'Ministry of Electricity portal', shortAr: 'بوابة الكهرباء', shortEn: 'Electricity portal',
+    subAr: 'العروض الفنية المعتمدة بانتظار قرارك: اطّلع على الطلب كاملًا ثم ارفع الموافقة أو ارفض بملاحظات.', subEn: 'Accepted technical offers awaiting your decision: review the application, then upload the approval or reject with notes.',
   },
   funder: {
     ar: 'لوحة جهة التمويل', en: 'Funder dashboard', shortAr: 'لوحة التمويل', shortEn: 'Funder dashboard',
@@ -123,7 +127,6 @@ const FIX: Record<string, { view: string; ar: string; en: string }> = {
 };
 
 const ToolIcon: React.FC<{ view: string }> = ({ view }) => {
-  if (view === 'providers') return <Wrench size={16} />;
   if (view === 'approvals' || view === 'appeals') return <Gavel size={16} />;
   if (view === 'ranking') return <BarChart3 size={16} />;
   if (view.startsWith('admin-')) return <Layers size={16} />;
@@ -351,6 +354,9 @@ export const WorkspaceBoard: React.FC<{
         </div>
       )}
 
+      {/* D17: Shams has the reminder; other initiatives do not offer it yet. */}
+      {type === 'pmu' && tab === 'overdue' && parts.some((p) => p.initiativeId === 'shams' && p.data.overdue > 0) ? <RemindOverdue initiativeId="shams" /> : null}
+
       {tab === 'readiness' ? <ReadinessTab parts={parts} merged={data.merged} />
         : tab === 'monitoring' ? <MonitoringTab parts={parts} merged={data.merged} onOpen={go} color={color} title={title} />
           : <QueueTab type={type} data={data} single={single} wq={wq} search={search} setSearch={setSearch} update={update} loading={loading} color={color} title={title} />}
@@ -377,7 +383,27 @@ const Attention: React.FC<{ type: UserType; parts: OkPart[]; merged: boolean; on
   );
 };
 
-/** One initiative's stage cards, side panels (ENCPC's provider directory) and tools. */
+/** D17: one click reminds every party an overdue application is waiting for (once a day per application). */
+const RemindOverdue: React.FC<{ initiativeId: string }> = ({ initiativeId }) => {
+  const { isAr, t } = usePlatform();
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
+  const send = async () => {
+    setBusy(true); setMessage(null);
+    try {
+      const r = await api.remindOverdue(initiativeId);
+      setMessage({ tone: 'ok', text: t(`أُرسل التنبيه لـ ${num(r.sent, true)} طلب متأخر${r.alreadyReminded ? ` — ${num(r.alreadyReminded, true)} نُبّهوا اليوم بالفعل` : ''}${r.noRecipients ? ` — ${num(r.noRecipients, true)} بلا مستلم` : ''}.`, `Reminded ${r.sent} overdue application(s).`) });
+    } catch (e) { setMessage({ tone: 'err', text: errText(e, isAr) }); } finally { setBusy(false); }
+  };
+  return (
+    <div className="row" style={{ marginBottom: '0.75rem', gap: '0.75rem' }}>
+      <button type="button" className="btn btn-primary btn-sm" onClick={() => void send()} disabled={busy} data-testid="remind-overdue"><Bell size={14} /> {t('تنبيه كل الجهات المتأخرة', 'Remind every late party')}</button>
+      {message ? <span className={`pf-alert ${message.tone}`} role="status" data-testid="remind-result">{message.text}</span> : null}
+    </div>
+  );
+};
+
+/** One initiative's stage cards, side panels and tools. */
 const InitiativeOverview: React.FC<{ part: OkPart; merged: boolean; onOpen: (l: WorkspaceLink | null) => void }> = ({ part, merged, onOpen }) => {
   const { isAr, t } = usePlatform();
   const d = part.data;

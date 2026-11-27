@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
-import { isolateTestEnv, startServer, clients, act, advanceTo, createCompleteDraft, pdfVariant, q, Client, type Started } from './helpers.js';
+import { PROVIDER_INFO, isolateTestEnv, startServer, clients, act, advanceTo, createCompleteDraft, pdfVariant, q, Client, type Started } from './helpers.js';
 
 const env = isolateTestEnv('prsec');
 let srv: Started;
@@ -25,7 +25,7 @@ const LEAK = /\bat [\w.<>]+ \(|node_modules|[A-Za-z]:\\|\/src\/|SQLITE|sqlite|st
 
 test('SEC-1 D20 deep link: the selection link carries no credential; login is required and ownership is checked on the server', async () => {
   await closeOpen(c.factory);
-  const id = await advanceTo('PROVIDER_SELECTION', c, 'IND-SEC-1');
+  const id = await advanceTo('OFFER_UPLOAD', c, 'IND-SEC-1');
   const mail = (await q<any>("SELECT body FROM notification_outbox WHERE applicationId = ? AND channel = 'email' AND body LIKE '%#i/shams/task/%'", id))[0];
   assert.ok(mail, 'selection email queued');
   const links = [...String(mail.body).matchAll(/href="([^"]+)"/g)].map((m) => m[1]).filter((h) => h.includes('#i/shams/task/'));
@@ -37,12 +37,12 @@ test('SEC-1 D20 deep link: the selection link carries no credential; login is re
   }
   // the link alone grants nothing: the API behind the page needs a session, and only the owner gets the application
   assert.equal((await new Client(srv.base).get(`/applications/${id}`)).status, 401);
-  assert.equal((await new Client(srv.base).post(`/applications/${id}/actions/select_provider`, { expectedVersion: 1, providerId: 'sp-demo-1' })).status, 401);
+  assert.equal((await new Client(srv.base).post(`/applications/${id}/actions/submit_offer`, { expectedVersion: 1, ...PROVIDER_INFO })).status, 401);
   assert.equal((await c.factory2.get(`/applications/${id}`)).status, 404, 'another factory changing the identifier gets 404');
-  const other = await c.factory2.post(`/applications/${id}/actions/select_provider`, { expectedVersion: 99, providerId: 'sp-demo-1' });
+  const other = await c.factory2.post(`/applications/${id}/actions/submit_offer`, { expectedVersion: 99, ...PROVIDER_INFO });
   assert.equal(other.status, 404);
   assert.equal((await c.factory.get(`/applications/${id}`)).status, 200);
-  assert.equal((await q<any>('SELECT state FROM shams_applications WHERE id = ?', id))[0].state, 'PROVIDER_SELECTION');
+  assert.equal((await q<any>('SELECT state FROM shams_applications WHERE id = ?', id))[0].state, 'OFFER_UPLOAD');
 });
 
 test('SEC-2 a document id from another application (or a traversal string) never downloads through an application the caller can see', async () => {
@@ -178,7 +178,7 @@ test('SEC-6 integration API read responses match contracts/integration.openapi.j
     }
   }
   // the read scope cannot write, and search does not match on identity
-  const put = await fetch(`${srv.integration}/service-providers/sp-demo-1`, { method: 'PUT', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: '{"nameAr":"x"}' });
+  const put = await fetch(`${srv.integration}/users`, { method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: '{"nameAr":"x"}' });
   assert.equal(put.status, 403);
   const byName = JSON.parse((await get(`/applications?q=${encodeURIComponent(app.industrialRegistryNumber)}`)).text);
   assert.equal(byName.data.items.length, 0, 'q does not search the registry number');

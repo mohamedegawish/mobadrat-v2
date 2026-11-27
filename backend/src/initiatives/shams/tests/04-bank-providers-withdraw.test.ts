@@ -1,7 +1,7 @@
 // اختبارات القبول 9–12: مقدم خدمة غير معتمد، اختيار البنك بعد قبول الكهرباء (G-01)، النتيجة يسجلها المصنع مباشرة (G-02)، الانسحاب.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { isolateTestEnv, startServer, clients, act, getApp, advanceTo, q, pdfVariant, Client, BANK_A, BANK_B, PROVIDER_PENDING, PROVIDER_SUSPENDED, PROVIDER_OK, type Started } from './helpers.js';
+import { isolateTestEnv, startServer, clients, act, getApp, advanceTo, q, pdfVariant, Client, BANK_A, BANK_B, type Started } from './helpers.js';
 
 async function dbRun(sql: string, ...params: string[]) {
   const { getDb } = await import('../db/database.js');
@@ -21,29 +21,6 @@ async function closeOpen() {
   const open = (await c.factory.get('/factory/profile')).json.data.openApplicationId;
   if (open) await act(c.factory, open, 'withdraw', { reason: 'إنهاء لأغراض الاختبار' });
 }
-
-test('9) unapproved (pending or suspended) provider is rejected; factory sees approved list only', async () => {
-  await closeOpen();
-  const id = await advanceTo('PROVIDER_SELECTION', c, reg());
-  const list = await c.factory.get('/service-providers');
-  assert.equal(list.status, 200);
-  assert.ok(list.json.data.items.every((p: any) => p.status === 'approved'));
-  assert.ok(!list.json.data.items.some((p: any) => p.id === PROVIDER_PENDING));
-  for (const providerId of [PROVIDER_PENDING, PROVIDER_SUSPENDED, 'sp-does-not-exist']) {
-    const r = await act(c.factory, id, 'select_provider', { providerId });
-    assert.equal(r.status, 422, providerId);
-    assert.equal(r.json.code, 'PROVIDER_NOT_APPROVED');
-  }
-  assert.equal((await getApp(c.factory, id)).state, 'PROVIDER_SELECTION');
-  // PMU يعتمد مقدم الخدمة المعلق → يصبح متاحًا
-  assert.equal((await c.pmu.post(`/service-providers/${PROVIDER_PENDING}/approve`, {})).status, 200);
-  assert.equal((await c.factory.post('/service-providers', { nameAr: 'محاولة مصنع' })).status, 403, 'factory cannot manage providers');
-  assert.equal((await c.imc.post(`/service-providers/${PROVIDER_OK}/suspend`, {})).status, 403, 'IMC cannot manage providers');
-  const ok = await act(c.factory, id, 'select_provider', { providerId: PROVIDER_PENDING });
-  assert.equal(ok.status, 200, JSON.stringify(ok.json));
-  // إعادة الإيقاف للحالة الأصلية
-  await c.pmu.post(`/service-providers/${PROVIDER_PENDING}/suspend`, {});
-});
 
 test('10) G-02: the factory records the outcome directly — no bank approval, no bank login; 11) no-contract requires a reason, notes optional, no document', async () => {
   await closeOpen();
@@ -69,19 +46,16 @@ test('10) G-02: the factory records the outcome directly — no bank approval, n
   assert.ok(!after.documents.some((d: any) => d.kind === 'contractFile'), 'no contract document needed for a failure');
 });
 
-test('10b) G-01: the bank is chosen only after PMU accepts the electricity approval — once, by the owning factory, from active banks', async () => {
+test('10b) G-01: the bank is chosen only after the ministry approves — once, by the owning factory, from active banks', async () => {
   await closeOpen();
-  const id = await advanceTo('ELECTRICITY_UPLOAD', c, reg());
-  // no bank with the electricity submission
-  assert.equal((await act(c.factory, id, 'select_bank', { bankOrgId: BANK_A })).status, 409, 'not before the approval is even submitted');
-  assert.equal((await c.factory.upload(`/applications/${id}/documents`, { kind: 'electricityApprovalFile' }, pdfVariant('e'), 'e.pdf')).status, 201);
-  const withBank = await act(c.factory, id, 'submit_electricity', { distributionCompany: 'شركة توزيع', bankOrgId: BANK_A });
-  assert.equal(withBank.status, 400, 'bankOrgId is not a field of the electricity submission');
+  const id = await advanceTo('ELECTRICITY_REVIEW', c, reg());
+  assert.equal((await act(c.factory, id, 'select_bank', { bankOrgId: BANK_A })).status, 409, 'not while the ministry reviews');
+  assert.equal((await c.electricity.upload(`/applications/${id}/documents`, { kind: 'electricityApprovalFile' }, pdfVariant('e'), 'e.pdf')).status, 201);
+  const withBank = await act(c.electricity, id, 'accept', { distributionCompany: 'شركة توزيع', bankOrgId: BANK_A });
+  assert.equal(withBank.status, 400, 'bankOrgId is not a field of the approval');
   assert.ok(withBank.json.details.some((d: any) => d.field === 'bankOrgId'));
-  assert.equal((await act(c.factory, id, 'submit_electricity', { distributionCompany: 'شركة توزيع' })).status, 200);
-  assert.equal((await act(c.factory, id, 'select_bank', { bankOrgId: BANK_A })).status, 409, 'not while PMU reviews');
   assert.equal((await getApp(c.factory, id)).bank, null);
-  assert.equal((await act(c.pmu, id, 'accept')).status, 200);
+  assert.equal((await act(c.electricity, id, 'accept', { distributionCompany: 'شركة توزيع' })).status, 200);
 
   // accepted: the bank choice is the only open step
   assert.equal((await act(c.factory, id, 'record_contract', { contractDate: '2026-10-01', contractAmount: 10 })).json.code, 'BANK_NOT_SELECTED');

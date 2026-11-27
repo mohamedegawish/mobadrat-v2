@@ -1,7 +1,7 @@
 /**
  * Deploy seeder — SEED_ON_DEPLOY=1 (every boot) or `npm run db:seed:deploy:prod` (once): one account for every role of the
  * platform and of every initiative, plus the demo data those accounts need to work (a demo factory, applicant, funder,
- * and — only where the initiative has none of its own — banks, service providers, an open cohort, experts).
+ * and — only where the initiative has none of its own — banks, an open cohort, experts).
  *
  * Safe on a production database, including one with real (imported) data:
  *   • it creates only what is missing and never changes an existing account (password, role, status) or existing data —
@@ -11,7 +11,7 @@
  *     their first state: the seed password, active, e-mail verified, their membership / platform role active, sessions
  *     ended — so every seeded account signs in with the documented password after that deployment;
  *   • reference data that real people choose from is added only when the initiative has none — next to real banks,
- *     providers, cohorts and experts the demo accounts use the real ones, and real users never see demo entries;
+ *     cohorts and experts the demo accounts use the real ones, and real users never see demo entries;
  *   • SEED_EMAIL_DOMAIN moves the accounts to another domain (imc1@shams.local → imc1.shams@<domain>), e.g. after the legacy
  *     import, whose old demo accounts (@shams.local, @sona3.local) arrive disabled;
  *   • it runs in one write transaction (write transactions are serialised across instances), so two instances starting at

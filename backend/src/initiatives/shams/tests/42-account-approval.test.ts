@@ -91,7 +91,7 @@ test('ACC-2 correction request: branded email, restricted sign-in (edit requeste
   for (const [what, res] of [
     ['list', await f.get('/applications')],
     ['inbox', await f.get('/notifications')],
-    ['providers', await f.get('/service-providers')],
+    ['reports', await f.get('/reports/summary')],
     ['new application', await f.post('/applications', {})],
   ] as const) {
     assert.equal(res.status, 403, what);
@@ -138,8 +138,8 @@ test('ACC-3 IMC acceptance approves the account: branded email with a sign-in bu
   assert.equal((await f.get('/notifications')).status, 200);
   assert.equal((await getApp(f, appId)).state, 'ENCPC_REVIEW');
   // Later decisions on an approved account use the usual application emails.
-  assert.equal((await act(c.encpc, appId, 'non_compliant', { deficiencies: [{ field: 'roofAreas', note: 'مساحة غير واضحة' }] })).status, 200);
-  assert.ok((await templatesFor(email)).includes('app.correction_requested'));
+  assert.equal((await act(c.encpc, appId, 'non_compliant', { reason: 'مساحة غير واضحة' })).status, 200);
+  assert.ok((await templatesFor(email)).includes('app.encpc_rejected'));
   assert.equal(await status(email), 'approved', 'an approved account stays approved');
   assert.equal((await f.get('/applications')).status, 200);
 });

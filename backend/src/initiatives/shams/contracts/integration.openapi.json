@@ -32,10 +32,6 @@
       "description": "النطاق manage_users"
     },
     {
-      "name": "manage_providers",
-      "description": "النطاق manage_providers"
-    },
-    {
       "name": "read_audit",
       "description": "النطاق read_audit"
     }
@@ -550,136 +546,6 @@
         }
       }
     },
-    "/service-providers": {
-      "get": {
-        "tags": [
-          "manage_providers"
-        ],
-        "x-scope": "manage_providers",
-        "operationId": "listServiceProviders",
-        "summary": "مقدمو الخدمة",
-        "parameters": [
-          {
-            "name": "status",
-            "in": "query",
-            "schema": {
-              "$ref": "#/components/schemas/ProviderStatus"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "ok",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProviderListEnvelope"
-                }
-              }
-            }
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "manage_providers"
-        ],
-        "x-scope": "manage_providers",
-        "operationId": "createServiceProvider",
-        "summary": "إضافة مقدم خدمة (بحالة pending)",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProviderInput"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "created",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProviderEnvelope"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/ValidationError"
-          }
-        }
-      }
-    },
-    "/service-providers/{id}": {
-      "parameters": [
-        {
-          "name": "id",
-          "in": "path",
-          "required": true,
-          "schema": {
-            "type": "string"
-          }
-        }
-      ],
-      "put": {
-        "tags": [
-          "manage_providers"
-        ],
-        "x-scope": "manage_providers",
-        "operationId": "updateServiceProvider",
-        "summary": "تعديل مقدم خدمة واعتماده أو إيقافه (status)",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "allOf": [
-                  {
-                    "$ref": "#/components/schemas/ProviderInput"
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "status": {
-                        "$ref": "#/components/schemas/ProviderStatus"
-                      }
-                    }
-                  }
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "updated",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProviderEnvelope"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/ValidationError"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          }
-        }
-      }
-    },
     "/audit-logs": {
       "get": {
         "tags": [
@@ -964,6 +830,7 @@
           "imc_reviewer",
           "encpc_reviewer",
           "pmu_reviewer",
+          "electricity_reviewer",
           "bank_reviewer",
           "system_admin"
         ]
@@ -975,6 +842,7 @@
           "imc",
           "encpc",
           "pmu",
+          "electricity",
           "bank",
           "admin"
         ]
@@ -998,6 +866,7 @@
               "imc",
               "encpc",
               "pmu",
+              "electricity",
               "bank",
               "none"
             ]
@@ -1406,50 +1275,6 @@
           "resetPassword": {
             "type": "boolean",
             "const": true
-          }
-        }
-      },
-      "ServiceProvider": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "nameAr": {
-            "type": "string"
-          },
-          "nameEn": {
-            "type": "string"
-          },
-          "contactName": {
-            "type": "string"
-          },
-          "contactPhone": {
-            "type": "string"
-          },
-          "contactEmail": {
-            "type": "string"
-          },
-          "website": {
-            "type": "string"
-          },
-          "status": {
-            "$ref": "#/components/schemas/ProviderStatus"
-          },
-          "notes": {
-            "type": "string"
-          },
-          "approvedAt": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "suspendedAt": {
-            "type": [
-              "string",
-              "null"
-            ]
           }
         }
       },

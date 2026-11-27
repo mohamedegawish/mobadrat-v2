@@ -2,7 +2,7 @@
 import { apiFetch, apiUpload, apiFetchBlob, setAccessToken, clearTokens } from './client';
 import type {
   AccountRequest, RecoveryRequest, RoleDashboard, InboxNotification, RegistryDispute, RegistryObjection, ActionBody, ActionName, ApplicationDetail, ApplicationListItem, AuditLogEntry, DocumentKind, Envelope, FactoryProfile, FormSection,
-  IntegrationKey, IntegrationScope, LoginRes, Meta, NotificationLogEntry, Organization, Page, Readiness, RegistryBlock, ReportRow, ReportSheet, Role, ServiceProvider, Summary, User,
+  IntegrationKey, IntegrationScope, LoginRes, Meta, NotificationLogEntry, Organization, Page, Readiness, RegistryBlock, ReportRow, ReportSheet, Role, Summary, User,
   WebhookLogEntry,
 } from './schemas';
 
@@ -68,20 +68,8 @@ export const api = {
   performAction: (id: string, action: ActionName, body: ActionBody) =>
     data(apiFetch<Envelope<ApplicationDetail>>(`${V1}/applications/${encodeURIComponent(id)}/actions/${action}`, { method: 'POST', body })),
 
-  // ── مقدمو الخدمة ──
-  listProviders: (status?: string) => data(apiFetch<Envelope<{ items: ServiceProvider[] }>>(`${V1}/service-providers`, { query: { status } })).then((d) => d.items),
-  createProvider: (body: Partial<ServiceProvider>) => data(apiFetch<Envelope<ServiceProvider>>(`${V1}/service-providers`, { method: 'POST', body })),
-  updateProvider: (id: string, body: Partial<ServiceProvider>) => data(apiFetch<Envelope<ServiceProvider>>(`${V1}/service-providers/${encodeURIComponent(id)}`, { method: 'PUT', body })),
-  /** الدليل كاملًا لـENCPC وPMU (بكل الحالات وحقل approvalRequired). */
-  providerDirectory: () => data(apiFetch<Envelope<{ items: ServiceProvider[]; approvalRequired?: boolean }>>(`${V1}/service-providers`)),
-  setProviderActive: (id: string, active: boolean) =>
-    data(apiFetch<Envelope<ServiceProvider>>(`${V1}/service-providers/${encodeURIComponent(id)}/${active ? 'activate' : 'deactivate'}`, { method: 'POST', body: {} })),
-  uploadProviderLogo(id: string, file: File) {
-    const fd = new FormData();
-    fd.append('file', file);
-    return data(apiFetch<Envelope<ServiceProvider>>(`${V1}/service-providers/${encodeURIComponent(id)}/logo`, { method: 'POST', formData: fd }));
-  },
-  setProviderStatus: (id: string, op: 'approve' | 'suspend') => data(apiFetch<Envelope<ServiceProvider>>(`${V1}/service-providers/${encodeURIComponent(id)}/${op}`, { method: 'POST', body: {} })),
+  // D17: PMU reminds the party an overdue application is waiting for.
+  remindResponsible: (id: string) => apiFetch<Envelope<undefined>>(`${V1}/applications/${encodeURIComponent(id)}/remind`, { method: 'POST', body: {} }),
 
   // ── صندوق الإشعارات ──
   notifications: (q: { page?: number; pageSize?: number; unread?: '1' } = {}) =>

@@ -193,6 +193,17 @@ export const ApplicationWizard: React.FC = () => {
   const unchanged = correction ? (app?.unchangedDeficiencies ?? []) : [];
   const fieldLabel = (key: string) => { const f = meta?.form.fields.find((x) => x.key === key); return f ? label(f) : key; };
 
+  // D16: an application returned by IMC opens on the first item it asked to change, scrolled to its field.
+  const focusedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!meta || !app || app.state !== 'IMC_CORRECTION' || focusedFor.current === app.id) return;
+    const asked = new Set(app.currentTask?.deficiencies.map((d) => d.field));
+    const first = meta.form.fields.find((f) => asked.has(f.key));
+    if (!first) return;
+    focusedFor.current = app.id;
+    void goField(first.key);
+  }, [meta, app]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const submit = async () => {
     if (!app) return;
     setSubmitting(true);
@@ -202,19 +213,21 @@ export const ApplicationWizard: React.FC = () => {
     try {
       const fresh = await api.getApplication(app.id);
       const done = await api.performAction(app.id, correction ? 'resubmit' : 'submit', { expectedVersion: fresh.version });
-      toast('success', correction ? t('تمت إعادة التقديم.', 'Resubmitted.') : t('تم إرسال الطلب.', 'Application submitted.'));
+      // D16: no message after a resubmission — the dashboard shows the new stage.
+      if (!correction) toast('success', t('تم إرسال الطلب.', 'Application submitted.'));
       // رسالة النجاح (رقم الطلب والحالة الجديدة) تُعرض في «لوحتي» حيث يتابع المصنع مراحل الطلب.
-      setSubmitFlash({ appId: done.id, number: done.number, stateLabelAr: done.stateLabelAr, stateLabelEn: done.stateLabelEn, resubmitted: correction, signedOut: restricted });
+      if (!correction) setSubmitFlash({ appId: done.id, number: done.number, stateLabelAr: done.stateLabelAr, stateLabelEn: done.stateLabelEn, signedOut: restricted });
       if (restricted) {
         // حساب لم يُقبل بعد: أُرسل الطلب لـIMC — شاشات المبادرة مقفلة حتى القرار (يصل بالبريد)، والحساب على المنصة يبقى
         // صالحًا لباقي المبادرات. الرسالة تُعرض في صفحة «مبادراتي» حيث تظهر حالة «قيد المراجعة».
-        setPlatformFlash({
-          testId: 'submitted-for-review', tone: 'ok',
-          titleAr: correction ? 'تم إرسال التعديلات للمراجعة' : 'تم إرسال طلب التسجيل للمراجعة',
-          titleEn: correction ? 'Your changes were sent for review' : 'Your registration was sent for review',
-          textAr: 'يراجع مركز تحديث الصناعة (IMC) طلبكم الآن، وسيصلكم بريد بالقرار. تُفتح لوحة «شمس الصناعة» بعد قبول الحساب.',
-          textEn: 'IMC is reviewing your registration; you will be emailed the decision. The Shams El-Senaa dashboard opens once the account is approved.',
-        });
+        if (!correction) {
+          setPlatformFlash({
+            testId: 'submitted-for-review', tone: 'ok',
+            titleAr: 'تم إرسال طلب التسجيل للمراجعة', titleEn: 'Your registration was sent for review',
+            textAr: 'يراجع مركز تحديث الصناعة (IMC) طلبكم الآن، وسيصلكم بريد بالقرار. تُفتح لوحة «شمس الصناعة» بعد قبول الحساب.',
+            textEn: 'IMC is reviewing your registration; you will be emailed the decision. The Shams El-Senaa dashboard opens once the account is approved.',
+          });
+        }
         try { sessionStorage.removeItem('platform_return_to'); } catch { /* storage unavailable */ }
         window.location.hash = '#hub';
         return;

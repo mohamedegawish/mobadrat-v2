@@ -65,7 +65,7 @@ test('public sign-up with a number in use: account + held draft, objection right
   const own = (await c.factory2.get('/factory/profile')).json.data.openApplicationId;
   if (own) await act(c.factory2, own, 'withdraw', { reason: 'تنظيف قبل الاختبار' });
   const N = `IND-D3-HELD-${process.pid}`;
-  const holder = await advanceTo('IMC_REVIEW', { factory: c.factory2, imc: c.imc, encpc: c.encpc, pmu: c.pmu }, N);
+  const holder = await advanceTo('IMC_REVIEW', { factory: c.factory2, imc: c.imc, encpc: c.encpc, pmu: c.pmu, electricity: c.electricity }, N);
   const { f, appId, signup, verify } = await selfRegistered(N);
   assert.equal(signup.data.registryHeld, true, 'the sign-up says the number is held');
   assert.equal(verify.data.modules.shams.registryHeld, true, 'activation says so too (not submitted)');
@@ -85,7 +85,7 @@ test('enrolment from a platform account with a number in use opens a held draft 
   const holderNumber = `IND-D3-ENR-${process.pid}`;
   const own = (await c.factory2.get('/factory/profile')).json.data.openApplicationId;
   if (own) await act(c.factory2, own, 'withdraw', { reason: 'تنظيف قبل الاختبار' });
-  await advanceTo('IMC_REVIEW', { factory: c.factory2, imc: c.imc, encpc: c.encpc, pmu: c.pmu }, holderNumber);
+  await advanceTo('IMC_REVIEW', { factory: c.factory2, imc: c.imc, encpc: c.encpc, pmu: c.pmu, electricity: c.electricity }, holderNumber);
   const email = `d3-enr-${process.pid}-${++seq}@platform.test`;
   const anon = new Client(srv.base);
   const reg = await fetch(`${srv.base}/auth/register`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ fullName: 'م. منصة', email, mobile: '01055556666', password: PASSWORD }) });

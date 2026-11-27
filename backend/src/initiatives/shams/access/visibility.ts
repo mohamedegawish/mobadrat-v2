@@ -25,6 +25,9 @@ export function listScope(user: UserInternal): { sql: string; params: SqlParam[]
       return { sql: "a.id IN (SELECT t.applicationId FROM shams_application_transitions t WHERE t.toState = 'IMC_REVIEW' AND t.fromState <> t.toState)", params: [], includeDrafts: false };
     case 'encpc_reviewer':
       return { sql: "a.id IN (SELECT t.applicationId FROM shams_application_transitions t WHERE t.toState = 'ENCPC_REVIEW' AND t.fromState <> t.toState)", params: [], includeDrafts: false };
+    // D18: the ministry sees an application from the moment it reaches it — then the factory's data and everything before.
+    case 'electricity_reviewer':
+      return { sql: "a.id IN (SELECT t.applicationId FROM shams_application_transitions t WHERE t.toState = 'ELECTRICITY_REVIEW' AND t.fromState <> t.toState)", params: [], includeDrafts: false };
     // bank_reviewer: دور ملغى (G-02) — لا يرى شيئًا (يقع في default).
     case 'pmu_reviewer':
     case 'system_admin':
@@ -40,6 +43,7 @@ export async function canSeeApplication(user: UserInternal, app: AppRow): Promis
     case 'factory_owner': return app.factoryOrgId === user.organizationId;
     case 'imc_reviewer': return await hasEnteredState(app.id, 'IMC_REVIEW');
     case 'encpc_reviewer': return await hasEnteredState(app.id, 'ENCPC_REVIEW');
+    case 'electricity_reviewer': return await hasEnteredState(app.id, 'ELECTRICITY_REVIEW');
     case 'pmu_reviewer': case 'system_admin': return true;
     default: return false;
   }
@@ -65,14 +69,17 @@ export function viewAttempt(user: UserInternal, app: AppRow): number | undefined
 export function visibleDocuments(user: UserInternal, app: AppRow, docs: DocumentRow[]): DocumentRow[] {
   switch (user.role) {
     case 'factory_owner':
-      return docs;
+      // D18: the ministry's approval file reaches the factory with the decision, not while it is being prepared.
+      return docs.filter((d) => !(d.uploadedInState === 'ELECTRICITY_REVIEW' && !wasSubmitted(d, app.attempt)));
+    case 'electricity_reviewer':
+      return docs.filter((d) => wasSubmitted(d, app.attempt) || d.uploadedInState === 'ELECTRICITY_REVIEW');
     case 'pmu_reviewer':
     case 'system_admin':
       return docs.filter((d) => wasSubmitted(d, app.attempt));
     case 'imc_reviewer':
       return docs.filter((d) => wasSubmitted(d, app.attempt) && FORM_DOCUMENT_KINDS.includes(d.kind) && IMC_STAGE.includes(d.uploadedInState));
     case 'encpc_reviewer':
-      return docs.filter((d) => wasSubmitted(d, app.attempt) && FORM_DOCUMENT_KINDS.includes(d.kind) && ENCPC_STAGE.includes(d.uploadedInState));
+      return docs.filter((d) => wasSubmitted(d, app.attempt) && (FORM_DOCUMENT_KINDS.includes(d.kind) || d.kind === 'correctionProofFile') && ENCPC_STAGE.includes(d.uploadedInState));
     default:
       return [];
   }

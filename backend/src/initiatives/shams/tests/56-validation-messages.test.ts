@@ -59,8 +59,8 @@ test('several invalid fields: one message lists each field by its Arabic name', 
 
 test('a field the step does not accept is named in Arabic, not by its code (BUG-02 bankOrgId)', async () => {
   await closeOpen();
-  const id = await advanceTo('ELECTRICITY_UPLOAD', c, 'IND-F7-3');
-  const r = await act(c.factory, id, 'submit_electricity', { distributionCompany: 'شركة توزيع (اختبار)', bankOrgId: 'org-bank-demo-a' });
+  const id = await advanceTo('ELECTRICITY_REVIEW', c, 'IND-F7-3');
+  const r = await act(c.electricity, id, 'accept', { distributionCompany: 'شركة توزيع (اختبار)', bankOrgId: 'org-bank-demo-a' });
   assert.equal(r.status, 400);
   const d = assertArabic(r.json, 'bankOrgId');
   assert.equal(d.messageAr, 'البنك: هذا البيان غير مقبول في هذه الخطوة.');

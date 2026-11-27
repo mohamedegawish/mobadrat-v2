@@ -150,14 +150,14 @@ export async function saveSection(user: UserInternal, appId: string, sectionRaw:
 async function uploadableKinds(app: AppRow): Promise<Set<DocumentKind>> {
   switch (app.state as ApplicationState) {
     case 'DRAFT': return new Set(FORM_DOCUMENT_KINDS);
-    case 'IMC_CORRECTION':
-    case 'ENCPC_CORRECTION': {
+    case 'IMC_CORRECTION': {
       const fields = new Set((await openDeficiencies(app.id)).map((d) => d.field));
       return new Set(FORM_DOCUMENT_KINDS.filter((k) => fields.has(fieldForDocKind(k))));
     }
+    case 'ENCPC_CORRECTION':
+    case 'ELECTRICITY_UPLOAD': return new Set(['correctionProofFile']);
     case 'OFFER_UPLOAD':
     case 'OFFER_CORRECTION': return new Set(['technicalOfferFile']);
-    case 'ELECTRICITY_UPLOAD': return new Set(['electricityApprovalFile']);
     // G-03: مستند إثبات التعاقد — بعد اختيار البنك فقط، وقبل تسجيل النتيجة (بعدها الطلب نهائي ولا يقبل رفعًا).
     case 'CONTRACT_OUTCOME': return app.bankOrgId ? new Set(['contractFile']) : new Set();
     // مسار شركة توزيع الكهرباء: موافقتها فقط، وقبل الإرسال لـPMU (إعادة الرفع تحفظ النسخ السابقة).
@@ -166,15 +166,25 @@ async function uploadableKinds(app: AppRow): Promise<Set<DocumentKind>> {
   }
 }
 
+/** Who uploads here: the owner of the application, or (D18) the ministry while the application is under its review. */
+async function loadForUpload(user: UserInternal, appId: string): Promise<AppRow> {
+  if (user.role !== 'electricity_reviewer') return loadOwned(user, appId);
+  const app = await getApplication(appId);
+  if (!app || !await canSeeApplication(user, app)) throw Errors.notFound('الطلب غير موجود.', 'Application not found.');
+  return app;
+}
+
 export async function uploadDocument(user: UserInternal, appId: string, kindRaw: unknown, file: Express.Multer.File | undefined, ip: string): Promise<DocumentRow> {
   let app: AppRow;
-  try { app = await loadOwned(user, appId); } catch (e) { discardUpload(file); throw e; }
+  try { app = await loadForUpload(user, appId); } catch (e) { discardUpload(file); throw e; }
   if (typeof kindRaw !== 'string' || !(DOCUMENT_KINDS as readonly string[]).includes(kindRaw)) {
     discardUpload(file);
     throw Errors.validation([{ field: 'kind', issue: 'unknown document kind' }]);
   }
   const kind = kindRaw as DocumentKind;
-  const allowed = await uploadableKinds(app);
+  const allowed: Set<DocumentKind> = user.role === 'electricity_reviewer'
+    ? new Set(app.state === 'ELECTRICITY_REVIEW' ? ['electricityApprovalFile'] : [])
+    : await uploadableKinds(app);
   if (!allowed.has(kind)) {
     discardUpload(file);
     if (FORM_CORRECTION_STATES.includes(app.state)) {
@@ -183,14 +193,17 @@ export async function uploadDocument(user: UserInternal, appId: string, kindRaw:
     throw Errors.conflict('INVALID_STATE', 'لا يمكن رفع هذا المستند في المرحلة الحالية.', 'This document cannot be uploaded in the current state.');
   }
   const pending = app.attempt + 1;
-  const multi = kind === 'electricityBill';
+  const multi = kind === 'electricityBill' || kind === 'correctionProofFile';
   const stored = acceptPdf(file);
   try {
     // F-05: كل الحدود تُفحص داخل معاملة الإدراج نفسها (BEGIN IMMEDIATE)، فلا يمر رفعان متزامنان معًا من فحص واحد حتى عبر عمليات متعددة.
     return await tx(async () => {
       await assertUnchangedInTx(app);
       const limits = shamsPolicy.documentLimits;
-      if (multi && (await activeDocsAt(app.id, pending)).filter((d) => d.kind === kind).length >= shamsPolicy.electricityBills.max) {
+      if (kind === 'correctionProofFile' && await countVersionsAtAttempt(app.id, kind, pending) >= shamsPolicy.correctionProof.maxFilesPerRound) {
+        throw new AppError(422, 'TOO_MANY_FILES', `الحد الأقصى ${shamsPolicy.correctionProof.maxFilesPerRound} ملفات.`, `At most ${shamsPolicy.correctionProof.maxFilesPerRound} files.`, [{ field: kind, issue: 'limit reached' }]);
+      }
+      if (kind === 'electricityBill' && (await activeDocsAt(app.id, pending)).filter((d) => d.kind === kind).length >= shamsPolicy.electricityBills.max) {
         throw new AppError(422, 'TOO_MANY_FILES', `الحد الأقصى ${shamsPolicy.electricityBills.max} فاتورة.`, `At most ${shamsPolicy.electricityBills.max} bills.`, [{ field: 'electricityBills', issue: 'limit reached' }]);
       }
       // الفواتير ملفات متعددة لا نسخ لمستند واحد: سقفها 12 ملفًا فعالًا أعلاه، وإعادة رفعها محكومة بحد التخزين.
@@ -227,7 +240,8 @@ export async function removeDocument(user: UserInternal, appId: string, docId: s
   // مستندات فورم التسجيل فقط (لا العرض الفني ولا موافقة الكهرباء ولا إثبات التعاقد)، وفقط حيث يجوز رفعها الآن:
   // المسودة كاملةً، وفي الاستيفاء بنود النواقص وحدها. الإزالة لا تحذف الصف ولا الملف: النسخة تُعلَّم «removed» من المحاولة القادمة،
   // فما لم يُرسل لا يراه مراجع (M7)، وما أُرسل سابقًا يبقى في السجل كما رآه المراجع.
-  if (!FORM_DOCUMENT_KINDS.includes(doc.kind) || !(await uploadableKinds(app)).has(doc.kind)) {
+  const removable = FORM_DOCUMENT_KINDS.includes(doc.kind) || (doc.kind === 'correctionProofFile' && doc.attempt > app.attempt);
+  if (!removable || !(await uploadableKinds(app)).has(doc.kind)) {
     throw Errors.conflict('INVALID_STATE', 'لا يمكن إزالة هذا المستند في المرحلة الحالية.', 'This document cannot be removed in the current state.');
   }
   if (!(await activeDocsAt(app.id, pending)).some((d) => d.id === doc.id)) throw Errors.notFound('المستند غير موجود.', 'Document not found.');

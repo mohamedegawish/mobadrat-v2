@@ -8,7 +8,7 @@ import {
 import { listDocuments, isActiveAt, wasSubmitted, type DocumentRow } from '../store/documents.js';
 import { getOrganization, getOrganizationsByIds, isBankAvailable, type Organization } from '../store/organizations.js';
 import { getUserNamesByIds } from '../store/users.js';
-import { getProvider, isSelectable } from '../store/providers.js';
+import { getProvider } from '../store/providers.js';
 import { conflictsForApplication, listObjections, pendingObjectionAgainst, registryAccess } from '../store/registry.js';
 import { AppError, Errors } from '../http/errors.js';
 import {
@@ -84,7 +84,7 @@ export async function responsibleInfo(app: AppRow, orgs?: OrgCache) {
 
 /**
  * قيود السياسة فوق جدول الانتقالات — نفس الدالة تحدد الأزرار وترفض التنفيذ في السيرفر:
- * البنك يُختار مرة واحدة ثم تُسجَّل النتيجة (G-01)؛ مقدم خدمة لم يعد معتمدًا → لا إرسال عرض، ويُتاح إعادة الاختيار (I11).
+ * البنك يُختار مرة واحدة ثم تُسجَّل النتيجة (G-01).
  */
 export async function actionBlock(app: AppRow, action: ActionName): Promise<AppError | null> {
   // D4: while another factory's objection to this registry number is under PMU review, the holder's application does not move
@@ -110,16 +110,6 @@ export async function actionBlock(app: AppRow, action: ActionName): Promise<AppE
     }
     if (action === 'select_bank' && app.contractPath === 'distribution') {
       return Errors.conflict('CONTRACT_PATH_LOCKED', 'هذا الطلب على مسار التعاقد عن طريق شركة التوزيع — لا يمكن اختيار بنك.', 'This application is on the distribution company path — a bank cannot be chosen.');
-    }
-  }
-  if (app.state === 'OFFER_UPLOAD') {
-    const approved = app.providerId ? isSelectable(await getProvider(app.providerId)) : false;
-    if (action === 'submit_offer' && !approved) {
-      return new AppError(422, 'PROVIDER_SUSPENDED', 'مقدم الخدمة المختار لم يعد معتمدًا — اختر مقدم خدمة معتمدًا آخر قبل إرسال العرض.',
-        'The selected service provider is no longer approved — choose another approved provider before submitting the offer.', [{ field: 'providerId', issue: 'not approved' }]);
-    }
-    if (action === 'select_provider' && approved) {
-      return Errors.conflict('INVALID_STATE', 'مقدم الخدمة المختار ما زال معتمدًا — لا يمكن تغييره في هذه المرحلة.', 'The selected provider is still approved and cannot be changed at this stage.');
     }
   }
   return null;
@@ -189,6 +179,7 @@ function fieldLabel(field: string): { ar: string; en: string } {
   if (field === 'technicalOfferFile') return DOCUMENT_LABELS.technicalOfferFile;
   if (field === 'electricityApprovalFile') return DOCUMENT_LABELS.electricityApprovalFile;
   if (field === 'distributionApprovalFile') return DOCUMENT_LABELS.distributionApprovalFile;
+  if (field === 'correctionProofFile') return DOCUMENT_LABELS.correctionProofFile;
   if (field === 'distributionCompany') return { ar: 'شركة التوزيع', en: 'Distribution company' };
   if (field === 'bankOrgId') return { ar: 'البنك', en: 'Bank' };
   return { ar: field, en: field };
@@ -275,15 +266,24 @@ export async function buildDetail(user: UserInternal, app: AppRow) {
   const distribution = seesStageData ? await getDistributionContract(app.id) : null;
   const names = await getUserNamesByIds(new Set([...docs.map((d) => d.uploadedBy), ...(distribution?.decidedBy ? [distribution.decidedBy] : []), ...(distribution?.selectedBy ? [distribution.selectedBy] : [])]));
 
-  const showOpenDefs = isOwner || user.role === 'pmu_reviewer' || user.role === 'system_admin'
-    || (user.role === 'imc_reviewer' && app.state === 'IMC_CORRECTION') || (user.role === 'encpc_reviewer' && (app.state === 'ENCPC_CORRECTION'));
+  const showOpenDefs = isOwner || user.role === 'pmu_reviewer' || user.role === 'system_admin' || user.role === 'electricity_reviewer'
+    || (user.role === 'imc_reviewer' && app.state === 'IMC_CORRECTION');
   const openList = showOpenDefs ? open.map((d) => ({ id: d.id, stage: d.stage, field: d.field, note: metaOnly ? '' : d.note, ...(() => { const l = fieldLabel(d.field); return { labelAr: l.ar, labelEn: l.en }; })() })) : [];
 
   let editableFields: string[] = [];
   if (isOwner && app.state === 'DRAFT') editableFields = [...ALL_FORM_FIELD_KEYS];
   else if (isOwner && FORM_CORRECTION_STATES.includes(app.state)) editableFields = open.map((d) => d.field).filter((f) => ALL_FORM_FIELD_KEYS.has(f));
 
-  const provider = seesStageData && app.providerId ? await getProvider(app.providerId) : null;
+  // D16: the provider the factory named with its offer (applications from before D14 keep the directory entry they chose).
+  const named = seesStageData ? await getSection(app.id, 'provider', viewAttempt(user, app)) : null;
+  const legacy = seesStageData && !named?.providerName && app.providerId ? await getProvider(app.providerId) : null;
+  const providerInfo = named?.providerName
+    ? { name: String(named.providerName), email: metaOnly ? '' : String(named.providerEmail ?? ''), phone: metaOnly ? '' : String(named.providerPhone ?? '') }
+    : legacy ? { name: legacy.nameAr, email: metaOnly ? '' : legacy.contactEmail, phone: metaOnly ? '' : legacy.contactPhone } : null;
+  const accepted = [...allTransitions].reverse().find((t) => t.action === 'compliant' && typeof t.payload.providersLink === 'string');
+  // D13 / D18: while the application is back with the factory, the decision that returned it (its reason is what to fix).
+  const returned = ['ENCPC_CORRECTION', 'OFFER_CORRECTION', 'ELECTRICITY_UPLOAD', 'IMC_CORRECTION'].includes(app.state)
+    ? [...transitions].reverse().find((t) => t.toState === app.state && t.fromState !== t.toState) ?? null : null;
   const conflicts = (user.role === 'imc_reviewer' || user.role === 'pmu_reviewer' || metaOnly) ? await mapSeq(await conflictsForApplication(app.id), async (c) => {
     const holds = c.holdingApplicationId === app.id;
     const other = await getApplication(holds ? c.attemptedApplicationId : c.holdingApplicationId);
@@ -308,8 +308,9 @@ export async function buildDetail(user: UserInternal, app: AppRow) {
     registryDisputeOpen: !isTerminal(app.state) && app.state !== 'DRAFT' && Boolean(app.industrialRegistryNumber) && await pendingObjectionAgainst(app.industrialRegistryNumber!, app.factoryId),
     // F2 / D3: the owner's draft holds a number used by another open application (or on hold) → the objection is offered.
     registryHold,
-    provider: provider ? { id: provider.id, nameAr: provider.nameAr, nameEn: provider.nameEn, contactName: metaOnly ? '' : provider.contactName, contactPhone: metaOnly ? '' : provider.contactPhone, contactEmail: metaOnly ? '' : provider.contactEmail, status: provider.status,
-      description: provider.description, isActive: provider.isActive === 1, selectable: isSelectable(provider) } : null,
+    providerInfo,
+    encpcAcceptance: accepted && !metaOnly ? { providersLink: String(accepted.payload.providersLink), note: accepted.reason, at: accepted.createdAt } : null,
+    returnDecision: returned && !metaOnly ? { reason: returned.reason, at: returned.createdAt } : null,
     referralHistory: seesStageData ? await mapSeq(await referralHistory(app.id), async (h) => {
       const org = await getOrganization(h.bankOrgId);
       return { bankOrgId: h.bankOrgId, bankNameAr: org?.nameAr ?? h.bankOrgId, bankNameEn: org?.nameEn ?? h.bankOrgId, referredAt: h.referredAt, endedAt: h.endedAt, endReason: metaOnly ? '' : h.endReason };

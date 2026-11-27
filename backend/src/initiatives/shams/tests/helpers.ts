@@ -210,13 +210,13 @@ export function pdfVariant(tag: string): Buffer { return Buffer.concat([PDF, Buf
 
 export const DEV = {
   admin: 'admin@shams.local', imc1: 'imc1@shams.local', imc2: 'imc2@shams.local', encpc: 'encpc@shams.local', pmu: 'pmu@shams.local',
-  factory: 'factory@shams.local', factory2: 'factory2@shams.local',
+  factory: 'factory@shams.local', factory2: 'factory2@shams.local', electricity: 'electricity@shams.local',
 };
 export const BANK_A = 'org-bank-demo-a';
 export const BANK_B = 'org-bank-demo-b';
-export const PROVIDER_OK = 'sp-demo-1';
-export const PROVIDER_PENDING = 'sp-demo-3';
-export const PROVIDER_SUSPENDED = 'sp-demo-4';
+/** D13: ENCPC's providers link; D16: the provider the factory names with its offer. */
+export const PROVIDERS_LINK = 'https://encpc.example.eg/providers';
+export const PROVIDER_INFO = { providerName: 'شركة طاقة (اختبار)', providerEmail: 'offers@provider.test', providerPhone: '01000000101' };
 
 export function completeSections(regNumber: string) {
   return {
@@ -258,10 +258,29 @@ export async function getApp(c: Client, id: string) {
   return r.json.data;
 }
 
-/** ينفذ إجراء بالنسخة الحالية للطلب. */
+/**
+ * ينفذ إجراء بالنسخة الحالية للطلب. The fields every call of an action needs (ENCPC's link, the offer's provider) are
+ * filled in unless the test passes its own — pass `undefined` for one to leave it out.
+ */
 export async function act(c: Client, id: string, action: string, body: Record<string, unknown> = {}) {
   const app = await getApp(c, id);
-  return c.post(`/applications/${id}/actions/${action}`, { expectedVersion: app.version, ...body });
+  const offer = action === 'submit_offer' || (action === 'resubmit' && app.state === 'OFFER_CORRECTION');
+  const defaults = action === 'compliant' ? { providersLink: PROVIDERS_LINK } : offer ? PROVIDER_INFO : {};
+  return c.post(`/applications/${id}/actions/${action}`, { expectedVersion: app.version, ...defaults, ...body });
+}
+
+/** D13 / D18: the factory's proof that a rejection's issue is fixed. */
+export async function uploadProof(factory: Client, id: string, tag = 'proof') {
+  const r = await factory.upload(`/applications/${id}/documents`, { kind: 'correctionProofFile' }, pdfVariant(tag), `${tag}.pdf`);
+  if (r.status !== 201) throw new Error(`proof upload ${r.status} ${JSON.stringify(r.json)}`);
+  return r.json.data;
+}
+
+/** D18: the ministry uploads its approval file and accepts. */
+export async function electricityAccept(electricity: Client, id: string, tag = 'elec-1') {
+  const up = await electricity.upload(`/applications/${id}/documents`, { kind: 'electricityApprovalFile' }, pdfVariant(tag), `${tag}.pdf`);
+  if (up.status !== 201) throw new Error(`approval upload ${up.status} ${JSON.stringify(up.json)}`);
+  return act(electricity, id, 'accept', { distributionCompany: 'شركة توزيع (اختبار)' });
 }
 
 export async function q<T = any>(sql: string, ...params: Array<string | number | null>): Promise<T[]> {
@@ -275,9 +294,9 @@ export async function q<T = any>(sql: string, ...params: Array<string | number |
  * CONTRACT_OUTCOME = اختار المصنع البنك وينتظر تسجيل النتيجة (لا حساب ولا قرار للبنك — G-02).
  */
 export async function advanceTo(
-  target: 'IMC_REVIEW' | 'ENCPC_REVIEW' | 'PROVIDER_SELECTION' | 'OFFER_REVIEW' | 'ELECTRICITY_UPLOAD' | 'ELECTRICITY_REVIEW' | 'BANK_SELECTION' | 'CONTRACT_OUTCOME'
+  target: 'IMC_REVIEW' | 'ENCPC_REVIEW' | 'OFFER_UPLOAD' | 'OFFER_REVIEW' | 'ELECTRICITY_REVIEW' | 'ELECTRICITY_UPLOAD' | 'BANK_SELECTION' | 'CONTRACT_OUTCOME'
     | 'DISTRIBUTION_UPLOAD' | 'DISTRIBUTION_REVIEW',
-  c: { factory: Client; imc: Client; encpc: Client; pmu: Client }, regNumber: string, bank = BANK_A,
+  c: { factory: Client; imc: Client; encpc: Client; pmu: Client; electricity: Client }, regNumber: string, bank = BANK_A,
 ): Promise<string> {
   const ok = (r: Res, step: string) => { if (r.status !== 200) throw new Error(`${step} -> ${r.status} ${JSON.stringify(r.json)}`); };
   const id = await createCompleteDraft(c.factory, regNumber);
@@ -286,19 +305,18 @@ export async function advanceTo(
   ok(await act(c.imc, id, 'accept'), 'imc accept');
   if (target === 'ENCPC_REVIEW') return id;
   ok(await act(c.encpc, id, 'compliant'), 'encpc compliant');
-  if (target === 'PROVIDER_SELECTION') return id;
-  ok(await act(c.factory, id, 'select_provider', { providerId: PROVIDER_OK }), 'select provider');
+  if (target === 'OFFER_UPLOAD') return id;
   const up = await c.factory.upload(`/applications/${id}/documents`, { kind: 'technicalOfferFile' }, pdfVariant('offer-1'), 'offer.pdf');
   if (up.status !== 201) throw new Error(`offer upload ${up.status}`);
   ok(await act(c.factory, id, 'submit_offer'), 'submit offer');
   if (target === 'OFFER_REVIEW') return id;
   ok(await act(c.pmu, id, 'accept'), 'pmu accept offer');
-  if (target === 'ELECTRICITY_UPLOAD') return id;
-  const up2 = await c.factory.upload(`/applications/${id}/documents`, { kind: 'electricityApprovalFile' }, pdfVariant('elec-1'), 'approval.pdf');
-  if (up2.status !== 201) throw new Error(`approval upload ${up2.status}`);
-  ok(await act(c.factory, id, 'submit_electricity', { distributionCompany: 'شركة توزيع (اختبار)' }), 'submit electricity');
   if (target === 'ELECTRICITY_REVIEW') return id;
-  ok(await act(c.pmu, id, 'accept'), 'pmu accept electricity');
+  if (target === 'ELECTRICITY_UPLOAD') {
+    ok(await act(c.electricity, id, 'request_correction', { reason: 'ملاحظات الكهرباء (اختبار)' }), 'electricity reject');
+    return id;
+  }
+  ok(await electricityAccept(c.electricity, id), 'electricity accept');
   if (target === 'BANK_SELECTION') return id;
   // المسار الثاني: التعاقد عن طريق شركة توزيع الكهرباء (رفع موافقتها ثم مراجعة PMU).
   if (target === 'DISTRIBUTION_UPLOAD' || target === 'DISTRIBUTION_REVIEW') {
@@ -328,12 +346,12 @@ export async function uploadContractFile(factory: Client, id: string, tag = 'con
 
 export async function clients(base: string) {
   // G-02: لا حسابات للبنوك — لا عميل بنك.
-  const [factory, factory2, imc, imc2, encpc, pmu, admin] = await Promise.all([
+  const [factory, factory2, imc, imc2, encpc, pmu, admin, electricity] = await Promise.all([
     new Client(base).login(DEV.factory), new Client(base).login(DEV.factory2), new Client(base).login(DEV.imc1), new Client(base).login(DEV.imc2),
-    new Client(base).login(DEV.encpc), new Client(base).login(DEV.pmu), new Client(base).login(DEV.admin),
+    new Client(base).login(DEV.encpc), new Client(base).login(DEV.pmu), new Client(base).login(DEV.admin), new Client(base).login(DEV.electricity),
   ]);
-  for (const cl of [factory, factory2, imc, imc2, encpc, pmu, admin]) cl.autoRelogin = true;
-  return { factory, factory2, imc, imc2, encpc, pmu, admin };
+  for (const cl of [factory, factory2, imc, imc2, encpc, pmu, admin, electricity]) cl.autoRelogin = true;
+  return { factory, factory2, imc, imc2, encpc, pmu, admin, electricity };
 }
 
 

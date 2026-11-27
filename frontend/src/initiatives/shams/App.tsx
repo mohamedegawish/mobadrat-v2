@@ -12,7 +12,6 @@ import { FactoryDashboardView } from './components/factory/FactoryDashboardView'
 import { ApplicationWizard } from './components/factory/ApplicationWizard';
 import { FactoryTaskView } from './components/factory/FactoryTaskView';
 import { ApplicationDetailView } from './components/review/ApplicationDetailView';
-import { ProvidersView } from './components/providers/ProvidersView';
 import { ApprovalsView } from './components/review/ApprovalsView';
 import { NotificationsView } from './components/common/NotificationsView';
 import { AccountsView, OrganizationsView } from './components/admin/AccountsViews';
@@ -47,7 +46,7 @@ const WorkspaceRedirect: React.FC = () => {
 const SCREENS: Record<View, React.FC> = {
   home: PlatformPageRedirect, login: LoginView, register: RegisterView, 'verify-email': VerifyEmailView, 'forgot-password': ForgotPasswordView, 'reset-password': ResetPasswordView, 'cancel-recovery': CancelRecoveryView, notifications: NotificationsView,
   'factory-dashboard': FactoryDashboardView, apply: ApplicationWizard, task: FactoryTaskView, application: ApplicationDetailView,
-  dashboard: WorkspaceRedirect, 'work-queue': WorkspaceRedirect, 'pmu-monitor': WorkspaceRedirect, providers: ProvidersView, approvals: ApprovalsView,
+  dashboard: WorkspaceRedirect, 'work-queue': WorkspaceRedirect, 'pmu-monitor': WorkspaceRedirect, approvals: ApprovalsView,
   'admin-dashboard': WorkspaceRedirect, 'admin-accounts': AccountsView, 'admin-organizations': OrganizationsView, 'admin-audit': AuditLogsView, 'admin-integration': IntegrationKeysView, 'admin-outbox': OutboxView,
 };
 

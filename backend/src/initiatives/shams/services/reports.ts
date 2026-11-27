@@ -1,9 +1,8 @@
 /** التقارير والملخصات — دالة واحدة لـ /reports/summary و Integration GET /summary. */
-import { getDb, sqlDaysBetween } from '../db/database.js';
+import { getDb, sqlDaysBetween, parseJson } from '../db/database.js';
 import { mapSeq } from '../http/helpers.js';
 import type { SqlParam } from '../http/helpers.js';
 import { listApplications, listTransitionsFor, getBankReferralsFor, getDistributionContractsFor, type AppRow } from '../store/applications.js';
-import { getProvidersByIds } from '../store/providers.js';
 import {
   APPLICATION_STATES, NON_TERMINAL_STATES, STATE_LABELS, RETURN_ACTIONS, isTerminal, type ApplicationState,
 } from '../workflow/shamsWorkflow.js';
@@ -21,6 +20,7 @@ export type StageLimit = ApplicationState[] | null;
 export const STAGE_LIMIT: Partial<Record<string, ApplicationState[]>> = {
   imc_reviewer: ['IMC_REVIEW', 'IMC_CORRECTION', 'REJECTED'],
   encpc_reviewer: ['ENCPC_REVIEW', 'ENCPC_CORRECTION'],
+  electricity_reviewer: ['ELECTRICITY_REVIEW', 'ELECTRICITY_UPLOAD'],
 };
 
 export async function buildSummary(scope: Scope, stageLimit: StageLimit = null) {
@@ -97,6 +97,25 @@ async function contractsAboveAlert(base: string, params: SqlParam[]): Promise<nu
     .get(shamsPolicy.contractAmountAlertEGP, ...params) as { n: number }).n;
 }
 
+/** D16: the provider each factory named with its latest offer; applications from before D14 name their directory entry. */
+async function providerNamesFor(ids: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  for (let i = 0; i < ids.length; i += 500) {
+    const chunk = ids.slice(i, i + 500);
+    const marks = chunk.map(() => '?').join(',');
+    const legacy = await getDb().prepare(`SELECT a.id AS id, p.nameAr AS name FROM shams_applications a JOIN shams_service_providers p ON p.id = a.providerId WHERE a.id IN (${marks})`)
+      .all(...chunk) as Array<{ id: string; name: string }>;
+    for (const r of legacy) out.set(r.id, r.name);
+    const named = await getDb().prepare(`SELECT applicationId, data FROM shams_application_data WHERE section = 'provider' AND applicationId IN (${marks}) ORDER BY attempt`)
+      .all(...chunk) as Array<{ applicationId: string; data: string }>;
+    for (const r of named) {
+      const name = parseJson<{ providerName?: string }>(r.data, {}).providerName;
+      if (name) out.set(r.applicationId, name);
+    }
+  }
+  return out;
+}
+
 /** صفوف تقرير Excel. `full` = PMU/الأدمن (مقدم الخدمة والبنك والتعاقد والإرجاعات). */
 export async function reportRows(apps: AppRow[], full: boolean) {
   // PERF-3: the export used ~2.7 sequential queries per application (13,478 for 5,005 rows: 5.8 s, 28 s with 10 concurrent exports).
@@ -106,7 +125,7 @@ export async function reportRows(apps: AppRow[], full: boolean) {
   const referrals = full ? await getBankReferralsFor(ids) : new Map();
   const distributions = full ? await getDistributionContractsFor(ids) : new Map();
   const transitions = full ? await listTransitionsFor(ids) : new Map();
-  const providers = full ? await getProvidersByIds(apps.map((a) => a.providerId).filter((x): x is string => Boolean(x))) : new Map();
+  const providers = full ? await providerNamesFor(ids) : new Map<string, string>();
   return mapSeq(apps, async (a) => {
     const sla = slaInfo(a);
     const resp = await responsibleInfo(a, orgs);
@@ -125,7 +144,7 @@ export async function reportRows(apps: AppRow[], full: boolean) {
     return {
       ...base,
       returnsTotal: Object.values(returns).reduce((s, n) => s + (n ?? 0), 0),
-      providerAr: a.providerId ? providers.get(a.providerId)?.nameAr ?? '' : '',
+      providerAr: providers.get(a.id) ?? '',
       bankAr: a.bankOrgId ? orgs.get(a.bankOrgId)?.nameAr ?? '' : '',
       contractPath: a.contractPath ?? '',
       contractStatus: a.contractPath === 'distribution' ? distStatus : ref?.contractStatus ?? '', contractAmount: ref?.contractAmount ?? null,

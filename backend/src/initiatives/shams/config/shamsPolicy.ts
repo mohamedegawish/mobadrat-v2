@@ -81,23 +81,9 @@ export const shamsPolicy = {
   /** G-02: لا حساب للبنك؛ المصنع يسجل نتيجة التعاقد مباشرة. */
   contractOutcomeRecordedBy: 'factory' as const,
   /** ★ الجهة التي تراجع موافقة الكهرباء. */
-  electricityReviewer: 'pmu' as const,
+  electricityReviewer: 'electricity' as const,
   /** ★ السجل غير الصحيح: تصحيح مع بقاء المسودة. */
   invalidRegistry: 'stay_draft' as const,
-  /**
-   * دليل مقدمي الخدمة (ليسوا مستخدمين ولا بوابة): ENCPC تضيف وتعدّل (الاسم والتفاصيل والشعار) وتفعّل وتلغي التفعيل.
-   * ظهور المقدم للمصنع = مفعّل من ENCPC + (إن كان providerApprovalRequired) معتمد من PMU.
-   */
-  providerManagerRoles: ['encpc_reviewer'] as Role[],
-  /**
-   * ★ هل يلزم اعتماد PMU قبل ظهور المقدم؟ المخطط 5.0 يجعل اعتماد قائمة المقدمين عند PMU، وقرار الحوكمة النهائي لم يصدر،
-   * فالقيمة الافتراضية true (لا نحذف ضابطًا قائمًا بصمت). false = تكفي موافقة ENCPC ويبقى لـPMU الإيقاف.
-   */
-  providerApprovalRequired: true,
-  /** ★ من يعتمد مقدمي الخدمة ويوقفهم — PMU فقط حتى يُعتمد غير ذلك (المخطط 5.0). */
-  providerApproverRoles: ['pmu_reviewer'] as Role[],
-  /** شعار مقدم الخدمة: صور فقط (لا SVG لأنه قد يحمل سكربتات)، بحد أقصى صغير. */
-  providerLogo: { maxBytes: 1024 * 1024, mimes: ['image/png', 'image/jpeg', 'image/webp'] as const },
   /**
    * ★ هل يرى الأدمن بيانات الطلبات ومستنداتها؟ false = البيانات الوصفية فقط (الرقم والحالة والتواريخ وقائمة المستندات
    * بلا تنزيل، بلا بيانات الفورم ولا الأسباب والملاحظات). قيمة مؤقتة حتى قرار الجهة المالكة.
@@ -143,23 +129,30 @@ export const shamsPolicy = {
    */
   registryDispute: { freezeHolderWhileObjectionPending: true, closeHolderReasonCode: 'REGISTRY_OWNERSHIP', loserSeesOtherCompany: false } as const,
   /**
-   * D6 — إيقاف مقدم الخدمة أثناء «رفع العرض الفني»: يعود الطلب إلى «اختيار مقدم الخدمة» بقيد في السجل وإشعار للمصنع.
-   * D7 — إيقافه بعد قبول العرض (بعد T13): لا تتغير الحالة؛ تنبيه للمصنع وPMU داخل المنصة وبالبريد، وقيد في السجل.
-   * (workflow/providerEvents.ts)
-   */
-  providerSuspendedInOfferUpload: 'return_to_provider_selection' as const,
-  providerSuspendedAfterOfferAccepted: 'warn_factory_and_pmu' as const,
-  /**
    * D8 — رقم سجل غير صحيح في صفحة التسجيل العامة: كما بُني — رسالة عربية واضحة، البيانات تبقى في النموذج، ولا يُنشأ شيء.
    * T2 في المرجع يخص مسار حساب المنصة فقط.
    * D9 — مسار التعاقد عن طريق شركة توزيع الكهرباء: معتمد كما بُني (T28 فما بعد في المرجع).
    * D10 — الأسباب في الإشعارات (لكل المبادرات): الإشعار الداخلي يحمل السبب كاملًا، والـ SMS القرار والسبب مختصرًا في
    * رسالتين مع رابط، والـ outbox يحفظ نص الـ SMS حتى بلا مزود (core/notify/decisionText.ts).
-   * تبقى كما هي: PMU وENCPC يديران دليل مقدمي الخدمة؛ طلب مفتوح واحد لكل مصنع ومسودة جديدة بعد أي حالة نهائية؛ مدير النظام
-   * يرى مقدم الخدمة المختار وحالة التعاقد وتاريخه؛ الاستيفاء يعدّل الحقول التي حددتها IMC فقط.
+   * تبقى كما هي: طلب مفتوح واحد لكل مصنع ومسودة جديدة بعد أي حالة نهائية؛ الاستيفاء يعدّل الحقول التي حددتها IMC فقط.
    */
   publicSignupInvalidRegistry: 'refuse_keep_form' as const,
   distributionRouteApproved: true,
+
+  // ── تعديلات المالك (2026-11-27) — D11 إلى D18. تُلغي D6 وD7 (لا دليل مقدمي خدمة). ──
+  /**
+   * D11 — صفحة الطلب لكل الحسابات بلا «المراحل اللاحقة» ولا «السجل» ولا «نتيجة التحقق من السجل»؛ «مسار التعاقد» باقٍ،
+   * والمراحل تُكتب «الإجراء — الجهة المسؤولة». D12 — المهل: slaDays وslaPhases أعلاه.
+   * D13 — ENCPC: «قبول فني» بلينك مقدمي الخدمة (إجباري) وملاحظة اختيارية تصل المصنع بالبريد، أو «رفض فني» بسبب يرد عليه
+   * المصنع بمرفق إثبات (correctionProofFile) دون تعديل الفورم.
+   * D14 — لا دليل مقدمي خدمة ولا اختيار ولا اعتماد؛ PROVIDER_SELECTION مرحلة ملغاة.
+   * D15 — لا صفحة «موافقات» لـENCPC: الأدمن ينشئ حسابات ENCPC مباشرةً (accountApproval.adminCreatesDirectly).
+   * D16 — المصنع يسمّي مقدم الخدمة (الاسم والبريد، والهاتف اختياري) مع العرض الفني.
+   * D17 — قبول PMU للعرض يُبلَّغ به صاحب المصنع ومقدم الخدمة؛ PMU تتابع قرارات الكهرباء وتُنبّه الجهات المتأخرة.
+   * D18 — وزارة الكهرباء (electricity_reviewer): ترى بيانات المصنع وكل ما سبق، وتقبل برفع الموافقة (إلى مسار التعاقد
+   * مباشرة) أو ترفض بملاحظات يرد عليها المصنع بمرفق.
+   */
+  correctionProof: { maxFilesPerRound: 10 },
 
   // ── قرارات المراجعة الأمنية (docs/SECURITY_FIX_REPORT.md §القرارات) ──
   /**
@@ -168,6 +161,10 @@ export const shamsPolicy = {
    */
   accountApproval: {
     approverRolesForBank: ['pmu_reviewer'] as Role[],
+    /** D15 / D18: organizations with no approvals page of their own — PMU approves their requests. */
+    approvedByPmu: ['encpc', 'electricity'] as const,
+    /** D15: a request the system administrator makes for these roles creates the account at once. */
+    adminCreatesDirectly: ['encpc_reviewer'] as Role[],
     firstUserViaCliOnly: true,
   },
   /** مدة رابط تعيين كلمة المرور (بعد الموافقة على الحساب أو إعادة التعيين الإدارية) — لمرة واحدة. */
@@ -184,8 +181,6 @@ export const shamsPolicy = {
   registryObjectionReviewerRoles: ['pmu_reviewer'] as Role[],
   /** القرار 5: مطابقة المالك/المفوض مع السجل — تُسجَّل فقط عند توفر API السجل، ولا منع آلي. */
   registryOwnershipCheck: 'record_only' as const,
-  /** القرار 6: إيقاف مقدم الخدمة أثناء مراجعة العرض أو تصحيحه → عودة تلقائية إلى OFFER_UPLOAD مع طلب عرض جديد. */
-  providerSuspendedDuringOfferReview: 'return_to_offer_upload' as const,
   /** L7: حدود تخزين المستندات (ضد ملء القرص من حساب ذاتي التسجيل). */
   documentLimits: { maxVersionsPerKindPerAttempt: 10, maxApplicationStorageMB: 300 },
   /** M3: تأخير متصاعد لكل (بريد، IP) بدل القفل الكامل، وإبلاغ صاحب الحساب عند النشاط المتكرر. */

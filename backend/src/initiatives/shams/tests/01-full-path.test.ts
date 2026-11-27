@@ -1,7 +1,7 @@
 // اختبار القبول 1: المسار الكامل حتى CONTRACTED مع التحقق من الحالة والجهة والإشعارات والسجل في كل خطوة.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { isolateTestEnv, startServer, clients, createCompleteDraft, act, getApp, pdfVariant, q, uploadContractFile, PROVIDER_OK, BANK_A, type Started, type Client } from './helpers.js';
+import { isolateTestEnv, startServer, clients, createCompleteDraft, act, getApp, pdfVariant, q, uploadContractFile, electricityAccept, PROVIDERS_LINK, PROVIDER_INFO, BANK_A, type Started, type Client } from './helpers.js';
 
 const env = isolateTestEnv('fullpath');
 let srv: Started;
@@ -52,53 +52,47 @@ test('full path DRAFT → CONTRACTED', async () => {
   await expectStep(c.imc, id, 'ENCPC_REVIEW', 'encpc', 'accept');
   assert.ok((await notificationsFor(id, 'app.review_assigned')).some((n) => n.recipientAddress === 'encpc@shams.local'));
 
-  // 3 → PROVIDER_SELECTION
+  // 3 → OFFER_UPLOAD: ENCPC's technical acceptance sends the providers link (D13)
   r = await act(c.encpc, id, 'compliant');
   assert.equal(r.status, 200, JSON.stringify(r.json));
-  await expectStep(c.encpc, id, 'PROVIDER_SELECTION', 'factory', 'compliant');
+  app = await expectStep(c.encpc, id, 'OFFER_UPLOAD', 'factory', 'compliant');
+  assert.equal(app.encpcAcceptance.providersLink, PROVIDERS_LINK);
   const compliant = await notificationsFor(id, 'app.encpc_compliant');
   assert.ok(compliant.some((n) => n.channel === 'email' && n.recipientAddress === 'factory@shams.local'));
   assert.ok(compliant.some((n) => n.channel === 'sms'), 'SMS to the factory contact mobile');
 
-  // 4 → OFFER_UPLOAD
-  r = await act(c.factory, id, 'select_provider', { providerId: PROVIDER_OK });
-  assert.equal(r.status, 200, JSON.stringify(r.json));
-  await expectStep(c.factory, id, 'OFFER_UPLOAD', 'factory', 'select_provider');
-
-  // 5 → OFFER_REVIEW
+  // 4 → OFFER_REVIEW: the offer and the provider that prepared it (D16)
   const up = await c.factory.upload(`/applications/${id}/documents`, { kind: 'technicalOfferFile' }, pdfVariant('offer'), 'offer.pdf');
   assert.equal(up.status, 201);
   r = await act(c.factory, id, 'submit_offer');
   assert.equal(r.status, 200, JSON.stringify(r.json));
-  await expectStep(c.pmu, id, 'OFFER_REVIEW', 'pmu', 'submit_offer');
+  app = await expectStep(c.pmu, id, 'OFFER_REVIEW', 'pmu', 'submit_offer');
+  assert.deepEqual(app.providerInfo, { name: PROVIDER_INFO.providerName, email: PROVIDER_INFO.providerEmail, phone: PROVIDER_INFO.providerPhone });
   assert.ok((await notificationsFor(id, 'app.review_assigned')).some((n) => n.recipientAddress === 'pmu@shams.local'));
 
-  // 6 → ELECTRICITY_UPLOAD
+  // PMU accepts → the ministry reviews; the factory owner and the provider are told (D17)
   r = await act(c.pmu, id, 'accept');
   assert.equal(r.status, 200, JSON.stringify(r.json));
-  await expectStep(c.pmu, id, 'ELECTRICITY_UPLOAD', 'factory', 'accept');
-  assert.ok((await notificationsFor(id, 'app.offer_accepted')).length >= 1);
+  await expectStep(c.pmu, id, 'ELECTRICITY_REVIEW', 'electricity', 'accept');
+  assert.ok((await notificationsFor(id, 'app.offer_accepted')).some((n) => n.recipientAddress === 'factory@shams.local'));
+  assert.ok((await notificationsFor(id, 'app.provider_offer_accepted')).some((n) => n.channel === 'email' && n.recipientAddress === PROVIDER_INFO.providerEmail));
+  assert.ok((await notificationsFor(id, 'app.review_assigned')).some((n) => n.recipientAddress === 'electricity@shams.local'));
+  assert.equal((await getApp(c.pmu, id)).bank, null, 'no bank before the electricity approval');
 
-  // 7 → ELECTRICITY_REVIEW (لا بنك في هذه الخطوة — G-01)
-  const up2 = await c.factory.upload(`/applications/${id}/documents`, { kind: 'electricityApprovalFile' }, pdfVariant('elec'), 'approval.pdf');
-  assert.equal(up2.status, 201);
-  r = await act(c.factory, id, 'submit_electricity', { distributionCompany: 'شركة توزيع (اختبار)' });
-  assert.equal(r.status, 200, JSON.stringify(r.json));
-  await expectStep(c.pmu, id, 'ELECTRICITY_REVIEW', 'pmu', 'submit_electricity');
-  assert.equal((await getApp(c.pmu, id)).bank, null, 'no bank before PMU acceptance');
-
-  // 8 → قبول PMU يفتح للمصنع اختيار البنك (CONTRACT_OUTCOME بلا بنك)
-  r = await act(c.pmu, id, 'accept');
+  // 5 → the ministry uploads its approval and accepts; the factory chooses the contracting path (CONTRACT_OUTCOME بلا بنك)
+  r = await electricityAccept(c.electricity, id);
   assert.equal(r.status, 200, JSON.stringify(r.json));
   app = await expectStep(c.factory, id, 'CONTRACT_OUTCOME', 'factory', 'accept');
-  assert.equal(app.step, 8, 'stage tracker on «bank»');
+  assert.equal(app.step, 6, 'stage tracker on «contracting path»');
   assert.deepEqual(app.allowedActions.map((a: any) => a.action).sort(), ['select_bank', 'select_distribution_path', 'withdraw'], 'only the contracting-path choice is open (bank or distribution company)');
+  assert.ok(app.documents.some((d: any) => d.kind === 'electricityApprovalFile'), 'the approval reaches the factory with the decision');
   assert.ok((await notificationsFor(id, 'app.electricity_accepted')).some((n) => n.recipientAddress === 'factory@shams.local'));
+  assert.ok((await notificationsFor(id, 'ops.electricity_decision')).some((n) => n.recipientAddress === 'pmu@shams.local'), 'PMU follows it up');
   r = await act(c.factory, id, 'select_bank', { bankOrgId: BANK_A });
   assert.equal(r.status, 200, JSON.stringify(r.json));
   app = await expectStep(c.factory, id, 'CONTRACT_OUTCOME', 'factory', 'select_bank');
   assert.equal(app.bank.id, BANK_A);
-  assert.equal(app.step, 9, 'stage tracker on «contract»');
+  assert.equal(app.step, 7, 'stage tracker on «contract»');
   assert.deepEqual(app.allowedActions.map((a: any) => a.action).sort(), ['record_contract', 'record_no_contract', 'withdraw']);
   assert.ok((await notificationsFor(id, 'app.bank_selected')).some((n) => n.recipientAddress === 'factory@shams.local'));
 
@@ -117,11 +111,11 @@ test('full path DRAFT → CONTRACTED', async () => {
   // السجل التاريخي كامل ومرتب
   const history = await q<{ fromState: string; toState: string }>('SELECT fromState, toState FROM shams_application_transitions WHERE applicationId = ? ORDER BY createdAt, rowid', id);
   assert.deepEqual(history.map((h) => h.toState), [
-    'IMC_REVIEW', 'ENCPC_REVIEW', 'PROVIDER_SELECTION', 'OFFER_UPLOAD', 'OFFER_REVIEW', 'ELECTRICITY_UPLOAD', 'ELECTRICITY_REVIEW', 'CONTRACT_OUTCOME', 'CONTRACT_OUTCOME', 'CONTRACTED',
+    'IMC_REVIEW', 'ENCPC_REVIEW', 'OFFER_UPLOAD', 'OFFER_REVIEW', 'ELECTRICITY_REVIEW', 'CONTRACT_OUTCOME', 'CONTRACT_OUTCOME', 'CONTRACTED',
   ]);
   // webhook واحد لكل انتقال (skipped لأن الربط غير مضبوط — الموقع يعمل بدونه)
   const hooks = await q<{ status: string }>("SELECT w.status FROM shams_webhook_outbox w JOIN shams_application_transitions t ON t.id = w.transitionId WHERE t.applicationId = ?", id);
-  assert.equal(hooks.length, 10);
+  assert.equal(hooks.length, 8);
   assert.ok(hooks.every((h) => h.status === 'skipped'));
 
   // الإرسال الفعلي عبر العامل (القرار لم ينتظره)

@@ -13,8 +13,8 @@ import { PdfUploader } from '../ui/PdfUploader';
 import { useToast } from '../common/ToastSystem';
 
 // G-02: لا حسابات للبنوك — البنك جهة خارجية تُضاف من «الجهات والبنوك» فقط.
-const STAFF_ROLES: Role[] = ['imc_reviewer', 'encpc_reviewer', 'pmu_reviewer', 'system_admin'];
-const ROLE_ORG: Record<Role, string> = { imc_reviewer: 'imc', encpc_reviewer: 'encpc', pmu_reviewer: 'pmu', bank_reviewer: 'bank', system_admin: 'admin', factory_owner: 'factory' };
+const STAFF_ROLES: Role[] = ['imc_reviewer', 'encpc_reviewer', 'pmu_reviewer', 'electricity_reviewer', 'system_admin'];
+const ROLE_ORG: Record<Role, string> = { imc_reviewer: 'imc', encpc_reviewer: 'encpc', pmu_reviewer: 'pmu', electricity_reviewer: 'electricity', bank_reviewer: 'bank', system_admin: 'admin', factory_owner: 'factory' };
 
 /** كلمة المرور المؤقتة تظهر مرة واحدة. */
 const SecretOnce: React.FC<{ title: string; secret: string; hint: string; onClose: () => void }> = ({ title, secret, hint, onClose }) => {
@@ -133,7 +133,7 @@ const CreateUser: React.FC<{ onClose: () => void; onCreated: (message: string) =
     try {
       const r = await api.adminCreateUser({ email: f.email.trim(), nameAr: f.nameAr.trim(), nameEn: f.nameEn.trim() || undefined, phone: f.phone.trim() || undefined, role: f.role, organizationId: orgId });
       await onCreated(r.request
-        ? t('سُجّل الطلب — بانتظار موافقة مستخدم نشط من الجهة نفسها.', 'Request filed — awaiting approval from an active user of the organization.')
+        ? t('سُجّل الطلب — بانتظار الموافقة (من الجهة نفسها، ولوزارة الكهرباء من PMU).', 'Request filed — awaiting approval (from the organization itself; the PMU for the Ministry of Electricity).')
         : t('أُنشئ الحساب — أُرسل رابط تعيين كلمة المرور إلى بريده.', 'Account created — a password setup link was sent to its email.'));
     } catch (e) { setError(errorText(e, isAr)); setErrs(errorDetails(e, isAr)); } finally { setBusy(false); }
   };
@@ -169,7 +169,7 @@ export const OrganizationsView: React.FC = () => {
   const [toggle, setToggle] = useState<Organization | null>(null);
   const [openLoad, setOpenLoad] = useState<{ org: Organization; message: string } | null>(null);
   const [busy, setBusy] = useState(false);
-  const typeLabel = (ty: string) => ({ imc: 'IMC', encpc: 'ENCPC', pmu: 'PMU', bank: t('بنك', 'Bank'), admin: t('إدارة النظام', 'Administration'), factory: t('مصنع', 'Factory') }[ty] ?? ty);
+  const typeLabel = (ty: string) => ({ imc: 'IMC', encpc: 'ENCPC', pmu: 'PMU', electricity: t('وزارة الكهرباء', 'Ministry of Electricity'), bank: t('بنك', 'Bank'), admin: t('إدارة النظام', 'Administration'), factory: t('مصنع', 'Factory') }[ty] ?? ty);
   const doToggle = async () => {
     if (!toggle) return;
     setBusy(true);

@@ -1,7 +1,7 @@
 // لوحات الأدوار: أرقام حقيقية بنطاق رؤية كل دور، تطابق عدد صفوف قائمة العمل التي تفتحها البطاقة، ولا أرقام مختلقة.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { isolateTestEnv, startServer, clients, act, advanceTo, createCompleteDraft, q, BANK_A, type Started } from './helpers.js';
+import { electricityAccept, uploadProof, isolateTestEnv, startServer, clients, act, advanceTo, createCompleteDraft, q, BANK_A, type Started } from './helpers.js';
 
 const env = isolateTestEnv('dashboards');
 let srv: Started;
@@ -59,37 +59,24 @@ test('IMC: counts follow its own scope and each linked card matches the queue it
   assert.equal(cardOf(d3, 'accepted').link, null);
   // IMC لا ترى شيئًا من مراحل ما بعدها في اللوحة
   assert.ok(d3.cards.every((x: any) => !['offer', 'electricity', 'bank'].includes(x.key)));
-  assert.equal(d3.providers, undefined);
   assert.equal(d3.byStage, undefined);
   assert.equal(d3.attention.length, 0, 'no SLA configured → no fake overdue item');
 });
 
-test('ENCPC: technical queue, compliant count and provider directory counters', async () => {
+test('ENCPC: technical queue and accepted count', async () => {
   await closeOpen();
   const base = await dash(c.encpc);
   const id = await advanceTo('ENCPC_REVIEW', c, reg());
   const d1 = await dash(c.encpc);
   assert.equal(d1.awaitingMe.count, base.awaitingMe.count + 1);
   assert.equal(d1.awaitingMe.count, await total(c.encpc, 'mine=1'));
-  assert.equal((await act(c.encpc, id, 'non_compliant', { deficiencies: [{ field: 'peakLoad', note: 'غير مطابق' }] })).status, 200);
+  assert.equal((await act(c.encpc, id, 'non_compliant', { reason: 'غير مطابق' })).status, 200);
   const d2 = await dash(c.encpc);
   assert.equal(cardOf(d2, 'correction').count, cardOf(base, 'correction').count + 1);
-  await act(c.factory, id, 'resubmit');
+  await uploadProof(c.factory, id);
+  assert.equal((await act(c.factory, id, 'resubmit')).status, 200);
   assert.equal((await act(c.encpc, id, 'compliant')).status, 200);
   assert.equal(cardOf(await dash(c.encpc), 'compliant').count, cardOf(base, 'compliant').count + 1);
-  // عدّادات الدليل حقيقية
-  const p = (await c.encpc.post('/service-providers', { nameAr: 'مقدم للوحة', description: 'x' })).json.data;
-  const d3 = await dash(c.encpc);
-  assert.equal(d3.providers.total, base.providers.total + 1);
-  assert.equal(d3.providers.inactive, base.providers.inactive + 1);
-  await c.encpc.post(`/service-providers/${p.id}/activate`, {});
-  const d4 = await dash(c.encpc);
-  assert.equal(d4.providers.awaitingApproval, base.providers.awaitingApproval + 1);
-  await c.pmu.post(`/service-providers/${p.id}/approve`, {});
-  const d5 = await dash(c.encpc);
-  assert.equal(d5.providers.visible, base.providers.visible + 1);
-  assert.equal(d5.providers.awaitingApproval, base.providers.awaitingApproval);
-  assert.equal(d5.providers.total, (await c.encpc.get('/service-providers')).json.data.items.length);
 });
 
 test('PMU: stage cards, the bank-choice and outcome stage, closed groups, attention items and the stage distribution all come from real data', async () => {
@@ -104,8 +91,8 @@ test('PMU: stage cards, the bank-choice and outcome stage, closed groups, attent
   const b = await advanceTo('ELECTRICITY_REVIEW', c, reg());
   const d2 = await dash(c.pmu);
   assert.equal(cardOf(d2, 'electricity').count, cardOf(base, 'electricity').count + 1);
-  assert.match(cardOf(d2, 'electricity').hintAr, /اختيار مسار التعاقد/);
-  assert.equal((await act(c.pmu, b, 'accept')).status, 200);
+  assert.match(cardOf(d2, 'electricity').hintAr, /القرار للوزارة/);
+  assert.equal((await electricityAccept(c.electricity, b)).status, 200);
   const d3 = await dash(c.pmu);
   assert.equal(cardOf(d3, 'bank-choice').count, cardOf(base, 'bank-choice').count + 1, 'accepting the electricity approval opens the bank choice');
   assert.ok(!d3.cards.some((x: any) => ['bank', 'study-approved', 'study-declined'].includes(x.key)), 'no bank-study cards (G-02)');
@@ -121,19 +108,15 @@ test('PMU: stage cards, the bank-choice and outcome stage, closed groups, attent
   assert.equal(d5.byStage.reduce((s: number, x: any) => s + x.count, 0), d5.total);
   assert.ok(!d5.byStage.some((x: any) => x.state === 'DRAFT'), 'drafts are counted separately');
   assert.equal(typeof d5.drafts, 'number');
-  // بنود الانتباه: نزاع حقيقي، ومقدم بانتظار الاعتماد، وطلب حساب
+  // بنود الانتباه: نزاع حقيقي، وطلب حساب
   await closeOpen();
   const number = reg();
   await advanceTo('IMC_REVIEW', c, number);
   const draft = await createCompleteDraft(c.factory2, number);
   assert.equal((await act(c.factory2, draft, 'submit')).status, 409);
-  const p = (await c.encpc.post('/service-providers', { nameAr: 'مقدم ينتظر', description: 'x' })).json.data;
-  await c.encpc.post(`/service-providers/${p.id}/activate`, {});
   const d6 = await dash(c.pmu);
   const att = (k: string) => d6.attention.find((x: any) => x.key === k);
   assert.ok(att('disputes') && att('disputes').count >= 1);
-  assert.ok(att('providers') && att('providers').count >= 1);
-  assert.equal(att('providers').link.view, 'providers');
   assert.equal(att('disputes').link.view, 'approvals');
   const req = await c.admin.post('/admin/users', { email: 'dash.imc@shams.local', nameAr: 'مراجع', role: 'imc_reviewer', organizationId: 'org-imc' });
   assert.equal(req.status, 202);

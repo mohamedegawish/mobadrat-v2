@@ -4,7 +4,7 @@
  * normalized shape. Nothing is counted twice: every card links to the queue filter its number was computed with.
  */
 import type {
-  ModuleWorkspace, WorkspaceQuery, WorkspaceLink, WorkspaceRow, WorkspaceBlock, WorkspaceFilter, WorkspacePanel,
+  ModuleWorkspace, WorkspaceQuery, WorkspaceLink, WorkspaceRow, WorkspaceBlock, WorkspaceFilter,
 } from '../contract.js';
 import { Errors } from './http/errors.js';
 import { listGovernorates, findGovernorate } from './config/locations.js';
@@ -23,14 +23,7 @@ type Role = UserInternal['role'];
 /** The role's tool screens of the module (the dashboard itself is the platform's). */
 const TOOLS: Partial<Record<Role, Array<{ view: string; labelAr: string; labelEn: string }>>> = {
   imc_reviewer: [{ view: 'approvals', labelAr: 'الموافقات', labelEn: 'Approvals' }],
-  encpc_reviewer: [
-    { view: 'providers', labelAr: 'مقدمو الخدمة', labelEn: 'Service providers' },
-    { view: 'approvals', labelAr: 'الموافقات', labelEn: 'Approvals' },
-  ],
-  pmu_reviewer: [
-    { view: 'providers', labelAr: 'مقدمو الخدمة', labelEn: 'Service providers' },
-    { view: 'approvals', labelAr: 'الموافقات', labelEn: 'Approvals' },
-  ],
+  pmu_reviewer: [{ view: 'approvals', labelAr: 'الموافقات', labelEn: 'Approvals' }],
   system_admin: [
     { view: 'admin-accounts', labelAr: 'الحسابات', labelEn: 'Accounts' },
     { view: 'admin-organizations', labelAr: 'الجهات', labelEn: 'Organizations' },
@@ -40,7 +33,7 @@ const TOOLS: Partial<Record<Role, Array<{ view: string; labelAr: string; labelEn
   ],
 };
 
-const DECIDES: Role[] = ['imc_reviewer', 'encpc_reviewer', 'pmu_reviewer'];
+const DECIDES: Role[] = ['imc_reviewer', 'encpc_reviewer', 'pmu_reviewer', 'electricity_reviewer'];
 
 /** «#work-queue/<param>» of the module's dashboard → a tab of the platform dashboard. */
 function toLink(l: { view: string; param: string | null } | null): WorkspaceLink | null {
@@ -119,22 +112,7 @@ export async function shamsWorkspace(actor: unknown, q: WorkspaceQuery): Promise
   ];
 
   const cards = d.cards.map((c) => ({ key: c.key, labelAr: c.labelAr, labelEn: c.labelEn, value: c.count, tone: c.tone, link: toLink(c.link), hintAr: c.hintAr, hintEn: c.hintEn }));
-  const extra = d as typeof d & {
-    providers?: { total: number; visible: number; inactive: number; awaitingApproval: number; approvalRequired: boolean };
-    drafts?: number;
-  };
-  const panels: WorkspacePanel[] = extra.providers ? [{
-    key: 'providers', titleAr: 'دليل مقدمي الخدمة', titleEn: 'Service provider directory',
-    tiles: [
-      { key: 'total', labelAr: 'الإجمالي', labelEn: 'Total', value: extra.providers.total },
-      { key: 'visible', labelAr: 'ظاهرون للمصانع', labelEn: 'Visible to factories', value: extra.providers.visible },
-      { key: 'inactive', labelAr: 'غير مفعّلين', labelEn: 'Not activated', value: extra.providers.inactive },
-      ...(extra.providers.approvalRequired ? [{ key: 'awaiting', labelAr: 'بانتظار اعتماد PMU', labelEn: 'Awaiting PMU approval', value: extra.providers.awaitingApproval }] : []),
-    ],
-    action: { view: 'providers', labelAr: 'إدارة مقدمي الخدمة', labelEn: 'Manage providers' },
-    ...(!extra.providers.visible ? { warnAr: 'لا يوجد مقدم خدمة ظاهر للمصانع — لن يستطيع مصنع تجاوز مرحلة الاختيار.', warnEn: 'No provider is visible to factories — no factory can pass the selection step.' } : {}),
-  }] : [];
-
+  const extra = d as typeof d & { drafts?: number };
   const ws: ModuleWorkspace = {
     role: user.role, decides,
     awaitingMe: decides ? d.awaitingMe.count : 0, overdue: d.overdue, open: d.open, total: d.total, slaConfigured: d.slaConfigured,
@@ -142,7 +120,7 @@ export async function shamsWorkspace(actor: unknown, q: WorkspaceQuery): Promise
     attention: d.attention.map((a) => ({ key: a.key, labelAr: a.labelAr, labelEn: a.labelEn, count: a.count, link: toLink(a.link) })),
     recent: d.recent.map((r) => ({ at: r.at, applicationId: r.applicationId, number: r.number, title: r.companyName, labelAr: r.labelAr, labelEn: r.labelEn, toLabelAr: r.toLabelAr, toLabelEn: r.toLabelEn })),
     states: APPLICATION_STATES.filter((s) => s !== 'DRAFT').map((s) => ({ key: s, labelAr: STATE_LABELS[s].ar, labelEn: STATE_LABELS[s].en })),
-    filters, panels,
+    filters, panels: [],
     tools: TOOLS[user.role] ?? [],
   };
 

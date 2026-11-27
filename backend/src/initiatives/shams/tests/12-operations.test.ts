@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import {
-  isolateTestEnv, startServer, clients, act, getApp, advanceTo, createCompleteDraft, q, pdfVariant, uploadContractFile, PROVIDER_OK, BANK_A, BANK_B, onMysql, type Started,
+  isolateTestEnv, startServer, clients, act, getApp, advanceTo, createCompleteDraft, q, pdfVariant, uploadContractFile, BANK_A, BANK_B, onMysql, type Started,
 } from './helpers.js';
 
 const env = isolateTestEnv('ops');
@@ -65,21 +65,6 @@ test('B2: entering a stage whose organization has no active users alerts PMU and
   }
 });
 
-test('B2: reaching provider selection with no approved provider alerts PMU and admin', async () => {
-  await closeOpen();
-  const id = await advanceTo('ENCPC_REVIEW', c, reg());
-  for (const p of ['sp-demo-1', 'sp-demo-2']) assert.equal((await c.pmu.post(`/service-providers/${p}/suspend`, {})).status, 200);
-  try {
-    assert.equal((await act(c.encpc, id, 'compliant')).status, 200);
-    const alerts = (await outbox(id, 'ops.no_providers')).map((r) => r.recipientAddress);
-    assert.ok(alerts.includes('pmu@shams.local') && alerts.includes('admin@shams.local'));
-    const ready = (await c.admin.get('/admin/readiness')).json.data;
-    assert.equal(ready.checks.find((x: any) => x.key === 'providers_approved').ok, false);
-  } finally {
-    for (const p of ['sp-demo-1', 'sp-demo-2']) await c.pmu.post(`/service-providers/${p}/approve`, {});
-  }
-});
-
 test('B2/I9: check:readiness fails without a support channel and reports each condition', async () => {
   const run = (extra: Record<string, string>) => spawnSync(process.execPath, ['--import', 'tsx', 'src/cli/checkReadiness.ts'], {
     cwd: path.resolve(import.meta.dirname, '..', '..', '..', '..'), encoding: 'utf8', env: { ...process.env, ...extra },
@@ -108,7 +93,7 @@ test('G-02: no bank referral or reassignment exists — PMU cannot move the bank
     const r = await c.pmu.post(`/applications/${id}/actions/${action}`, { expectedVersion: v, bankOrgId: BANK_B, reason: 'محاولة', studyResult: 'approved', studyDate: '2026-10-01' });
     assert.equal(r.status, 404, action);
   }
-  assert.deepEqual((await getApp(c.pmu, id)).allowedActions, [], 'PMU has no action after the electricity acceptance');
+  assert.deepEqual((await getApp(c.pmu, id)).allowedActions, [], 'PMU has no action after the electricity approval');
   assert.equal((await getApp(c.pmu, id)).bank.id, BANK_A, 'bank unchanged');
 });
 
@@ -137,48 +122,6 @@ test('disabling a bank chosen by open applications needs explicit confirmation, 
   }
 });
 
-test('I11: provider suspended before the offer is sent → submit_offer blocked, reselection allowed; during offer review → returned to offer upload (details in test 15)', async () => {
-  await closeOpen();
-  const id = await advanceTo('PROVIDER_SELECTION', c, reg());
-  assert.equal((await act(c.factory, id, 'select_provider', { providerId: PROVIDER_OK })).status, 200);
-  const up = await c.factory.upload(`/applications/${id}/documents`, { kind: 'technicalOfferFile' }, pdfVariant('o-1'), 'offer.pdf');
-  assert.equal(up.status, 201);
-  assert.deepEqual((await getApp(c.factory, id)).allowedActions.map((a: any) => a.action).sort(), ['submit_offer', 'withdraw']);
-  assert.equal((await act(c.factory, id, 'select_provider', { providerId: 'sp-demo-2' })).status, 409, 'cannot change an approved provider');
-  assert.equal((await c.pmu.post(`/service-providers/${PROVIDER_OK}/suspend`, {})).status, 200);
-  try {
-    // D6 (QA 2026-11-23): before the offer is sent the application returns to provider selection.
-    const v = await getApp(c.factory, id);
-    assert.equal(v.state, 'PROVIDER_SELECTION');
-    assert.equal(v.provider.status, 'suspended');
-    assert.deepEqual(v.allowedActions.map((a: any) => a.action).sort(), ['select_provider', 'withdraw']);
-    const blocked = await act(c.factory, id, 'submit_offer');
-    assert.equal(blocked.status, 409);
-    assert.equal(blocked.json.code, 'INVALID_STATE');
-    assert.ok((await outbox(id, 'app.provider_suspended')).some((r) => r.recipientAddress === 'factory@shams.local'));
-    assert.equal((await act(c.factory, id, 'select_provider', { providerId: 'sp-demo-1' })).status, 422, 'suspended provider cannot be re-chosen');
-    const re = await act(c.factory, id, 'select_provider', { providerId: 'sp-demo-2' });
-    assert.equal(re.status, 200, JSON.stringify(re.json));
-    const after1 = await getApp(c.factory, id);
-    assert.equal(after1.state, 'OFFER_UPLOAD');
-    assert.equal(after1.provider.id, 'sp-demo-2');
-    assert.ok(after1.transitions.some((t: any) => t.action === 'select_provider' && t.fromState === 'PROVIDER_SELECTION'));
-    assert.equal((await act(c.factory, id, 'submit_offer')).status, 422, 'a new offer from the new provider is required');
-    await c.factory.upload(`/applications/${id}/documents`, { kind: 'technicalOfferFile' }, pdfVariant('o-2'), 'offer2.pdf');
-    assert.equal((await act(c.factory, id, 'submit_offer')).status, 200);
-    // أثناء مراجعة العرض (القرار 6): الإيقاف يعيد الطلب آليًا إلى رفع العرض — لا قبول لعرض مقدم موقوف.
-    assert.equal((await c.pmu.post('/service-providers/sp-demo-2/suspend', {})).status, 200);
-    const pmuView = await getApp(c.pmu, id);
-    assert.equal(pmuView.state, 'OFFER_UPLOAD');
-    assert.equal(pmuView.provider.status, 'suspended');
-    assert.ok(!pmuView.allowedActions.some((a: any) => a.action === 'accept'));
-    assert.ok(pmuView.transitions.some((t: any) => t.action === 'provider_suspended_return' && t.fromState === 'OFFER_REVIEW' && t.toState === 'OFFER_UPLOAD'));
-  } finally {
-    await c.pmu.post(`/service-providers/${PROVIDER_OK}/approve`, {});
-    await c.pmu.post('/service-providers/sp-demo-2/approve', {});
-  }
-});
-
 test('I8: contract amount above the alert threshold is recorded (not rejected), labelled factory-recorded, and alerts PMU', async () => {
   await closeOpen();
   const id = await advanceTo('CONTRACT_OUTCOME', c, reg());
@@ -196,9 +139,7 @@ test('I8: contract amount above the alert threshold is recorded (not rejected), 
   assert.equal(s.contracted.alertThresholdEGP, 100_000_000);
 });
 
-test('21: providers are approved by PMU only; admin sees application metadata only (no data, no download)', async () => {
-  assert.equal((await c.admin.post('/service-providers/sp-demo-3/approve', {})).status, 403);
-  assert.equal((await c.admin.post('/service-providers', { nameAr: 'مقدم من الأدمن' })).status, 403);
+test('21: admin sees application metadata only (no data, no download)', async () => {
   await closeOpen();
   const id = await advanceTo('OFFER_REVIEW', c, reg());
   const a = await getApp(c.admin, id);

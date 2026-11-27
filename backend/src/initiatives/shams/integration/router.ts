@@ -14,12 +14,9 @@ import { getApplication, listApplications } from '../store/applications.js';
 import { getDocument, wasSubmitted } from '../store/documents.js';
 import { listOrganizations } from '../store/organizations.js';
 import { listUsers, toPublicUser } from '../store/users.js';
-import { createProvider, getProvider, listProviders, updateProvider, type ProviderInput, type ProviderStatus } from '../store/providers.js';
 import { metadataDetail, metadataItem } from './metadataView.js';
 import { buildSummary, ALL_SCOPE } from '../services/reports.js';
 import { createOrg, requestStaffAccount, updateOrg, updateStaffUser } from '../services/accounts.js';
-import { cleanProviderInput, publicProvider } from '../routes/providers.js';
-import { recordProviderChange } from '../services/providerChanges.js';
 import { kickNotificationWorker } from '../jobs/notificationWorker.js';
 import { tx } from '../db/database.js';
 import { sendStoredPdf } from '../http/upload.js';
@@ -128,31 +125,6 @@ integrationRouter.get('/users', requireScope('manage_users'), ah(async (req, res
 /** H2: لا يُنشئ حسابًا مباشرة — يسجل طلبًا تعتمده الجهة (لا يمكن إنشاء مدير نظام عبر الربط). */
 integrationRouter.post('/users', requireScope('manage_users'), ah(async (req, res) => okMessage(res, 202, 'account request created — awaiting organization approval', await requestStaffAccount(actorFromReq(req), req.body, LIMITED))));
 integrationRouter.put('/users/:id', requireScope('manage_users'), ah(async (req, res) => okMessage(res, 200, 'updated', await updateStaffUser(actorFromReq(req), req.params.id, req.body, LIMITED))));
-
-// ── manage_providers ──
-integrationRouter.get('/service-providers', requireScope('manage_providers'), ah(async (req, res) => {
-  const status = ['pending', 'approved', 'suspended'].includes(str(req.query.status)) ? (str(req.query.status) as ProviderStatus) : undefined;
-  return okMessage(res, 200, 'ok', { items: (await listProviders({ status })).map((p) => publicProvider(p, true)) });
-}));
-integrationRouter.post('/service-providers', requireScope('manage_providers'), ah(async (req, res) => {
-  const p = await createProvider(cleanProviderInput(req.body, true) as ProviderInput & { nameAr: string }, null);
-  await addAuditLog({ ...actorFromReq(req), action: 'provider.create', entityType: 'service_provider', entityId: p.id, summaryAr: `إضافة مقدم خدمة عبر الربط: ${p.nameAr}` });
-  return okMessage(res, 201, 'created', publicProvider(p, true));
-}));
-/** M5: الربط لا يغيّر حالة الاعتماد/الإيقاف (قرار PMU فقط)؛ يعدّل البيانات الوصفية لمقدم الخدمة فقط. */
-integrationRouter.put('/service-providers/:id', requireScope('manage_providers'), ah(async (req, res) => {
-  const before = await getProvider(req.params.id);
-  if (!before) throw Errors.notFound();
-  const patch = cleanProviderInput(req.body, false);
-  // F-04: نفس أثر تعديل ENCPC (فرق منظم + تنبيه PMU للمعتمد) والفاعل هو مفتاح الربط.
-  const p = await tx(async () => {
-    const after = (await updateProvider(before.id, patch))!;
-    await recordProviderChange({ before, after, source: 'integration', actor: actorFromReq(req), action: 'provider.update', summaryAr: `تعديل مقدم خدمة عبر الربط: ${after.nameAr}` });
-    return after;
-  });
-  kickNotificationWorker();
-  return okMessage(res, 200, 'updated', publicProvider(p, true));
-}));
 
 // ── read_audit ──
 integrationRouter.get('/audit-logs', requireScope('read_audit'), ah(async (req, res) => {

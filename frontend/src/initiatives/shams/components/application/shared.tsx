@@ -8,20 +8,20 @@ import { useToast } from '../common/ToastSystem';
 
 /** شاشة المصنع المناسبة لحالة الطلب. */
 export function factoryTarget(state: ApplicationState): View {
-  if (state === 'DRAFT' || state === 'IMC_CORRECTION' || state === 'ENCPC_CORRECTION') return 'apply';
-  if (['PROVIDER_SELECTION', 'OFFER_UPLOAD', 'OFFER_CORRECTION', 'ELECTRICITY_UPLOAD', 'CONTRACT_OUTCOME', 'DISTRIBUTION_UPLOAD'].includes(state)) return 'task';
+  if (state === 'DRAFT' || state === 'IMC_CORRECTION') return 'apply';
+  if (['ENCPC_CORRECTION', 'OFFER_UPLOAD', 'OFFER_CORRECTION', 'ELECTRICITY_UPLOAD', 'CONTRACT_OUTCOME', 'DISTRIBUTION_UPLOAD'].includes(state)) return 'task';
   return 'application';
 }
 
+/** D11: «الإجراء — الجهة المسؤولة». The numbers match the server's STATE_STEP. */
 const STEPS = [
   { ar: 'التسجيل — المصنع', en: 'Registration — Factory' }, { ar: 'مراجعة الطلب — IMC', en: 'Application review — IMC' },
-  { ar: 'المراجعة الفنية — ENCPC', en: 'Technical review — ENCPC' }, { ar: 'اختيار مقدم الخدمة — المصنع', en: 'Provider selection — Factory' },
-  { ar: 'رفع العرض الفني — المصنع', en: 'Offer upload — Factory' }, { ar: 'مراجعة العرض — PMU', en: 'Offer review — PMU' },
-  { ar: 'موافقة الكهرباء — المصنع / PMU', en: 'Electricity approval — Factory / PMU' }, { ar: 'مسار التعاقد — المصنع', en: 'Contracting path — Factory' },
-  { ar: 'التعاقد — المصنع', en: 'Contract — Factory' },
+  { ar: 'المراجعة الفنية — ENCPC', en: 'Technical review — ENCPC' }, { ar: 'العرض الفني — المصنع / PMU', en: 'Technical offer — Factory / PMU' },
+  { ar: 'موافقة الكهرباء — وزارة الكهرباء', en: 'Electricity approval — Ministry of Electricity' },
+  { ar: 'مسار التعاقد — المصنع', en: 'Contracting path — Factory' }, { ar: 'التعاقد — المصنع', en: 'Contract — Factory' },
 ];
 
-/** شريط المراحل التسع. */
+/** شريط المراحل. */
 export const StageTracker: React.FC<{ step: number; state: ApplicationState }> = ({ step, state }) => {
   const { isAr } = useStore();
   // الإغلاق غير الناجح (رفض نهائي / لم يتم التعاقد) يظهر بعلامة X حمراء على مرحلته؛ الانسحاب يبقى محايدًا.
@@ -99,7 +99,7 @@ export const FinalOutcomeCard: React.FC<{
 };
 
 /** «المطلوب منك الآن»، أو لمن ينتظر: الإجراء ثم الجهة المسؤولة عنه (D11). */
-export const TaskCard: React.FC<{ task: CurrentTask | null; onAct?: () => void; actLabel?: string }> = ({ task, onAct, actLabel }) => {
+export const TaskCard: React.FC<{ task: CurrentTask | null; returnReason?: string | null; onAct?: () => void; actLabel?: string }> = ({ task, returnReason, onAct, actLabel }) => {
   const { isAr, t } = useStore();
   const Arrow = isAr ? ArrowLeft : ArrowRight;
   if (!task) return null;
@@ -111,13 +111,18 @@ export const TaskCard: React.FC<{ task: CurrentTask | null; onAct?: () => void; 
         <p className="task-card-title">{task.isMine ? t('المطلوب منك الآن', 'Your action is needed') : `${isAr ? task.labelAr : task.labelEn} — ${responsible}`}</p>
         <p className="task-card-sub">{task.isMine ? `${isAr ? task.labelAr : task.labelEn} — ${responsible}` : t('بانتظار تنفيذ الجهة المسؤولة', 'Waiting for the responsible party')}</p>
         {task.overdue ? <p className="overdue-flag" style={{ margin: '0.3rem 0 0' }}><Clock size={13} /> {t('متأخر عن المهلة', 'Overdue')} ({formatDate(task.dueAt, isAr)})</p> : null}
-        {task.deficiencies.length ? (
-          <p className="task-card-sub" style={{ marginTop: '0.45rem', fontWeight: 700 }} data-testid="returned-notice">{task.isMine ? t('أُعيد الطلب إليك للتصحيح — ليس رفضًا نهائيًا. المطلوب:', 'Returned to you for correction — not a final rejection. Required:') : t('أُعيد الطلب للمصنع للتصحيح:', 'Returned to the factory for correction:')}</p>
+        {/* D16: the factory reads each IMC note at its field (the wizard opens on it); here it sees how many items. */}
+        {task.state === 'IMC_CORRECTION' && task.deficiencies.length ? (
+          <>
+            <p className="task-card-sub" style={{ marginTop: '0.45rem', fontWeight: 700 }} data-testid="returned-notice">
+              {task.isMine ? t(`ليس رفضًا نهائيًا — مطلوب تعديل ${formatNumber(task.deficiencies.length, true)} بند، والملاحظة عند كل حقل.`, `Not a final rejection — ${task.deficiencies.length} item(s) to change; each note is at its field.`)
+                : t('أُعيد الطلب للمصنع للتصحيح:', 'Returned to the factory for correction:')}
+            </p>
+            {!task.isMine ? <ul className="home-list" style={{ marginTop: '0.5rem' }}>{task.deficiencies.map((d) => <li key={d.id}><b>{isAr ? d.labelAr : d.labelEn}</b>{d.note ? ` — ${d.note}` : ''}</li>)}</ul> : null}
+          </>
         ) : null}
-        {task.deficiencies.length ? (
-          <ul className="home-list" style={{ marginTop: '0.5rem' }}>
-            {task.deficiencies.map((d) => <li key={d.id}><b>{isAr ? d.labelAr : d.labelEn}</b>{d.note ? ` — ${d.note}` : ''}</li>)}
-          </ul>
+        {task.state !== 'IMC_CORRECTION' && returnReason ? (
+          <p className="task-card-sub" style={{ marginTop: '0.45rem', fontWeight: 700, whiteSpace: 'pre-line' }} data-testid="return-reason">{t('الملاحظات', 'Notes')}: {returnReason}</p>
         ) : null}
       </div>
       {onAct && task.isMine ? <button type="button" className="btn btn-primary" onClick={onAct} data-testid="task-go">{actLabel ?? t('ابدأ', 'Start')} <Arrow size={15} /></button> : null}

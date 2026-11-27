@@ -6,7 +6,7 @@ import { createHmac } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
-import { isolateTestEnv, startServer, clients, advanceTo, act, getApp, q, createCompleteDraft, pdfVariant, PROVIDER_OK, BANK_A, type Started, type Client } from './helpers.js';
+import { isolateTestEnv, startServer, clients, advanceTo, act, getApp, q, createCompleteDraft, pdfVariant, BANK_A, type Started, type Client } from './helpers.js';
 
 const env = isolateTestEnv('integration');
 let srv: Started;
@@ -44,7 +44,7 @@ test('18a) keys: stored hashed, scope enforced, revoked/rotated keys rejected', 
   assert.ok('byState' in sj.data && 'overdue' in sj.data && 'avgDaysPerState' in sj.data);
   assert.equal((await call(read.key, 'GET', '/applications', undefined, 'x-api-key')).status, 200);
   // نطاق ناقص
-  for (const p of ['/users', '/organizations', '/service-providers', '/audit-logs']) {
+  for (const p of ['/users', '/organizations', '/audit-logs']) {
     const r = await call(read.key, 'GET', p);
     assert.equal(r.status, 403, p);
     assert.equal((await r.json()).code, 'INSUFFICIENT_SCOPE');
@@ -53,11 +53,11 @@ test('18a) keys: stored hashed, scope enforced, revoked/rotated keys rejected', 
   await c.admin.post(`/admin/integration-keys/${read.id}/revoke`, {});
   assert.equal((await call(read.key, 'GET', '/summary')).status, 401);
   // التدوير: القديم يُلغى والجديد يعمل بنفس النطاقات
-  const k2 = await createKey(['read', 'manage_providers']);
+  const k2 = await createKey(['read', 'manage_users']);
   const rot = await c.admin.post(`/admin/integration-keys/${k2.id}/rotate`, {});
   assert.equal(rot.status, 201);
   assert.equal((await call(k2.key, 'GET', '/summary')).status, 401);
-  assert.equal((await call(rot.json.data.plaintextKey, 'GET', '/service-providers')).status, 200);
+  assert.equal((await call(rot.json.data.plaintextKey, 'GET', '/users')).status, 200);
   // كل طلب ربط مُدقق
   assert.ok((await q("SELECT 1 FROM audit_logs WHERE actorType = 'integration_key'")).length > 0);
   // غير الأدمن لا يدير المفاتيح
@@ -100,7 +100,7 @@ test('18b) per-key rate limit', async () => {
 });
 
 test('18c) there is no decision endpoint, and manage_users cannot touch system admins', async () => {
-  const all = await createKey(['read', 'manage_users', 'manage_providers']);
+  const all = await createKey(['read', 'manage_users']);
   const id = await advanceTo('IMC_REVIEW', c, 'IND-INT-1');
   const app = await getApp(c.imc, id);
   for (const [m, p] of [
@@ -137,14 +137,8 @@ test('18c) there is no decision endpoint, and manage_users cannot touch system a
   assert.equal((await q("SELECT 1 FROM users WHERE email = 'new.pmu@shams.local'")).length, 0, 'no account exists before approval');
   assert.equal((await call(all.key, 'POST', '/users', { email: 'evil@shams.local', nameAr: 'مدير', role: 'system_admin', organizationId: 'org-admin' })).status, 400);
   assert.equal((await call(all.key, 'PUT', '/users/usr-admin', { isActive: false })).status, 403);
-  // مقدمو الخدمة
-  const sp = await call(all.key, 'POST', '/service-providers', { nameAr: 'مقدم خدمة عبر الربط' });
-  assert.equal(sp.status, 201);
-  const spj = await sp.json();
-  // M5: الربط لا يعتمد مقدمي الخدمة ولا يوقفهم (قرار PMU فقط).
-  assert.equal((await call(all.key, 'PUT', `/service-providers/${spj.data.id}`, { status: 'approved' })).status, 400);
-  assert.equal((await call(all.key, 'PUT', `/service-providers/${spj.data.id}`, { notes: 'ملاحظة' })).status, 200);
-  assert.equal((await q<{ status: string }>('SELECT status FROM shams_service_providers WHERE id = ?', spj.data.id))[0].status, 'pending');
+  // D14: the provider directory is gone from the integration API too.
+  assert.equal((await call(all.key, 'GET', '/service-providers')).status, 404);
 });
 
 test('18d) webhook: HMAC-signed, same eventId on retry, never re-sent after delivery', async () => {
@@ -215,7 +209,7 @@ const SECRET = {
 };
 const LIST_KEYS = ['bank', 'closedAt', 'contractPath', 'createdAt', 'daysInState', 'dueAt', 'governorate', 'id', 'industrialZone', 'number', 'overdue', 'responsible',
   'stateEnteredAt', 'state', 'stateLabelAr', 'stateLabelEn', 'step', 'submittedAt', 'updatedAt'].sort();
-const FORBIDDEN_KEYS = ['companyName', 'industrialRegistryNumber', 'totalRoofArea', 'attempt', 'version', 'factoryId', 'data', 'registry', 'registryConflicts', 'provider',
+const FORBIDDEN_KEYS = ['companyName', 'industrialRegistryNumber', 'totalRoofArea', 'attempt', 'version', 'factoryId', 'data', 'registry', 'registryConflicts', 'provider', 'providerInfo', 'encpcAcceptance', 'providersLink',
   'referralHistory', 'bankReferral', 'referralSummary', 'documents', 'deficiencies', 'returnCounts', 'allowedActions', 'editableFields', 'currentTask',
   'reason', 'note', 'actorName', 'actorOrgId', 'sha256', 'originalName', 'storedName', 'facility', 'taxNumber', 'contactEmail', 'contactMobile', 'contactName',
   'address', 'contractAmount', 'contractNotes', 'bankNotes', 'studyResult', 'notContractedReason', 'orgId', 'orgNameAr', 'orgNameEn', 'logoUrl', 'url', 'path'];
@@ -242,16 +236,14 @@ async function richContractedApplication(): Promise<string> {
   ok(await act(c.factory, id, 'resubmit'), 'resubmit');
   ok(await act(c.imc, id, 'accept'), 'imc accept');
   ok(await act(c.encpc, id, 'compliant'), 'encpc compliant');
-  ok(await act(c.factory, id, 'select_provider', { providerId: PROVIDER_OK }), 'select provider');
   assert.equal((await c.factory.upload(`/applications/${id}/documents`, { kind: 'technicalOfferFile' }, pdfVariant('meta-offer-1'), 'offer-private-name.pdf')).status, 201);
   ok(await act(c.factory, id, 'submit_offer'), 'submit offer');
   ok(await act(c.pmu, id, 'request_correction', { reason: SECRET.offerReason }), 'pmu offer correction');
   assert.equal((await c.factory.upload(`/applications/${id}/documents`, { kind: 'technicalOfferFile' }, pdfVariant('meta-offer-2'), 'offer-private-name-2.pdf')).status, 201);
   ok(await act(c.factory, id, 'resubmit'), 'offer resubmit');
   ok(await act(c.pmu, id, 'accept'), 'pmu accept offer');
-  assert.equal((await c.factory.upload(`/applications/${id}/documents`, { kind: 'electricityApprovalFile' }, pdfVariant('meta-elec'), 'approval-private-name.pdf')).status, 201);
-  ok(await act(c.factory, id, 'submit_electricity', { distributionCompany: SECRET.distribution }), 'submit electricity');
-  ok(await act(c.pmu, id, 'accept'), 'pmu accept electricity');
+  assert.equal((await c.electricity.upload(`/applications/${id}/documents`, { kind: 'electricityApprovalFile' }, pdfVariant('meta-elec'), 'approval-private-name.pdf')).status, 201);
+  ok(await act(c.electricity, id, 'accept', { distributionCompany: SECRET.distribution }), 'electricity accept');
   ok(await act(c.factory, id, 'select_bank', { bankOrgId: BANK_A }), 'select bank');
   assert.equal((await c.factory.upload(`/applications/${id}/documents`, { kind: 'contractFile' }, pdfVariant('meta-contract'), 'contract-private-name.pdf')).status, 201);
   ok(await act(c.factory, id, 'record_contract', { contractDate: '2026-10-20', contractAmount: SECRET.amount, contractNotes: SECRET.contractNotes }), 'record contract');
@@ -266,7 +258,7 @@ test('F-02) integration `read` returns an explicit metadata allowlist only — n
   assert.equal((await act(c.imc, rejectedId, 'reject', { reason: SECRET.rejectReason, reasonCode: 'other' })).status, 200);
 
   const rich = await getApp(c.pmu, contractedId);
-  const providerName: string = rich.provider.nameAr;
+  const providerName: string = rich.providerInfo.name;
   const docRows = await q<{ originalName: string; sha256: string; storedName: string }>('SELECT originalName, sha256, storedName FROM shams_documents WHERE applicationId = ?', contractedId);
   const factoryId: string = (await q<{ factoryId: string }>('SELECT factoryId FROM shams_applications WHERE id = ?', contractedId))[0].factoryId;
   const allSecrets = [
@@ -331,8 +323,8 @@ test('F-02) integration `read` returns an explicit metadata allowlist only — n
 
   // 6) ما زال محفوظًا: غير موجود 404، ومفتاح بلا نطاق read مرفوض، والملخص التجميعي يعمل
   assert.equal((await call(read.key, 'GET', '/applications/none')).status, 404);
-  const providersOnly = await createKey(['manage_providers']);
-  assert.equal((await call(providersOnly.key, 'GET', `/applications/${contractedId}`)).status, 403);
+  const usersOnly = await createKey(['manage_users']);
+  assert.equal((await call(usersOnly.key, 'GET', `/applications/${contractedId}`)).status, 403);
   const summary = await (await call(read.key, 'GET', '/summary')).json();
   assert.ok('byState' in summary.data && summary.data.total >= 2);
   assert.ok(!JSON.stringify(summary).includes('IND-META-1'));

@@ -26,7 +26,7 @@ test('S-2 every Shams table is prefixed, identity/audit/notifications are core t
   for (const t of ['users', 'refresh_tokens', 'audit_logs', 'notification_outbox', 'user_notifications', 'initiative_memberships', 'industrial_zones']) assert.ok(tables.has(t), t);
   for (const t of ['organizations', 'applications', 'documents', 'factories']) assert.ok(!tables.has(t), 'no unprefixed ' + t);
   const orgs = (await q<{ id: string }>('SELECT id FROM shams_organizations ORDER BY id')).map((r) => r.id);
-  assert.deepEqual(orgs, ['org-admin', 'org-encpc', 'org-imc', 'org-pmu'], 'structural organisations');
+  assert.deepEqual(orgs, ['org-admin', 'org-electricity', 'org-encpc', 'org-imc', 'org-pmu'], 'structural organisations');
 });
 
 test('S-3 the partial-unique keys and the history triggers exist (constraint and trigger names are prefixed: they are schema-global)', async () => {

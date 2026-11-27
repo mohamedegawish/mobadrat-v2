@@ -6,9 +6,9 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import {
+import { electricityAccept, uploadProof, PROVIDER_INFO, PROVIDERS_LINK,
   isolateTestEnv, startServer, clients, createCompleteDraft, act, getApp, q, advanceTo, pdfVariant, PDF, sentMails,
-  BANK_A, BANK_B, PROVIDER_OK, PROVIDER_PENDING, PROVIDER_SUSPENDED, uploadContractFile, type Started, type Client,
+  BANK_A, BANK_B, uploadContractFile, type Started, type Client,
 } from './helpers.js';
 
 const env = isolateTestEnv('workflow-audit');
@@ -61,15 +61,16 @@ async function assertCleanOutbox(id: string, number: string | null) {
     assert.doesNotMatch(m.body + m.textBody, /eyJ[A-Za-z0-9_-]{10,}/, `no JWT in ${m.templateKey}`);
     assert.doesNotMatch(m.body + m.textBody, /Shams@2026|token=|password=/i, `no secret in ${m.templateKey}`);
     if (number && m.templateKey.startsWith('app.')) assert.ok(m.subject.includes(number) || m.body.includes(number), `${m.templateKey} carries ${number}`);
-    if (m.templateKey.startsWith('app.')) assert.ok(m.body.includes(encodeURIComponent(id)), `${m.templateKey} links to the application`);
+    // the provider has no account, so its e-mail carries no link into the platform
+    if (m.templateKey.startsWith('app.') && m.templateKey !== 'app.provider_offer_accepted') assert.ok(m.body.includes(encodeURIComponent(id)), `${m.templateKey} links to the application`);
   }
   // one logical notification per (event, recipient): only events that legitimately repeat in a cycle may appear twice
-  const repeating = new Set(['app.correction_requested', 'app.resubmitted', 'app.review_assigned', 'app.offer_received', 'app.electricity_received']);
+  const repeating = new Set(['app.correction_requested', 'app.resubmitted', 'app.review_assigned', 'app.offer_received', 'app.electricity_received', 'app.electricity_rejected', 'app.encpc_rejected', 'ops.electricity_decision']);
   for (const [k, n] of seen) if (!repeating.has(k.split('|')[0])) assert.equal(n, 1, `duplicate logical notification ${k}`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-test('S1 successful journey: registration → registry verified → IMC → ENCPC → provider → offer → PMU → electricity → PMU → factory chooses bank → evidence → contracted', async () => {
+test('S1 successful journey: registration → registry verified → IMC → ENCPC → offer → PMU → electricity ministry → factory chooses bank → evidence → contracted', async () => {
   await freeFactories();
   const F = 'factory@shams.local';
   // Stage 1: draft, verification, application creation
@@ -95,70 +96,59 @@ test('S1 successful journey: registration → registry verified → IMC → ENCP
   assert.equal((await emailsTo(id, 'app.review_assigned', 'encpc@shams.local')).length, 1);
   assert.deepEqual(await actionsOf(c.encpc, id), ['compliant', 'non_compliant'], 'ENCPC has no final reject');
 
-  // Stage 3: ENCPC accepts → provider list (email + dashboard)
-  ok(await act(c.encpc, id, 'compliant'), 'encpc compliant');
-  assert.equal((await getApp(c.factory, id)).state, 'PROVIDER_SELECTION');
-  const listMail = await emailsTo(id, 'app.encpc_compliant', F);
-  assert.equal(listMail.length, 1);
-  assert.ok(listMail[0].body.includes('مقدم خدمة تجريبي (1)'), 'email lists the providers');
-  assert.ok(!listMail[0].body.includes('بانتظار الاعتماد') && !listMail[0].body.includes('موقوف'), 'email omits non-selectable providers');
-  const visible = (await c.factory.get('/service-providers')).json.data.items.map((p: { id: string }) => p.id);
-  assert.ok(visible.includes(PROVIDER_OK));
-  assert.ok(!visible.includes(PROVIDER_PENDING) && !visible.includes(PROVIDER_SUSPENDED), 'dashboard list = selectable only');
-  ok(await act(c.factory, id, 'select_provider', { providerId: PROVIDER_OK }), 'select provider');
+  // Stage 3: ENCPC accepts → the providers link and its note reach the factory (D13)
+  assert.equal((await act(c.encpc, id, 'compliant', { providersLink: undefined })).status, 400, 'the providers link is required');
+  ok(await act(c.encpc, id, 'compliant', { note: 'اختاروا مقدمًا معتمدًا' }), 'encpc compliant');
   app = await getApp(c.factory, id);
   assert.equal(app.state, 'OFFER_UPLOAD');
-  assert.equal(app.provider.id, PROVIDER_OK);
-  const chosen = await emailsTo(id, 'app.provider_selected', F);
-  assert.equal(chosen.length, 1);
-  assert.ok(chosen[0].body.includes('خارج المنصة'), 'factory told to contact the provider offline (email)');
-  assert.ok(app.currentTask.labelAr.includes('خارج المنصة'), 'factory told to contact the provider offline (dashboard)');
+  const listMail = await emailsTo(id, 'app.encpc_compliant', F);
+  assert.equal(listMail.length, 1);
+  assert.ok(listMail[0].body.includes(PROVIDERS_LINK) && listMail[0].body.includes('اختاروا مقدمًا معتمدًا'), 'link and note in the email');
+  assert.equal(app.encpcAcceptance.providersLink, PROVIDERS_LINK);
+  assert.equal(app.encpcAcceptance.note, 'اختاروا مقدمًا معتمدًا');
 
-  // Stage 4: technical offer mandatory, then PMU queue
+  // Stage 4: technical offer and its provider mandatory, then PMU queue
   const noOffer = await act(c.factory, id, 'submit_offer');
   assert.equal(noOffer.status, 422); assert.equal(noOffer.json.code, 'DOCUMENT_REQUIRED');
   assert.equal((await upload(c.factory, id, 'technicalOfferFile', 'offer-s1')).status, 201);
+  assert.equal((await act(c.factory, id, 'submit_offer', { providerEmail: undefined })).status, 400, 'provider e-mail required');
   ok(await act(c.factory, id, 'submit_offer'), 'submit offer');
   assert.equal((await getApp(c.factory, id)).state, 'OFFER_REVIEW');
   assert.equal((await emailsTo(id, 'app.offer_received', F)).length, 1);
   assert.equal((await emailsTo(id, 'app.review_assigned', 'pmu@shams.local')).length, 1);
-  // electricity is not reachable before PMU accepts the offer
-  assert.ok((await upload(c.factory, id, 'electricityApprovalFile', 'early')).status >= 400, 'no electricity upload before offer acceptance');
-  assert.equal((await act(c.factory, id, 'submit_electricity', { distributionCompany: 'شركة' })).status, 409);
-  assert.equal((await act(c.factory, id, 'select_bank', { bankOrgId: BANK_A })).status, 409, 'no bank choice before the electricity acceptance');
+  // the ministry sees nothing before PMU accepts the offer
+  assert.equal((await c.electricity.get(`/applications/${id}`)).status, 404);
+  assert.equal((await act(c.factory, id, 'select_bank', { bankOrgId: BANK_A })).status, 409, 'no bank choice before the electricity approval');
 
-  // Stage 5: PMU accepts the offer
+  // Stage 5: PMU accepts the offer → the ministry; the factory owner and the provider are told (D17)
   ok(await act(c.pmu, id, 'accept'), 'pmu accept offer');
   app = await getApp(c.factory, id);
-  assert.equal(app.state, 'ELECTRICITY_UPLOAD');
-  assert.ok(app.currentTask.isMine, 'dashboard shows the next action');
-  assert.equal((await emailsTo(id, 'app.offer_accepted', F)).length, 1);
-
-  // Stage 6: electricity approval — no bank in this step (G-01)
-  const noFile = await act(c.factory, id, 'submit_electricity', { distributionCompany: 'شركة توزيع' });
-  assert.equal(noFile.status, 422, 'approval document mandatory');
-  assert.equal((await upload(c.factory, id, 'electricityApprovalFile', 'elec-s1')).status, 201);
-  assert.equal((await act(c.factory, id, 'submit_electricity', { distributionCompany: 'شركة توزيع', bankOrgId: BANK_A })).status, 400, 'bank is not part of the electricity submission');
-  ok(await act(c.factory, id, 'submit_electricity', { distributionCompany: 'شركة توزيع' }), 'submit electricity');
-  app = await getApp(c.factory, id);
   assert.equal(app.state, 'ELECTRICITY_REVIEW');
-  assert.equal(app.bank, null, 'no bank before PMU acceptance');
-  assert.equal((await emailsTo(id, 'app.electricity_received', F)).length, 1, 'factory receipt for the electricity submission');
-  assert.equal((await act(c.factory, id, 'select_bank', { bankOrgId: BANK_A })).status, 409, 'no bank choice during the PMU review');
+  assert.equal(app.currentTask.isMine, false);
+  assert.equal((await emailsTo(id, 'app.offer_accepted', F)).length, 1);
+  assert.equal((await emailsTo(id, 'app.provider_offer_accepted', PROVIDER_INFO.providerEmail)).length, 1);
+  assert.equal((await emailsTo(id, 'app.review_assigned', 'electricity@shams.local')).length, 1);
 
-  // Stage 7: PMU accepts electricity → the factory may now choose the bank (no referral, no bank step — G-01/G-02)
-  ok(await act(c.pmu, id, 'accept'), 'pmu accept electricity');
+  // Stage 6: the ministry approves with its file — no bank in this step (G-01)
+  const noFile = await act(c.electricity, id, 'accept', { distributionCompany: 'شركة توزيع' });
+  assert.equal(noFile.status, 422, 'approval document mandatory');
+  assert.equal((await upload(c.electricity, id, 'electricityApprovalFile', 'elec-s1')).status, 201);
+  assert.ok(!(await getApp(c.factory, id)).documents.some((d: { kind: string }) => d.kind === 'electricityApprovalFile'), 'not shown before the decision');
+  assert.equal((await act(c.electricity, id, 'accept', {})).status, 400, 'distribution company required');
+  assert.equal((await act(c.factory, id, 'select_bank', { bankOrgId: BANK_A })).status, 409, 'no bank choice during the ministry review');
+  ok(await act(c.electricity, id, 'accept', { distributionCompany: 'شركة توزيع' }), 'electricity accept');
   app = await getApp(c.factory, id);
   assert.equal(app.state, 'CONTRACT_OUTCOME');
-  assert.equal(app.step, 8);
+  assert.equal(app.step, 6);
   assert.deepEqual(app.allowedActions.map((a: { action: string }) => a.action).sort(), ['select_bank', 'select_distribution_path', 'withdraw']);
   assert.equal((await emailsTo(id, 'app.electricity_accepted', F)).length, 1, 'factory told to choose the bank');
+  assert.equal((await emailsTo(id, 'ops.electricity_decision', 'pmu@shams.local')).length, 1, 'PMU follows up');
   assert.deepEqual(await actionsOf(c.pmu, id), [], 'PMU has nothing more to do');
 
   // Stage 8: the factory chooses one active bank
   ok(await act(c.factory, id, 'select_bank', { bankOrgId: BANK_A }), 'select bank');
   app = await getApp(c.factory, id);
-  assert.equal(app.bank.id, BANK_A); assert.equal(app.step, 9);
+  assert.equal(app.bank.id, BANK_A); assert.equal(app.step, 7);
   const bankMail = await emailsTo(id, 'app.bank_selected', F);
   assert.equal(bankMail.length, 1, 'bank choice confirmed to the factory');
   assert.ok(bankMail[0].body.includes('خارج المنصة'), 'factory told to deal with the bank outside the platform');
@@ -190,8 +180,8 @@ test('S1 successful journey: registration → registry verified → IMC → ENCP
   // History: every decision, by the right role, in order; audit row for each
   const h = await history(id);
   assert.deepEqual(h.map((t) => `${t.actorRole}:${t.action}`), [
-    'factory_owner:submit', 'imc_reviewer:accept', 'encpc_reviewer:compliant', 'factory_owner:select_provider', 'factory_owner:submit_offer',
-    'pmu_reviewer:accept', 'factory_owner:submit_electricity', 'pmu_reviewer:accept', 'factory_owner:select_bank', 'factory_owner:record_contract',
+    'factory_owner:submit', 'imc_reviewer:accept', 'encpc_reviewer:compliant', 'factory_owner:submit_offer',
+    'pmu_reviewer:accept', 'electricity_reviewer:accept', 'factory_owner:select_bank', 'factory_owner:record_contract',
   ]);
   assert.deepEqual(h.map((t) => t.toState).at(-1), 'CONTRACTED');
   for (let i = 1; i < h.length; i++) assert.equal(h[i].fromState, h[i - 1].toState, 'continuous chain of states');
@@ -268,37 +258,42 @@ test('S3 IMC final rejection: reason mandatory → REJECTED is permanent → no 
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-test('S4 ENCPC correction cycle (repeated): returns to the factory and back to ENCPC, never to IMC; then the provider list', async () => {
+test('S4 ENCPC technical rejection cycle (repeated): proof from the factory, back to ENCPC, never to IMC; then the providers link', async () => {
   await freeFactories();
   const id = await advanceTo('ENCPC_REVIEW', c, 'IND-WA-S4');
   assert.equal((await act(c.encpc, id, 'reject', { reason: 'غير مطابق' })).status, 403, 'ENCPC has no final rejection');
-  assert.equal((await act(c.encpc, id, 'non_compliant', {})).status, 400, 'notes required');
+  assert.equal((await act(c.encpc, id, 'non_compliant', {})).status, 400, 'reason required');
+  assert.equal((await act(c.encpc, id, 'non_compliant', { reason: 'سبب', deficiencies: [{ field: 'address', note: 'x' }] })).status, 400, 'no per-field list');
   for (const round of [1, 2]) {
-    ok(await act(c.encpc, id, 'non_compliant', { deficiencies: [{ field: 'ownershipProofFile', note: `مستند الملكية غير واضح (${round})` }] }), `non_compliant ${round}`);
+    ok(await act(c.encpc, id, 'non_compliant', { reason: `قدرة المحول غير كافية (${round})` }), `non_compliant ${round}`);
     const app = await getApp(c.factory, id);
     assert.equal(app.state, 'ENCPC_CORRECTION');
-    assert.ok(app.currentTask.deficiencies.some((d: { note: string }) => d.note.includes(`(${round})`)));
-    assert.deepEqual((await getApp(c.factory, id)).unchangedDeficiencies, ['ownershipProofFile'], 'warning (M8), not a block — G-06');
-    assert.equal((await upload(c.factory, id, 'ownershipProofFile', `own-v${round + 1}`)).status, 201);
-    ok(await act(c.factory, id, 'resubmit'), `resubmit ${round}`);
+    assert.ok(app.returnDecision.reason.includes(`(${round})`), 'the factory sees the reason');
+    assert.deepEqual(app.editableFields, [], 'the form is not reopened');
+    assert.ok((await c.factory.put(`/applications/${id}/data/general`, { address: 'x' })).status >= 400);
+    assert.ok((await upload(c.factory, id, 'taxCardFile', `tax-${round}`)).status >= 400, 'only proof files');
+    assert.equal((await act(c.factory, id, 'resubmit')).status, 422, 'a new proof file is required');
+    await uploadProof(c.factory, id, `proof-${round}`);
+    ok(await act(c.factory, id, 'resubmit', { note: `تم تركيب محول جديد (${round})` }), `resubmit ${round}`);
     assert.equal((await getApp(c.encpc, id)).state, 'ENCPC_REVIEW', 'back to ENCPC, not IMC');
   }
   const app = await getApp(c.pmu, id);
   assert.equal(app.returnCounts.ENCPC_REVIEW, 2, 'cycles counted for PMU');
-  assert.equal(app.documents.filter((d: { kind: string }) => d.kind === 'ownershipProofFile').length, 3, 'all versions kept');
-  assert.equal((await outbox(id)).filter((m) => m.templateKey === 'app.correction_requested').length, 2, 'one email per return');
+  assert.equal((await getApp(c.encpc, id)).documents.filter((d: { kind: string }) => d.kind === 'correctionProofFile').length, 2, 'ENCPC sees the proofs');
+  assert.ok(!(await getApp(c.imc, id)).documents.some((d: { kind: string }) => d.kind === 'correctionProofFile'), 'IMC does not');
+  assert.equal((await outbox(id)).filter((m) => m.templateKey === 'app.encpc_rejected' && m.recipientAddress === 'factory@shams.local' && m.subject).length, 2, 'one email per rejection');
   assert.equal((await history(id)).filter((t) => t.action === 'non_compliant').length, 2, 'both reviews in history');
   // The IMC never sees it again
   assert.ok(!(await history(id)).some((t, i) => i > 1 && t.toState === 'IMC_REVIEW'));
   ok(await act(c.encpc, id, 'compliant'), 'compliant');
-  assert.equal((await getApp(c.factory, id)).state, 'PROVIDER_SELECTION');
-  assert.equal((await emailsTo(id, 'app.encpc_compliant', 'factory@shams.local')).length, 1, 'provider list sent once, only after acceptance');
+  assert.equal((await getApp(c.factory, id)).state, 'OFFER_UPLOAD');
+  assert.equal((await emailsTo(id, 'app.encpc_compliant', 'factory@shams.local')).length, 1, 'link sent once, only after acceptance');
   await assertCleanOutbox(id, app.number);
   ok(await act(c.factory, id, 'withdraw', { reason: 'إنهاء سيناريو الاختبار' }), 'cleanup');
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-test('S5 PMU technical-offer correction: notes mandatory → corrected offer → back to PMU → accepted → electricity available', async () => {
+test('S5 PMU technical-offer correction: notes mandatory → corrected offer → back to PMU → accepted → the ministry', async () => {
   await freeFactories();
   const id = await advanceTo('OFFER_REVIEW', c, 'IND-WA-S5');
   assert.equal((await act(c.pmu, id, 'request_correction', {})).status, 400, 'reason required');
@@ -307,17 +302,16 @@ test('S5 PMU technical-offer correction: notes mandatory → corrected offer →
   assert.equal(app.state, 'OFFER_CORRECTION');
   assert.ok(app.currentTask.deficiencies.some((d: { note: string }) => d.note === 'العرض لا يحدد قدرة الألواح'));
   assert.ok((await emailsTo(id, 'app.correction_requested', 'factory@shams.local'))[0].body.includes('العرض لا يحدد قدرة الألواح'));
-  assert.ok((await upload(c.factory, id, 'electricityApprovalFile', 'too-early')).status >= 400, 'electricity still locked');
   assert.equal((await act(c.factory, id, 'resubmit')).status, 422, 'corrected offer required');
   assert.equal((await upload(c.factory, id, 'technicalOfferFile', 'offer-v2')).status, 201);
-  ok(await act(c.factory, id, 'resubmit'), 'resubmit offer');
+  ok(await act(c.factory, id, 'resubmit', { providerName: 'شركة أخرى للطاقة', providerEmail: 'other@provider.test' }), 'resubmit offer');
   assert.equal((await getApp(c.pmu, id)).state, 'OFFER_REVIEW', 'back to PMU offer review, not an earlier stage');
   ok(await act(c.pmu, id, 'accept'), 'pmu accept');
   app = await getApp(c.factory, id);
-  assert.equal(app.state, 'ELECTRICITY_UPLOAD');
+  assert.equal(app.state, 'ELECTRICITY_REVIEW');
   assert.equal(app.documents.filter((d: { kind: string }) => d.kind === 'technicalOfferFile').length, 2, 'both offers kept');
-  assert.equal(app.provider.id, PROVIDER_OK, 'offer remains tied to the selected provider');
-  assert.equal((await upload(c.factory, id, 'electricityApprovalFile', 'now-ok')).status, 201, 'electricity upload now available');
+  assert.equal(app.providerInfo.email, 'other@provider.test', 'the latest provider');
+  assert.equal((await emailsTo(id, 'app.provider_offer_accepted', 'other@provider.test')).length, 1);
   const h = await history(id);
   assert.ok(h.some((t) => t.fromState === 'OFFER_REVIEW' && t.action === 'request_correction' && t.reason === 'العرض لا يحدد قدرة الألواح'));
   await assertCleanOutbox(id, app.number);
@@ -325,29 +319,32 @@ test('S5 PMU technical-offer correction: notes mandatory → corrected offer →
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-test('S6 PMU electricity correction: notes mandatory → corrected document → back to PMU electricity review → accepted → bank stage', async () => {
+test('S6 electricity rejection: notes mandatory → proof from the factory → back to the ministry → accepted → bank stage', async () => {
   await freeFactories();
   const id = await advanceTo('ELECTRICITY_REVIEW', c, 'IND-WA-S6');
-  assert.deepEqual(await actionsOf(c.factory, id), ['withdraw'], 'no bank or contract action before acceptance');
-  assert.equal((await act(c.pmu, id, 'request_correction', {})).status, 400, 'reason required');
-  ok(await act(c.pmu, id, 'request_correction', { reason: 'الموافقة غير موقعة' }), 'pmu return');
+  assert.deepEqual(await actionsOf(c.factory, id), ['withdraw'], 'no bank or contract action before the approval');
+  assert.equal((await act(c.electricity, id, 'request_correction', {})).status, 400, 'reason required');
+  assert.equal((await upload(c.electricity, id, 'electricityApprovalFile', 'draft-approval')).status, 201);
+  ok(await act(c.electricity, id, 'request_correction', { reason: 'الرسم الهندسي غير موقع' }), 'ministry rejects');
   let app = await getApp(c.factory, id);
   assert.equal(app.state, 'ELECTRICITY_UPLOAD');
-  assert.ok(app.currentTask.deficiencies.some((d: { field: string; note: string }) => d.field === 'electricityApprovalFile' && d.note === 'الموافقة غير موقعة'), 'the return is visible as a correction');
-  assert.ok((await emailsTo(id, 'app.correction_requested', 'factory@shams.local'))[0].body.includes('الموافقة غير موقعة'));
-  const again = await act(c.factory, id, 'submit_electricity', { distributionCompany: 'شركة توزيع' });
-  assert.equal(again.status, 422, 'a corrected document is required');
-  assert.equal((await upload(c.factory, id, 'electricityApprovalFile', 'elec-v2')).status, 201);
-  ok(await act(c.factory, id, 'submit_electricity', { distributionCompany: 'شركة توزيع' }), 'resubmit electricity');
-  assert.equal((await getApp(c.pmu, id)).state, 'ELECTRICITY_REVIEW', 'back to PMU electricity review');
-  assert.equal((await emailsTo(id, 'app.resubmitted', 'pmu@shams.local')).length, 1, 'PMU told it is a resubmission');
-  ok(await act(c.pmu, id, 'accept'), 'pmu accept');
+  assert.equal(app.returnDecision.reason, 'الرسم الهندسي غير موقع');
+  assert.ok(!app.documents.some((d: { kind: string }) => d.kind === 'electricityApprovalFile'), 'the unused approval file is not sent');
+  assert.ok((await emailsTo(id, 'app.electricity_rejected', 'factory@shams.local'))[0].body.includes('الرسم الهندسي غير موقع'));
+  assert.equal((await emailsTo(id, 'ops.electricity_decision', 'pmu@shams.local')).length, 1);
+  assert.equal((await act(c.factory, id, 'resubmit')).status, 422, 'proof required');
+  assert.ok((await upload(c.factory, id, 'electricityApprovalFile', 'forged')).status >= 400, 'the factory cannot upload the approval');
+  await uploadProof(c.factory, id, 'signed-drawing');
+  ok(await act(c.factory, id, 'resubmit'), 'resubmit');
+  assert.equal((await getApp(c.electricity, id)).state, 'ELECTRICITY_REVIEW', 'back to the ministry');
+  assert.equal((await emailsTo(id, 'app.resubmitted', 'electricity@shams.local')).length, 1, 'told it is a resubmission');
+  const stale = await act(c.electricity, id, 'accept', { distributionCompany: 'شركة توزيع' });
+  assert.equal(stale.status, 422, 'the discarded file does not count');
+  ok(await electricityAccept(c.electricity, id, 'elec-v2'), 'accept');
   app = await getApp(c.factory, id);
   assert.equal(app.state, 'CONTRACT_OUTCOME');
   assert.deepEqual(app.allowedActions.map((a: { action: string }) => a.action).sort(), ['select_bank', 'select_distribution_path', 'withdraw'], 'bank choice available after acceptance');
-  const elec = app.documents.filter((d: { kind: string }) => d.kind === 'electricityApprovalFile');
-  assert.equal(elec.length, 2, 'both versions kept');
-  assert.ok(elec.every((d: { createdAt: string }) => d.createdAt), 'submission dates kept');
+  assert.equal(app.documents.filter((d: { kind: string }) => d.kind === 'electricityApprovalFile').length, 1);
   await assertCleanOutbox(id, app.number);
   ok(await act(c.factory, id, 'withdraw', { reason: 'إنهاء سيناريو الاختبار' }), 'cleanup');
 });
@@ -367,7 +364,7 @@ test('S7 final contracting failure: reason mandatory, no evidence needed → CLO
   assert.deepEqual(app.allowedActions, []);
   for (const [cl, action, body] of [
     [c.factory, 'record_contract', { contractDate: '2026-10-05', contractAmount: 100 }], [c.factory, 'select_bank', { bankOrgId: BANK_B }],
-    [c.factory, 'submit_electricity', { distributionCompany: 'شركة' }], [c.factory, 'withdraw', { reason: 'إعادة فتح' }],
+    [c.factory, 'resubmit', {}], [c.factory, 'withdraw', { reason: 'إعادة فتح' }],
   ] as const) {
     const r = await act(cl, id, action, body as Record<string, unknown>);
     assert.equal(r.status, 409, `${action} after failure`);
@@ -392,14 +389,14 @@ test('S7 final contracting failure: reason mandatory, no evidence needed → CLO
 test('S8 authorization attacks are refused server-side', async () => {
   await freeFactories();
   // A: factory, B: factory2
-  const A = await advanceTo('PROVIDER_SELECTION', c, 'IND-WA-S8A');
+  const A = await advanceTo('OFFER_UPLOAD', c, 'IND-WA-S8A');
   const B = await advanceTo('IMC_REVIEW', { ...c, factory: c.factory2 }, 'IND-WA-S8B');
   const docA = (await getApp(c.factory, A)).documents[0].id;
   const before = await getApp(c.factory, A);
 
   // another factory's application and documents
   assert.equal((await c.factory2.get(`/applications/${A}`)).status, 404);
-  assert.equal((await c.factory2.post(`/applications/${A}/actions/select_provider`, { expectedVersion: before.version, providerId: PROVIDER_OK })).status, 404);
+  assert.equal((await c.factory2.post(`/applications/${A}/actions/submit_offer`, { expectedVersion: before.version, ...PROVIDER_INFO })).status, 404);
   assert.equal((await c.factory2.get(`/applications/${A}/documents/${docA}/download`)).status, 404);
   assert.equal((await c.factory2.get(`/applications/${B}/documents/${docA}/download`)).status, 404, 'document id swapping');
   assert.ok((await c.factory2.put(`/applications/${A}/data/general`, { address: 'x' })).status >= 400);
@@ -413,39 +410,32 @@ test('S8 authorization attacks are refused server-side', async () => {
   refused(await raw(c.pmu, B, 'compliant'), 'PMU cannot make an ENCPC decision');
   refused(await raw(c.imc, B, 'compliant'), 'IMC cannot make an ENCPC decision');
 
-  // provider manipulation
-  for (const pid of [PROVIDER_PENDING, PROVIDER_SUSPENDED, 'sp-does-not-exist']) {
-    const r = await act(c.factory, A, 'select_provider', { providerId: pid });
-    assert.equal(r.status, 422, `provider ${pid}`); assert.equal(r.json.code, 'PROVIDER_NOT_APPROVED');
-  }
-  await dbRun("UPDATE shams_service_providers SET isActive = 0 WHERE id = 'sp-demo-2'");
-  try {
-    const r = await act(c.factory, A, 'select_provider', { providerId: 'sp-demo-2' });
-    assert.equal(r.status, 422, 'approved but inactive provider');
-  } finally { await dbRun("UPDATE shams_service_providers SET isActive = 1 WHERE id = 'sp-demo-2'"); }
-  assert.equal((await c.factory.post('/service-providers', { nameAr: 'مقدم مزيف', nameEn: 'Fake' })).status, 403, 'factory cannot add providers');
+  // retired actions and the removed directory
+  assert.equal((await raw(c.factory, A, 'select_provider', { providerId: 'sp-demo-1' })).status, 404, 'provider selection is gone');
+  assert.equal((await c.factory.get('/service-providers')).status, 404);
 
   // skipping stages and changing the state directly
-  for (const [action, body] of [['submit_offer', {}], ['submit_electricity', { distributionCompany: 'شركة' }], ['select_bank', { bankOrgId: BANK_A }], ['record_contract', { contractDate: '2026-10-05', contractAmount: 5 }], ['record_no_contract', { reason: 'تخطي' }]] as const) {
-    assert.equal((await act(c.factory, A, action, body as Record<string, unknown>)).status, 409, `skip via ${action}`);
+  for (const [action, body] of [['accept', { distributionCompany: 'شركة' }], ['select_bank', { bankOrgId: BANK_A }], ['record_contract', { contractDate: '2026-10-05', contractAmount: 5 }], ['record_no_contract', { reason: 'تخطي' }]] as const) {
+    assert.ok([403, 409].includes((await act(c.factory, A, action, body as Record<string, unknown>)).status), `skip via ${action}`);
   }
-  assert.equal((await act(c.factory, A, 'select_provider', { providerId: PROVIDER_OK, state: 'CONTRACTED' })).status, 400, 'extra fields rejected');
+  assert.equal((await act(c.factory, A, 'submit_offer', { state: 'CONTRACTED' })).status, 400, 'extra fields rejected');
   assert.equal((await c.factory.post(`/applications/${A}/actions/set_state`, { expectedVersion: before.version, state: 'CONTRACTED' })).status, 404, 'no generic state change');
   assert.ok([404, 405].includes((await c.factory.req('PATCH', `/applications/${A}`, { state: 'CONTRACTED' })).status));
   assert.ok([404, 405].includes((await c.factory.put(`/applications/${A}`, { state: 'CONTRACTED' })).status));
-  assert.equal((await getApp(c.factory, A)).state, 'PROVIDER_SELECTION', 'state untouched by every attack');
+  assert.equal((await getApp(c.factory, A)).state, 'OFFER_UPLOAD', 'state untouched by every attack');
 
   // inactive / non-bank organizations cannot be chosen as the bank
-  ok(await act(c.factory, A, 'select_provider', { providerId: PROVIDER_OK }), 'select');
   assert.equal((await upload(c.factory, A, 'technicalOfferFile', 's8-offer')).status, 201);
   ok(await act(c.factory, A, 'submit_offer'), 'offer');
   refused(await raw(c.encpc, A, 'accept'), 'ENCPC cannot approve a PMU stage');
+  refused(await raw(c.electricity, A, 'accept'), 'the ministry cannot approve a PMU stage');
   ok(await act(c.pmu, A, 'accept'), 'pmu accept');
-  assert.equal((await upload(c.factory, A, 'electricityApprovalFile', 's8-elec')).status, 201);
-  ok(await act(c.factory, A, 'submit_electricity', { distributionCompany: 'شركة' }), 'electricity');
+  assert.ok((await upload(c.factory, A, 'electricityApprovalFile', 's8-forged')).status >= 400, 'the factory cannot upload the approval');
+  assert.ok((await upload(c.electricity, A, 'technicalOfferFile', 's8-x')).status >= 400, 'the ministry uploads its approval only');
   refused(await raw(c.encpc, A, 'accept'), 'ENCPC cannot approve the electricity stage');
+  refused(await raw(c.pmu, A, 'accept'), 'PMU cannot approve the electricity stage');
   refused(await raw(c.factory, A, 'accept'), 'the factory cannot approve its own electricity approval');
-  ok(await act(c.pmu, A, 'accept'), 'pmu accept electricity');
+  ok(await electricityAccept(c.electricity, A, 's8-elec'), 'electricity accept');
   const bankIds = async () => (await c.factory.get('/meta')).json.data.banks.map((b: { id: string }) => b.id);
   assert.ok((await bankIds()).includes(BANK_B), 'active bank listed');
   await dbRun('UPDATE shams_organizations SET isActive = 0 WHERE id = ?', BANK_B);

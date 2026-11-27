@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Building2, LayoutDashboard, ChevronsLeft, ChevronsRight, FileClock, KeyRound, Mail, ShieldCheck, Users, Wrench } from 'lucide-react';
+import { Building2, LayoutDashboard, ChevronsLeft, ChevronsRight, FileClock, KeyRound, Mail, ShieldCheck, Users } from 'lucide-react';
 import { useStore, canView, workspaceHash, type View } from '../../store/state';
 
 interface Item { view: View; ar: string; en: string; icon: React.ReactNode }
@@ -7,7 +7,6 @@ interface Group { ar: string; en: string; items: Item[] }
 
 const GROUPS: Group[] = [
   { ar: 'الطلبات', en: 'Applications', items: [
-    { view: 'providers', ar: 'مقدمو الخدمة', en: 'Service providers', icon: <Wrench size={17} /> },
     { view: 'approvals', ar: 'الموافقات', en: 'Approvals', icon: <ShieldCheck size={17} /> },
   ] },
   { ar: 'إدارة النظام', en: 'Administration', items: [
@@ -26,9 +25,6 @@ export const AdminSidebar: React.FC = () => {
   const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem(KEY) === '1'; } catch { return false; } });
   const toggle = () => { const v = !collapsed; setCollapsed(v); try { localStorage.setItem(KEY, v ? '1' : '0'); } catch { /* ignore */ } };
   const groups = GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => canView(i.view, user)) })).filter((g) => g.items.length);
-  /** الدليل نفسه بعنوانين: ENCPC «إدارة مقدمي الخدمة» وPMU «اعتماد مقدمي الخدمة». */
-  const label = (i: Item) => (i.view === 'providers' && user?.role === 'encpc_reviewer' ? t('إدارة مقدمي الخدمة', 'Manage service providers')
-    : i.view === 'providers' ? t('اعتماد مقدمي الخدمة', 'Approve service providers') : isAr ? i.ar : i.en);
   const Chevron = (isAr ? !collapsed : collapsed) ? ChevronsRight : ChevronsLeft;
 
   return (
@@ -56,8 +52,8 @@ export const AdminSidebar: React.FC = () => {
           <div key={g.en} className="admin-side-group">
             {!collapsed ? <div className="admin-side-group-title">{isAr ? g.ar : g.en}</div> : null}
             {g.items.map((i) => (
-              <button key={i.view} type="button" className={`admin-side-item${view === i.view ? ' active' : ''}`} onClick={() => store.navigate(i.view)} title={label(i)}>
-                {i.icon}{!collapsed ? <span className="admin-side-label">{label(i)}</span> : null}
+              <button key={i.view} type="button" className={`admin-side-item${view === i.view ? ' active' : ''}`} onClick={() => store.navigate(i.view)} title={isAr ? i.ar : i.en}>
+                {i.icon}{!collapsed ? <span className="admin-side-label">{isAr ? i.ar : i.en}</span> : null}
               </button>
             ))}
           </div>

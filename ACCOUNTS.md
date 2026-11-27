@@ -12,13 +12,14 @@
 | 3 | `auditor@mobadrat.local` | المدقق — النظرة العامة وسجل التدقيق | `#admin` |
 | 4 | `content@mobadrat.local` | مدير المحتوى — صفحات المبادرات وبانرات الرئيسية | `#admin-catalog` |
 | 5 | `imc@mobadrat.local` | لوحة IMC — شمس الصناعة وصُنّاع المستقبل في لوحة واحدة | `#workspace/imc` |
-| 6 | `encpc@shams.local` | لوحة ENCPC — المراجعة الفنية ودليل مقدمي الخدمة | `#workspace/encpc` |
+| 6 | `encpc@shams.local` | لوحة ENCPC — المراجعة الفنية | `#workspace/encpc` |
 | 7 | `pmu@shams.local` | لوحة PMU — وحدة إدارة المبادرة | `#workspace/pmu` |
 | 8 | `funder@sona3.local` | لوحة جهة التمويل | `#workspace/funder` |
 | 9 | `evaluator1@sona3.local` | لوحة المقيّم — الدراسات المسندة للتقييم | `#workspace/evaluator` |
 | 10 | `admin@shams.local` | إدارة المبادرة — الجاهزية والتشغيل وأدوات الإدارة | `#workspace/system_admin` |
 | 11 | `factory@shams.local` | مصنع في شمس الصناعة (ومعاه مصنع تجريبي) | لوحة المصنع |
 | 12 | `applicant@sona3.local` | متقدم في صُنّاع المستقبل (ومعاه ملفه) | صفحة المتقدم |
+| 13 | `electricity@shams.local` | بوابة وزارة الكهرباء — موافقة أو رفض العروض الفنية المعتمدة | `#workspace/electricity` |
 
 باقي حسابات التجربة (زي `imc1@shams.local` و`admin@sona3.local` و`factory2@shams.local`) موجودة كمان، وقائمتها كاملة في
 [docs/DEPLOY.md](docs/DEPLOY.md) «حسابات لكل دور».

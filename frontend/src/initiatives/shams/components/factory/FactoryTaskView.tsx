@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Building2, FileSignature, Landmark, Upload, Wrench, Zap } from 'lucide-react';
+import { Building2, FileSignature, Landmark, Paperclip, Upload } from 'lucide-react';
 import { api, type ActionBody, type ActionName, type ApplicationDetail } from '../../api';
 import { errorText, store, useStore } from '../../store/state';
 import { useAsync } from '../../hooks/useAsync';
@@ -10,12 +10,11 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { StateBadge } from '../ui/StateBadge';
 import { DocumentsList, StageTracker, TaskCard } from '../application/shared';
 import { useToast } from '../common/ToastSystem';
-import { SupportContact } from '../common/SupportContact';
 import { toLatinDigits } from '../../utils/validation';
-import { ProviderLogo } from '../common/ProviderLogo';
+import { SupportContact } from '../common/SupportContact';
 
 /**
- * شاشة واحدة لكل مهمة: مقدم الخدمة، العرض الفني، موافقة الكهرباء، ثم بعد قبولها اختيار مسار التعاقد (بنك — G-01 — أو شركة
+ * شاشة واحدة لكل مهمة: العرض الفني، الرد على ملاحظات ENCPC أو وزارة الكهرباء، ثم بعد موافقتها اختيار مسار التعاقد (بنك — G-01 — أو شركة
  * توزيع الكهرباء)، ثم خطوات المسار المختار وحده: اختيار البنك ونتيجة التعاقد، أو رفع موافقة شركة التوزيع.
  */
 export const FactoryTaskView: React.FC = () => {
@@ -29,12 +28,10 @@ export const FactoryTaskView: React.FC = () => {
 
   let body: React.ReactNode;
   switch (app.state) {
-    // D6: a provider stopped while the offer was being prepared sends the application back here — the page says why.
-    case 'PROVIDER_SELECTION': body = <ProviderStep app={app} reselect={Boolean(app.provider && !app.provider.selectable)} />; break;
-    // I11: مقدم الخدمة المختار أُوقف قبل إرسال العرض → إعادة الاختيار بدل الطريق المغلق.
-    case 'OFFER_UPLOAD': case 'OFFER_CORRECTION': body = app.state === 'OFFER_UPLOAD' && app.provider && !app.provider.selectable ? <ProviderStep app={app} reselect /> : <UploadStep app={app} kind="technicalOfferFile" action={app.state === 'OFFER_UPLOAD' ? 'submit_offer' : 'resubmit'} onUploaded={reload} />; break;
-    case 'ELECTRICITY_UPLOAD': body = <UploadStep app={app} kind="electricityApprovalFile" action="submit_electricity" onUploaded={reload} />; break;
-    // G-01/G-02: بعد قبول PMU لموافقة الكهرباء يختار المصنع مسار التعاقد؛ على مسار البنك يختار البنك ثم يسجل النتيجة بنفسه.
+    case 'OFFER_UPLOAD': case 'OFFER_CORRECTION': body = <UploadStep app={app} kind="technicalOfferFile" action={app.state === 'OFFER_UPLOAD' ? 'submit_offer' : 'resubmit'} onUploaded={reload} />; break;
+    // D13 / D18: a technical or electricity rejection is answered with proof that the issue is fixed.
+    case 'ENCPC_CORRECTION': case 'ELECTRICITY_UPLOAD': body = <ProofStep app={app} onChanged={reload} />; break;
+    // G-01/G-02: بعد موافقة وزارة الكهرباء يختار المصنع مسار التعاقد؛ على مسار البنك يختار البنك ثم يسجل النتيجة بنفسه.
     case 'CONTRACT_OUTCOME': body = app.bank ? <ContractStep app={app} onUploaded={reload} /> : <ContractPathStep app={app} />; break;
     // مسار شركة توزيع الكهرباء: رفع موافقتها (مع حفظ النسخ السابقة) ثم إرسالها لمراجعة PMU.
     case 'DISTRIBUTION_UPLOAD': body = <UploadStep app={app} kind="distributionApprovalFile" action="submit_distribution_approval" onUploaded={reload} />; break;
@@ -54,7 +51,7 @@ export const FactoryTaskView: React.FC = () => {
         <button type="button" className="btn btn-secondary btn-sm" onClick={() => store.navigate('factory-dashboard')}>{t('العودة للوحتي', 'Back to dashboard')}</button>
       </div>
       <div className="card" style={{ marginBottom: '1rem' }}><StageTracker step={app.step} state={app.state} /></div>
-      <div style={{ marginBottom: '1rem' }}><TaskCard task={app.currentTask} /></div>
+      <div style={{ marginBottom: '1rem' }}><TaskCard task={app.currentTask} returnReason={app.returnDecision?.reason} /></div>
       <div className="card">{body}</div>
     </div>
   );
@@ -77,67 +74,62 @@ function useAct(app: ApplicationDetail) {
   return { busy, error, run };
 }
 
-const ProviderStep: React.FC<{ app: ApplicationDetail; reselect?: boolean }> = ({ app, reselect }) => {
+/** D13 / D18: one or more proof files and an optional comment, sent back to whoever rejected. */
+const ProofStep: React.FC<{ app: ApplicationDetail; onChanged: () => Promise<void> }> = ({ app, onChanged }) => {
   const { isAr, t } = useStore();
-  const providers = useAsync(() => api.listProviders(), []);
-  const [selected, setSelected] = useState('');
-  const [confirm, setConfirm] = useState(false);
+  const { toast } = useToast();
   const { busy, error, run } = useAct(app);
-  if (providers.loading) return <Loading />;
-  if (providers.error) return <ErrorState message={providers.error} onRetry={providers.reload} />;
-  const list = (providers.data ?? []).filter((p) => p.id !== app.provider?.id);
-  const chosen = list.find((p) => p.id === selected);
+  const [confirm, setConfirm] = useState(false);
+  const [note, setNote] = useState('');
+  const toMinistry = app.state === 'ELECTRICITY_UPLOAD';
+  const ready = app.documents.some((d) => d.kind === 'correctionProofFile' && !d.submitted && d.isCurrent);
+  const upload = async (file: File) => {
+    try { await api.uploadDocument(app.id, 'correctionProofFile', file); toast('success', t('تم رفع الملف.', 'File uploaded.')); await onChanged(); } catch (e) { toast('error', errorText(e, isAr)); }
+  };
+  const remove = async (docId: string) => {
+    try { await api.removeDocument(app.id, docId); await onChanged(); } catch (e) { toast('error', errorText(e, isAr)); }
+  };
   return (
-    <div className="stack">
-      <h2 style={{ margin: 0, fontSize: '1.1rem' }}><Wrench size={18} style={{ verticalAlign: '-3px' }} /> {t('اختر مقدم الخدمة من القائمة المعتمدة', 'Choose a service provider from the approved list')}</h2>
-      {reselect && app.provider ? (
-        <div className="error-box" data-testid="provider-suspended">
-          {t(`أُوقف اعتماد مقدم الخدمة «${app.provider.nameAr}» الذي اخترته. اختر مقدم خدمة معتمدًا آخر، ثم ارفع العرض الفني المُعد منه.`, `The provider “${app.provider.nameEn || app.provider.nameAr}” you chose is no longer approved. Choose another approved provider, then upload its technical offer.`)}
+    <div className="stack" data-testid="proof-step">
+      <h2 style={{ margin: 0, fontSize: '1.1rem' }}><Paperclip size={18} style={{ verticalAlign: '-3px' }} /> {t('إرفاق ما يثبت حل المشكلة', 'Attach proof that the issue is fixed')}</h2>
+      {app.returnDecision?.reason ? (
+        <div className="error-box" data-testid="rejection-reason" style={{ whiteSpace: 'pre-line' }}>
+          <b>{toMinistry ? t('ملاحظات وزارة الكهرباء', 'Ministry of Electricity notes') : t('سبب الرفض الفني', 'Technical rejection reason')}:</b> {app.returnDecision.reason}
         </div>
       ) : null}
-      {/* B2: قائمة فارغة — رسالة واضحة بدل طريق مغلق صامت (PMU والأدمن يُنبَّهان آليًا) */}
-      {!list.length ? <Empty title={t('لا يوجد حاليًا مقدمو خدمة معتمدون', 'There are no approved service providers right now')}
-        hint={<>{t('طلبك محفوظ في هذه المرحلة ولن يضيع. أُبلغت وحدة إدارة المبادرة بأن القائمة فارغة؛ عُد إلى هذه الصفحة لاحقًا لاختيار مقدم الخدمة.', 'Your application is saved at this stage. The PMU has been alerted that the list is empty; come back to this page later to choose a provider.')} <SupportContact /></>} /> : (
-        <div className="stack" role="radiogroup" style={{ gap: '0.5rem' }}>
-          {list.map((p) => (
-            <label key={p.id} className={`doc-item${selected === p.id ? ' is-selected' : ''}`} style={{ cursor: 'pointer', borderColor: selected === p.id ? 'var(--egypt-red)' : undefined }}>
-              <input type="radio" name="provider" value={p.id} checked={selected === p.id} onChange={() => setSelected(p.id)} data-testid={`provider-${p.id}`} />
-              <ProviderLogo logoUrl={p.logoUrl} name={p.nameAr} size={52} />
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span className="doc-name" style={{ display: 'block' }}>{isAr ? p.nameAr : (p.nameEn || p.nameAr)}</span>
-                {p.description ? <span className="doc-meta" style={{ display: 'block', whiteSpace: 'pre-line' }}>{p.description}</span> : null}
-                {p.website ? <a className="doc-meta" href={p.website} target="_blank" rel="noopener noreferrer" dir="ltr" onClick={(e) => e.stopPropagation()}>{p.website}</a> : null}
-              </span>
-            </label>
-          ))}
-        </div>
-      )}
+      <DocumentsList app={app} kinds={['correctionProofFile']} onRemove={(id) => void remove(id)} removable={(d) => !d.submitted} />
+      <PdfUploader onFile={upload} testId="upload-correctionProofFile" label={ready ? t('إضافة ملف آخر', 'Add another file') : undefined} />
+      {!ready ? <p className="form-helper">{t('ارفع ملفًا واحدًا على الأقل قبل الإرسال.', 'Upload at least one file before sending.')}</p> : null}
+      <div className="form-group">
+        <label className="form-label" htmlFor="proofNote">{t('تعليق (اختياري)', 'Comment (optional)')}</label>
+        <textarea id="proofNote" className="form-control" rows={3} value={note} onChange={(e) => setNote(e.target.value)} maxLength={2000} data-testid="proof-note" />
+      </div>
       <ErrorBox message={error} />
-      <div><button type="button" className="btn btn-primary" disabled={!selected || busy} onClick={() => setConfirm(true)} data-testid="select-provider">{t('تأكيد الاختيار', 'Confirm selection')}</button></div>
-      {confirm && chosen ? (
-        <ConfirmDialog title={t('تأكيد اختيار مقدم الخدمة', 'Confirm service provider')} message={t(`سيتم اعتماد «${chosen.nameAr}» مقدمًا للخدمة لهذا الطلب، ثم تنتقل لرفع العرض الفني.`, `“${chosen.nameEn || chosen.nameAr}” will be set as the provider; next you upload the technical offer.`)}
-          confirmLabel={t('تأكيد', 'Confirm')} busy={busy} onCancel={() => setConfirm(false)}
-          onConfirm={async () => { if (!(await run('select_provider', { providerId: selected }))) setConfirm(false); }} />
+      <div><button type="button" className="btn btn-primary" disabled={!ready || busy} onClick={() => setConfirm(true)} data-testid="task-submit">{t('إرسال للمراجعة', 'Send for review')}</button></div>
+      {confirm ? (
+        <ConfirmDialog title={t('تأكيد الإرسال', 'Confirm submission')}
+          message={toMinistry ? t('ستُرسل المرفقات إلى وزارة الكهرباء للمراجعة.', 'The attachments will be sent to the Ministry of Electricity.') : t('ستُرسل المرفقات إلى ENCPC للمراجعة الفنية.', 'The attachments will be sent to ENCPC.')}
+          confirmLabel={t('إرسال', 'Send')} busy={busy} onCancel={() => setConfirm(false)}
+          onConfirm={async () => { if (!(await run('resubmit', note.trim() ? { note: note.trim() } : {}))) setConfirm(false); }} />
       ) : null}
     </div>
   );
 };
 
-const UploadStep: React.FC<{ app: ApplicationDetail; kind: 'technicalOfferFile' | 'electricityApprovalFile' | 'distributionApprovalFile'; action: ActionName; onUploaded: () => Promise<void> }> = ({ app, kind, action, onUploaded }) => {
+const UploadStep: React.FC<{ app: ApplicationDetail; kind: 'technicalOfferFile' | 'distributionApprovalFile'; action: ActionName; onUploaded: () => Promise<void> }> = ({ app, kind, action, onUploaded }) => {
   const { isAr, t } = useStore();
   const { toast } = useToast();
   const { busy, error, run } = useAct(app);
   const [confirm, setConfirm] = useState(false);
-  const [distributionCompany, setDistributionCompany] = useState(String(app.data.electricity?.distributionCompany ?? ''));
   const [note, setNote] = useState('');
+  // D16: the provider that prepared the offer.
+  const [provider, setProvider] = useState({ providerName: app.providerInfo?.name ?? '', providerEmail: app.providerInfo?.email ?? '', providerPhone: app.providerInfo?.phone ?? '' });
   const isOffer = kind === 'technicalOfferFile';
   const isDistribution = kind === 'distributionApprovalFile';
-  const isElectricity = kind === 'electricityApprovalFile';
   const pendingNew = app.documents.some((d) => d.kind === kind && !d.submitted && d.isCurrent);
-  const returned = app.currentTask?.deficiencies.some((d) => d.field === kind);
-  const needsNew = isOffer || isDistribution || returned;
   const hasFile = app.documents.some((d) => d.kind === kind && d.isCurrent);
-  const ready = (needsNew ? pendingNew : hasFile) && (!isElectricity || distributionCompany.trim().length >= 2);
+  const providerOk = provider.providerName.trim().length >= 2 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(provider.providerEmail.trim());
+  const ready = pendingNew && (!isOffer || providerOk);
 
   const upload = async (file: File) => {
     try { await api.uploadDocument(app.id, kind, file); toast('success', t('تم رفع الملف.', 'File uploaded.')); await onUploaded(); } catch (e) { toast('error', errorText(e, isAr)); }
@@ -147,8 +139,7 @@ const UploadStep: React.FC<{ app: ApplicationDetail; kind: 'technicalOfferFile' 
     <div className="stack">
       <h2 style={{ margin: 0, fontSize: '1.1rem' }}>
         {isOffer ? <><Upload size={18} style={{ verticalAlign: '-3px' }} /> {t('رفع العرض الفني المُعد من مقدم الخدمة', 'Upload the technical offer prepared by the provider')}</>
-          : isDistribution ? <><Building2 size={18} style={{ verticalAlign: '-3px' }} /> {t('رفع موافقة شركة توزيع الكهرباء على التعاقد', 'Upload the distribution company contracting approval')}</>
-          : <><Zap size={18} style={{ verticalAlign: '-3px' }} /> {t('رفع موافقة شركة الكهرباء', 'Upload the electricity company approval')}</>}
+          : <><Building2 size={18} style={{ verticalAlign: '-3px' }} /> {t('رفع موافقة شركة توزيع الكهرباء على التعاقد', 'Upload the distribution company contracting approval')}</>}
       </h2>
       {isDistribution ? (
         <p className="form-helper" data-testid="distribution-step">
@@ -156,35 +147,45 @@ const UploadStep: React.FC<{ app: ApplicationDetail; kind: 'technicalOfferFile' 
             'You chose to complete the contract through the electricity distribution company. Upload the company’s contracting approval (PDF). You can upload a new version before sending; earlier versions are kept. The PMU then reviews it and its decision is final: acceptance means “contracted”, rejection closes the application.')}
         </p>
       ) : null}
-      {app.provider && isOffer ? <p className="form-helper">{t('مقدم الخدمة', 'Service provider')}: <b>{isAr ? app.provider.nameAr : app.provider.nameEn || app.provider.nameAr}</b></p> : null}
+      {isOffer && app.encpcAcceptance ? (
+        <div className="account-banner" data-testid="encpc-acceptance">
+          <b>{t('قُبل طلبك فنيًا', 'Your application was technically accepted')}</b>
+          <a className="btn btn-primary btn-sm" style={{ alignSelf: 'flex-start', textDecoration: 'none' }} href={app.encpcAcceptance.providersLink} target="_blank" rel="noopener noreferrer" data-testid="providers-link">{t('عرض مقدمي الخدمة', 'View the service providers')}</a>
+          {app.encpcAcceptance.note ? <span style={{ whiteSpace: 'pre-line' }}>{t('ملاحظات ENCPC', 'ENCPC notes')}: {app.encpcAcceptance.note}</span> : null}
+        </div>
+      ) : null}
       <DocumentsList app={app} kinds={[kind]} />
       <PdfUploader onFile={upload} testId={`upload-${kind}`} label={hasFile ? t('رفع نسخة جديدة (تُحفظ السابقة)', 'Upload a new version (previous kept)') : undefined} />
-      {needsNew && !pendingNew ? <p className="form-helper">{t('يجب رفع نسخة جديدة قبل الإرسال.', 'A new version must be uploaded before submitting.')}</p> : null}
+      {!pendingNew ? <p className="form-helper">{t('يجب رفع نسخة جديدة قبل الإرسال.', 'A new version must be uploaded before submitting.')}</p> : null}
       {isDistribution ? (
         <div className="form-group">
           <label className="form-label" htmlFor="distributionNote">{t('ملاحظات للمراجع (اختياري)', 'Notes for the reviewer (optional)')}</label>
           <textarea id="distributionNote" className="form-control" rows={2} value={note} onChange={(e) => setNote(e.target.value)} maxLength={2000} data-testid="distribution-note" />
         </div>
       ) : null}
-      {isElectricity ? (
-        <div className="field-grid">
-          <div className="form-group">
-            <label className="form-label required" htmlFor="distributionCompany">{t('شركة التوزيع المصدِرة للموافقة', 'Issuing distribution company')}</label>
-            {/* TODO(محتوى): قائمة شركات التوزيع الرسمية — حقل نصي حتى تُعتمد */}
-            <input id="distributionCompany" className="form-control" value={distributionCompany} onChange={(e) => setDistributionCompany(e.target.value)} maxLength={200} />
-          </div>
-        </div>
+      {isOffer ? (
+        <fieldset className="field-grid" style={{ border: 0, padding: 0, margin: 0 }}>
+          <legend className="form-label">{t('مقدم الخدمة الذي أعد العرض', 'The service provider that prepared the offer')}</legend>
+          {([['providerName', t('اسم مقدم الخدمة', 'Provider name'), 'text', true], ['providerEmail', t('البريد الإلكتروني', 'E-mail'), 'email', true],
+            ['providerPhone', t('الهاتف (اختياري)', 'Phone (optional)'), 'tel', false]] as const).map(([key, label, type, required]) => (
+            <div className="form-group" key={key}>
+              <label className={`form-label${required ? ' required' : ''}`} htmlFor={key}>{label}</label>
+              <input id={key} type={type} dir={type === 'text' ? undefined : 'ltr'} className="form-control" value={provider[key]} maxLength={key === 'providerPhone' ? 20 : 200}
+                onChange={(e) => setProvider({ ...provider, [key]: key === 'providerPhone' ? toLatinDigits(e.target.value) : e.target.value })} data-testid={key} />
+            </div>
+          ))}
+        </fieldset>
       ) : null}
       <ErrorBox message={error} />
       <div><button type="button" className="btn btn-primary" disabled={!ready || busy} onClick={() => setConfirm(true)} data-testid="task-submit">{t('إرسال للمراجعة', 'Send for review')}</button></div>
       {confirm ? (
         <ConfirmDialog title={t('تأكيد الإرسال', 'Confirm submission')}
-          message={isOffer ? t('سيُرسل المستند إلى وحدة إدارة المبادرة للمراجعة.', 'The document will be sent to the PMU for review.')
-            : isDistribution ? t('ستُرسل موافقة شركة التوزيع إلى وحدة إدارة المبادرة. قرارها نهائي، ولا يمكن تعديل المستند بعد الإرسال.', 'The distribution company approval will be sent to the PMU. Its decision is final and the document cannot be changed after sending.')
-            : t('سيُرسل المستند إلى وحدة إدارة المبادرة للمراجعة. بعد قبوله تختار مسار التعاقد (بنك أو شركة توزيع الكهرباء).', 'The document will be sent to the PMU for review. Once it is accepted you will choose the contracting path (bank or distribution company).')}
+          message={isOffer ? t('سيُرسل العرض وبيانات مقدم الخدمة إلى وحدة إدارة المبادرة للمراجعة.', 'The offer and the provider details will be sent to the PMU for review.')
+            : t('ستُرسل موافقة شركة التوزيع إلى وحدة إدارة المبادرة. قرارها نهائي، ولا يمكن تعديل المستند بعد الإرسال.', 'The distribution company approval will be sent to the PMU. Its decision is final and the document cannot be changed after sending.')}
           confirmLabel={t('إرسال', 'Send')} busy={busy} onCancel={() => setConfirm(false)}
           onConfirm={async () => {
-            const body = isElectricity ? { distributionCompany: distributionCompany.trim() } : isDistribution && note.trim() ? { note: note.trim() } : {};
+            const body = isOffer ? { providerName: provider.providerName.trim(), providerEmail: provider.providerEmail.trim(), ...(provider.providerPhone.trim() ? { providerPhone: provider.providerPhone.trim() } : {}) }
+              : note.trim() ? { note: note.trim() } : {};
             if (!(await run(action, body))) setConfirm(false);
           }} />
       ) : null}

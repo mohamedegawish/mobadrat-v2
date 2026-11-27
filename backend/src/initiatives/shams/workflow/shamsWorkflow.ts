@@ -25,7 +25,7 @@ export type ApplicationState = (typeof APPLICATION_STATES)[number];
 
 export const TERMINAL_STATES: readonly ApplicationState[] = ['REJECTED', 'CONTRACTED', 'CLOSED_NOT_CONTRACTED', 'WITHDRAWN'];
 /** حالات ملغاة: لا يدخلها أي انتقال، وأي طلب كان فيها نُقل بالـmigration (G-02: BANK_STUDY). */
-export const RETIRED_STATES: readonly ApplicationState[] = ['BANK_STUDY'];
+export const RETIRED_STATES: readonly ApplicationState[] = ['BANK_STUDY', 'PROVIDER_SELECTION'];
 export function isTerminal(s: ApplicationState): boolean { return TERMINAL_STATES.includes(s); }
 /**
  * PA-04: every state that can still carry a per-application flag. A terminal application has no transition (so no action:
@@ -35,7 +35,7 @@ export const NON_TERMINAL_STATES: readonly ApplicationState[] = APPLICATION_STAT
 
 export const ACTIONS = [
   'submit', 'resubmit', 'accept', 'request_correction', 'reject', 'compliant', 'non_compliant',
-  'select_provider', 'submit_offer', 'submit_electricity', 'select_bank', 'record_contract', 'record_no_contract', 'withdraw',
+  'submit_offer', 'select_bank', 'record_contract', 'record_no_contract', 'withdraw',
   'select_distribution_path', 'submit_distribution_approval', 'reject_distribution',
 ] as const;
 
@@ -63,6 +63,11 @@ export type ActionName = (typeof ACTIONS)[number];
  * إيقاف مقدم الخدمة (القرار 6 وD6 وD7)، قرار PMU في نزاع رقم السجل (D4)، وتحرير الطلب من بنك موقوف (D2).
  */
 export const SYSTEM_ACTION_LABELS = {
+  // Retired steps (D14, D18): kept so earlier history entries keep their names.
+  select_provider: { ar: 'اختيار مقدم الخدمة', en: 'Select service provider' },
+  submit_electricity: { ar: 'إرسال موافقة الكهرباء', en: 'Submit electricity approval' },
+  provider_selection_retired: { ar: 'نقل آلي: إلغاء مرحلة اختيار مقدم الخدمة', en: 'Automatic move: provider selection retired' },
+  electricity_upload_retired: { ar: 'نقل آلي: وزارة الكهرباء ترفع الموافقة', en: 'Automatic move: the ministry uploads the approval' },
   provider_suspended_return: { ar: 'إرجاع آلي لرفع العرض (إيقاف مقدم الخدمة)', en: 'Automatic return to offer upload (provider suspended)' },
   provider_suspended_reselect: { ar: 'عودة آلية لاختيار مقدم الخدمة (إيقاف مقدم الخدمة)', en: 'Automatic return to provider selection (provider suspended)' },
   provider_suspended_warning: { ar: 'تنبيه: أُوقف مقدم الخدمة المختار — لا تغيير في مسار الطلب', en: 'Warning: the chosen provider was suspended — the application continues' },
@@ -73,7 +78,7 @@ export const SYSTEM_ACTION_LABELS = {
 export type SystemAction = keyof typeof SYSTEM_ACTION_LABELS;
 
 /** الجهة المسؤولة عن الخطوة الحالية. */
-export type Responsible = 'factory' | 'imc' | 'encpc' | 'pmu' | 'none';
+export type Responsible = 'factory' | 'imc' | 'encpc' | 'pmu' | 'electricity' | 'none';
 
 export type RegistryCheck = 'always' | 'if_changed';
 
@@ -91,9 +96,12 @@ export interface TransitionDef {
     completeForm?: boolean;
     reason?: boolean;
     deficiencies?: boolean;
-    providerId?: boolean;
+    providersLink?: boolean;
+    providerInfo?: boolean;
+    /** an active document of this kind (not necessarily new in this attempt). */
+    document?: 'electricityApprovalFile';
     bankOrgId?: boolean;
-    newDocument?: 'technicalOfferFile' | 'electricityApprovalFile' | 'contractFile' | 'distributionApprovalFile';
+    newDocument?: 'technicalOfferFile' | 'correctionProofFile' | 'contractFile' | 'distributionApprovalFile';
     electricity?: boolean;
     contract?: boolean;
     /** يتطلب أن يكون المصنع قد سجّل البنك المختار (بعد قبول موافقة الكهرباء). */
@@ -123,58 +131,49 @@ export const TRANSITIONS: readonly TransitionDef[] = [
     requires: { completeForm: true }, confirm: true, labelAr: 'إعادة التقديم', labelEn: 'Resubmit' },
   { step: 2, from: 'IMC_CORRECTION', action: 'resubmit', actorRole: 'factory_owner', to: 'IMC_CORRECTION', when: 'registry_not_valid', registryCheck: 'if_changed',
     requires: { completeForm: true }, proposed: true, labelAr: 'إعادة التقديم', labelEn: 'Resubmit' },
-  // 3 — المراجعة الفنية ENCPC (لا يوجد رفض)
-  { step: 3, from: 'ENCPC_REVIEW', action: 'compliant', actorRole: 'encpc_reviewer', to: 'PROVIDER_SELECTION', confirm: true,
-    labelAr: 'مطابق فنيًا', labelEn: 'Technically compliant' },
+  // 3 — المراجعة الفنية ENCPC (D13): قبول فني بلينك مقدمي الخدمة، أو رفض فني يرد عليه المصنع بمرفق إثبات.
+  { step: 3, from: 'ENCPC_REVIEW', action: 'compliant', actorRole: 'encpc_reviewer', to: 'OFFER_UPLOAD',
+    requires: { providersLink: true }, confirm: true, labelAr: 'قبول فني', labelEn: 'Technical acceptance' },
   { step: 3, from: 'ENCPC_REVIEW', action: 'non_compliant', actorRole: 'encpc_reviewer', to: 'ENCPC_CORRECTION',
-    requires: { deficiencies: true }, confirm: true, labelAr: 'غير مطابق — طلب تصحيح', labelEn: 'Not compliant — request correction' },
-  { step: 3, from: 'ENCPC_CORRECTION', action: 'resubmit', actorRole: 'factory_owner', to: 'ENCPC_REVIEW', when: 'registry_valid', registryCheck: 'if_changed',
-    requires: { completeForm: true }, confirm: true, labelAr: 'إعادة التقديم', labelEn: 'Resubmit' },
-  { step: 3, from: 'ENCPC_CORRECTION', action: 'resubmit', actorRole: 'factory_owner', to: 'ENCPC_CORRECTION', when: 'registry_not_valid', registryCheck: 'if_changed',
-    requires: { completeForm: true }, proposed: true, labelAr: 'إعادة التقديم', labelEn: 'Resubmit' },
-  // 4 — اختيار مقدم الخدمة
-  { step: 4, from: 'PROVIDER_SELECTION', action: 'select_provider', actorRole: 'factory_owner', to: 'OFFER_UPLOAD',
-    requires: { providerId: true }, confirm: true, labelAr: 'اختيار مقدم الخدمة', labelEn: 'Select service provider' },
-  // 5 — رفع العرض الفني
-  // ★ I11: إعادة اختيار مقدم الخدمة من OFFER_UPLOAD — متاحة فقط إذا لم يعد مقدم الخدمة المختار معتمدًا (effectiveActions).
-  { step: 5, from: 'OFFER_UPLOAD', action: 'select_provider', actorRole: 'factory_owner', to: 'OFFER_UPLOAD',
-    requires: { providerId: true }, confirm: true, proposed: true, labelAr: 'إعادة اختيار مقدم الخدمة', labelEn: 'Choose another service provider' },
-  { step: 5, from: 'OFFER_UPLOAD', action: 'submit_offer', actorRole: 'factory_owner', to: 'OFFER_REVIEW',
-    requires: { newDocument: 'technicalOfferFile' }, confirm: true, labelAr: 'إرسال العرض الفني', labelEn: 'Submit technical offer' },
-  // 6 — مراجعة PMU للعرض (لا يوجد رفض)
-  { step: 6, from: 'OFFER_REVIEW', action: 'accept', actorRole: 'pmu_reviewer', to: 'ELECTRICITY_UPLOAD', confirm: true,
+    requires: { reason: true }, confirm: true, labelAr: 'رفض فني', labelEn: 'Technical rejection' },
+  { step: 3, from: 'ENCPC_CORRECTION', action: 'resubmit', actorRole: 'factory_owner', to: 'ENCPC_REVIEW',
+    requires: { newDocument: 'correctionProofFile' }, confirm: true, labelAr: 'إرسال إثبات حل المشكلة', labelEn: 'Send proof of the fix' },
+  // 4 — العرض الفني (D16): المصنع يرفعه ويسمّي مقدم الخدمة الذي أعده.
+  { step: 4, from: 'OFFER_UPLOAD', action: 'submit_offer', actorRole: 'factory_owner', to: 'OFFER_REVIEW',
+    requires: { newDocument: 'technicalOfferFile', providerInfo: true }, confirm: true, labelAr: 'إرسال العرض الفني', labelEn: 'Submit technical offer' },
+  // مراجعة PMU للعرض (لا يوجد رفض) — القبول يرسله لوزارة الكهرباء (D17/D18).
+  { step: 4, from: 'OFFER_REVIEW', action: 'accept', actorRole: 'pmu_reviewer', to: 'ELECTRICITY_REVIEW', confirm: true,
     labelAr: 'قبول العرض الفني', labelEn: 'Accept technical offer' },
-  { step: 6, from: 'OFFER_REVIEW', action: 'request_correction', actorRole: 'pmu_reviewer', to: 'OFFER_CORRECTION',
+  { step: 4, from: 'OFFER_REVIEW', action: 'request_correction', actorRole: 'pmu_reviewer', to: 'OFFER_CORRECTION',
     requires: { reason: true }, confirm: true, labelAr: 'طلب تعديل العرض', labelEn: 'Request offer revision' },
-  { step: 6, from: 'OFFER_CORRECTION', action: 'resubmit', actorRole: 'factory_owner', to: 'OFFER_REVIEW',
-    requires: { newDocument: 'technicalOfferFile' }, confirm: true, labelAr: 'إعادة رفع العرض', labelEn: 'Resubmit offer' },
-  // 7 — موافقة الكهرباء
-  { step: 7, from: 'ELECTRICITY_UPLOAD', action: 'submit_electricity', actorRole: 'factory_owner', to: 'ELECTRICITY_REVIEW',
-    requires: { newDocument: 'electricityApprovalFile', electricity: true }, confirm: true,
-    labelAr: 'إرسال موافقة الكهرباء', labelEn: 'Submit electricity approval' },
+  { step: 4, from: 'OFFER_CORRECTION', action: 'resubmit', actorRole: 'factory_owner', to: 'OFFER_REVIEW',
+    requires: { newDocument: 'technicalOfferFile', providerInfo: true }, confirm: true, labelAr: 'إعادة رفع العرض', labelEn: 'Resubmit offer' },
+  // 5 — موافقة وزارة الكهرباء (D18): هي التي ترفع ملف الموافقة وتقرر، دون مراجعة PMU.
   // G-01: القبول يفتح للمصنع اختيار مسار التعاقد: بنك (لا إحالة ولا دراسة بنكية داخل المنصة — G-02) أو شركة توزيع الكهرباء.
-  { step: 7, from: 'ELECTRICITY_REVIEW', action: 'accept', actorRole: 'pmu_reviewer', to: 'CONTRACT_OUTCOME', confirm: true,
-    labelAr: 'الموافقة مستوفاة — يختار المصنع مسار التعاقد', labelEn: 'Approval complete — factory chooses the contracting path' },
-  { step: 7, from: 'ELECTRICITY_REVIEW', action: 'request_correction', actorRole: 'pmu_reviewer', to: 'ELECTRICITY_UPLOAD',
-    requires: { reason: true }, confirm: true, proposed: true, labelAr: 'غير مستوفاة — استكمال المستند', labelEn: 'Incomplete — request document' },
-  // 8 — اختيار البنك (G-01): مرة واحدة، وبعد قبول PMU لموافقة الكهرباء فقط. البنك جهة خارجية بلا حساب (G-02).
-  { step: 8, from: 'CONTRACT_OUTCOME', action: 'select_bank', actorRole: 'factory_owner', to: 'CONTRACT_OUTCOME',
+  { step: 5, from: 'ELECTRICITY_REVIEW', action: 'accept', actorRole: 'electricity_reviewer', to: 'CONTRACT_OUTCOME',
+    requires: { document: 'electricityApprovalFile', electricity: true }, confirm: true, labelAr: 'قبول ورفع الموافقة', labelEn: 'Approve and upload the approval' },
+  { step: 5, from: 'ELECTRICITY_REVIEW', action: 'request_correction', actorRole: 'electricity_reviewer', to: 'ELECTRICITY_UPLOAD',
+    requires: { reason: true }, confirm: true, labelAr: 'رفض مع ملاحظات', labelEn: 'Reject with notes' },
+  { step: 5, from: 'ELECTRICITY_UPLOAD', action: 'resubmit', actorRole: 'factory_owner', to: 'ELECTRICITY_REVIEW',
+    requires: { newDocument: 'correctionProofFile' }, confirm: true, labelAr: 'إرسال إثبات حل المشكلة', labelEn: 'Send proof of the fix' },
+  // 6 — اختيار البنك (G-01): مرة واحدة، وبعد قبول PMU لموافقة الكهرباء فقط. البنك جهة خارجية بلا حساب (G-02).
+  { step: 6, from: 'CONTRACT_OUTCOME', action: 'select_bank', actorRole: 'factory_owner', to: 'CONTRACT_OUTCOME',
     requires: { bankOrgId: true }, confirm: true, labelAr: 'اختيار البنك', labelEn: 'Choose the bank' },
-  // 9 — يسجل المصنع نتيجة التعاقد مباشرة بعد تواصله مع البنك خارج المنصة (G-02)، مع مستند إثبات للتعاقد (G-03).
-  { step: 9, from: 'CONTRACT_OUTCOME', action: 'record_contract', actorRole: 'factory_owner', to: 'CONTRACTED',
+  // 7 — يسجل المصنع نتيجة التعاقد مباشرة بعد تواصله مع البنك خارج المنصة (G-02)، مع مستند إثبات للتعاقد (G-03).
+  { step: 7, from: 'CONTRACT_OUTCOME', action: 'record_contract', actorRole: 'factory_owner', to: 'CONTRACTED',
     requires: { contract: true, bankSelected: true, newDocument: 'contractFile' }, confirm: true, labelAr: 'تسجيل التعاقد', labelEn: 'Record contract' },
-  { step: 9, from: 'CONTRACT_OUTCOME', action: 'record_no_contract', actorRole: 'factory_owner', to: 'CLOSED_NOT_CONTRACTED',
+  { step: 7, from: 'CONTRACT_OUTCOME', action: 'record_no_contract', actorRole: 'factory_owner', to: 'CLOSED_NOT_CONTRACTED',
     requires: { reason: true, bankSelected: true }, confirm: true, labelAr: 'لم يتم التعاقد', labelEn: 'No contract' },
-  // 8/9 — المسار الثاني: التعاقد عن طريق شركة توزيع الكهرباء. الاختيار مرة واحدة ويثبّت المسار (لا بنك بعده — actionBlock + CHECK).
-  { step: 8, from: 'CONTRACT_OUTCOME', action: 'select_distribution_path', actorRole: 'factory_owner', to: 'DISTRIBUTION_UPLOAD', confirm: true,
+  // 6/7 — المسار الثاني: التعاقد عن طريق شركة توزيع الكهرباء. الاختيار مرة واحدة ويثبّت المسار (لا بنك بعده — actionBlock + CHECK).
+  { step: 6, from: 'CONTRACT_OUTCOME', action: 'select_distribution_path', actorRole: 'factory_owner', to: 'DISTRIBUTION_UPLOAD', confirm: true,
     labelAr: 'التعاقد من خلال شركة توزيع الكهرباء', labelEn: 'Contract through the distribution company' },
-  { step: 9, from: 'DISTRIBUTION_UPLOAD', action: 'submit_distribution_approval', actorRole: 'factory_owner', to: 'DISTRIBUTION_REVIEW',
+  { step: 7, from: 'DISTRIBUTION_UPLOAD', action: 'submit_distribution_approval', actorRole: 'factory_owner', to: 'DISTRIBUTION_REVIEW',
     requires: { newDocument: 'distributionApprovalFile' }, confirm: true, labelAr: 'إرسال موافقة شركة التوزيع', labelEn: 'Submit the distribution company approval' },
   // قرار PMU نهائي في الاتجاهين: القبول = تم التعاقد، والرفض = إغلاق بلا تعاقد (نفس نتيجة التعاقد البنكي غير المكتمل).
-  { step: 9, from: 'DISTRIBUTION_REVIEW', action: 'accept', actorRole: 'pmu_reviewer', to: 'CONTRACTED', confirm: true,
+  { step: 7, from: 'DISTRIBUTION_REVIEW', action: 'accept', actorRole: 'pmu_reviewer', to: 'CONTRACTED', confirm: true,
     labelAr: 'قبول موافقة شركة التوزيع — تم التعاقد', labelEn: 'Accept the distribution approval — contracted' },
   // فعل مستقل عن «reject» (رفض IMC للطلب → REJECTED): هنا رفض مستند التعاقد → إغلاق بلا تعاقد.
-  { step: 9, from: 'DISTRIBUTION_REVIEW', action: 'reject_distribution', actorRole: 'pmu_reviewer', to: 'CLOSED_NOT_CONTRACTED',
+  { step: 7, from: 'DISTRIBUTION_REVIEW', action: 'reject_distribution', actorRole: 'pmu_reviewer', to: 'CLOSED_NOT_CONTRACTED',
     requires: { reason: true }, confirm: true, labelAr: 'رفض موافقة شركة التوزيع — إغلاق نهائي', labelEn: 'Reject the distribution approval — final closure' },
   // — الانسحاب من أي حالة غير نهائية
   { step: 0, from: 'ANY_NON_TERMINAL', action: 'withdraw', actorRole: 'factory_owner', to: 'WITHDRAWN',
@@ -199,36 +198,37 @@ export const STATE_RESPONSIBLE: Record<ApplicationState, Responsible> = {
   DRAFT: 'factory',
   IMC_REVIEW: 'imc', IMC_CORRECTION: 'factory',
   ENCPC_REVIEW: 'encpc', ENCPC_CORRECTION: 'factory',
-  PROVIDER_SELECTION: 'factory', OFFER_UPLOAD: 'factory',
+  PROVIDER_SELECTION: 'none', OFFER_UPLOAD: 'factory',
   OFFER_REVIEW: 'pmu', OFFER_CORRECTION: 'factory',
-  ELECTRICITY_UPLOAD: 'factory', ELECTRICITY_REVIEW: 'pmu',
+  ELECTRICITY_UPLOAD: 'factory', ELECTRICITY_REVIEW: 'electricity',
   BANK_STUDY: 'none', CONTRACT_OUTCOME: 'factory',
   DISTRIBUTION_UPLOAD: 'factory', DISTRIBUTION_REVIEW: 'pmu',
   REJECTED: 'none', CONTRACTED: 'none', CLOSED_NOT_CONTRACTED: 'none', WITHDRAWN: 'none',
 };
 
-/** رقم المرحلة (1–9) على خريطة الإجراءات. */
+/** رقم المرحلة (1–7) على خريطة الإجراءات. */
 export const STATE_STEP: Record<ApplicationState, number> = {
   DRAFT: 1, IMC_REVIEW: 2, IMC_CORRECTION: 2, ENCPC_REVIEW: 3, ENCPC_CORRECTION: 3, PROVIDER_SELECTION: 4,
-  OFFER_UPLOAD: 5, OFFER_REVIEW: 6, OFFER_CORRECTION: 6, ELECTRICITY_UPLOAD: 7, ELECTRICITY_REVIEW: 7,
-  BANK_STUDY: 8, CONTRACT_OUTCOME: 9, DISTRIBUTION_UPLOAD: 9, DISTRIBUTION_REVIEW: 9, REJECTED: 2, CONTRACTED: 9, CLOSED_NOT_CONTRACTED: 9, WITHDRAWN: 0,
+  OFFER_UPLOAD: 4, OFFER_REVIEW: 4, OFFER_CORRECTION: 4, ELECTRICITY_UPLOAD: 5, ELECTRICITY_REVIEW: 5,
+  BANK_STUDY: 6, CONTRACT_OUTCOME: 7, DISTRIBUTION_UPLOAD: 7, DISTRIBUTION_REVIEW: 7, REJECTED: 2, CONTRACTED: 7, CLOSED_NOT_CONTRACTED: 7, WITHDRAWN: 0,
 };
 
+/** D11: «الإجراء — الجهة المسؤولة». */
 export const STATE_LABELS: Record<ApplicationState, { ar: string; en: string }> = {
   DRAFT: { ar: 'مسودة', en: 'Draft' },
   IMC_REVIEW: { ar: 'مراجعة الطلب — IMC', en: 'Application review — IMC' },
-  IMC_CORRECTION: { ar: 'استيفاء البيانات', en: 'Data completion' },
+  IMC_CORRECTION: { ar: 'استيفاء البيانات — المصنع', en: 'Data completion — Factory' },
   ENCPC_REVIEW: { ar: 'المراجعة الفنية — ENCPC', en: 'Technical review — ENCPC' },
-  ENCPC_CORRECTION: { ar: 'تصحيح الملف الفني', en: 'Technical file correction' },
-  PROVIDER_SELECTION: { ar: 'اختيار مقدم الخدمة', en: 'Service provider selection' },
-  OFFER_UPLOAD: { ar: 'رفع العرض الفني', en: 'Technical offer upload' },
+  ENCPC_CORRECTION: { ar: 'الرد على الرفض الفني — المصنع', en: 'Answer to the technical rejection — Factory' },
+  PROVIDER_SELECTION: { ar: 'اختيار مقدم الخدمة (مرحلة ملغاة)', en: 'Service provider selection (retired)' },
+  OFFER_UPLOAD: { ar: 'رفع العرض الفني — المصنع', en: 'Technical offer upload — Factory' },
   OFFER_REVIEW: { ar: 'مراجعة العرض الفني — PMU', en: 'Technical offer review — PMU' },
-  OFFER_CORRECTION: { ar: 'تعديل العرض الفني', en: 'Technical offer revision' },
-  ELECTRICITY_UPLOAD: { ar: 'رفع موافقة الكهرباء', en: 'Electricity approval upload' },
-  ELECTRICITY_REVIEW: { ar: 'مراجعة موافقة الكهرباء — PMU', en: 'Electricity approval review — PMU' },
+  OFFER_CORRECTION: { ar: 'تعديل العرض الفني — المصنع', en: 'Technical offer revision — Factory' },
+  ELECTRICITY_UPLOAD: { ar: 'الرد على ملاحظات الكهرباء — المصنع', en: 'Answer to the electricity notes — Factory' },
+  ELECTRICITY_REVIEW: { ar: 'موافقة الكهرباء — وزارة الكهرباء', en: 'Electricity approval — Ministry of Electricity' },
   BANK_STUDY: { ar: 'دراسة البنك (مرحلة ملغاة)', en: 'Bank study (retired)' },
-  CONTRACT_OUTCOME: { ar: 'مسار التعاقد / التعاقد البنكي', en: 'Contracting path / bank contracting' },
-  DISTRIBUTION_UPLOAD: { ar: 'رفع موافقة شركة توزيع الكهرباء', en: 'Distribution company approval upload' },
+  CONTRACT_OUTCOME: { ar: 'مسار التعاقد / التعاقد البنكي — المصنع', en: 'Contracting path / bank contracting — Factory' },
+  DISTRIBUTION_UPLOAD: { ar: 'رفع موافقة شركة توزيع الكهرباء — المصنع', en: 'Distribution company approval upload — Factory' },
   DISTRIBUTION_REVIEW: { ar: 'مراجعة موافقة شركة التوزيع — PMU', en: 'Distribution company approval review — PMU' },
   REJECTED: { ar: 'طلب مرفوض', en: 'Rejected' },
   CONTRACTED: { ar: 'اكتمل — تم التعاقد', en: 'Completed — contracted' },
@@ -242,13 +242,12 @@ export const STATE_TASKS: Partial<Record<ApplicationState, { ar: string; en: str
   IMC_REVIEW: { ar: 'مراجعة الطلب والمستندات واتخاذ القرار', en: 'Review the application and documents, then decide' },
   IMC_CORRECTION: { ar: 'استكمل النواقص المطلوبة وأعد التقديم', en: 'Complete the requested items and resubmit' },
   ENCPC_REVIEW: { ar: 'التقييم الفني للطلب', en: 'Technical evaluation of the application' },
-  ENCPC_CORRECTION: { ar: 'صحّح البيانات والمستندات الفنية وأعد التقديم', en: 'Correct the technical data and documents, then resubmit' },
-  PROVIDER_SELECTION: { ar: 'اختر مقدم الخدمة من القائمة المعتمدة', en: 'Select a service provider from the approved list' },
-  OFFER_UPLOAD: { ar: 'تواصل مع مقدم الخدمة خارج المنصة للحصول على العرض الفني، ثم ارفعه', en: 'Contact the provider outside the platform for the technical offer, then upload it' },
+  ENCPC_CORRECTION: { ar: 'ارفع ما يثبت حل المشكلة الفنية ثم أرسله', en: 'Upload proof that the technical issue is fixed, then send it' },
+  OFFER_UPLOAD: { ar: 'تواصل مع مقدم خدمة من القائمة المرسلة إليك، ثم ارفع عرضه الفني وبيانات التواصل معه', en: 'Contact a provider from the list sent to you, then upload their technical offer and contact details' },
   OFFER_REVIEW: { ar: 'مراجعة العرض الفني', en: 'Review the technical offer' },
   OFFER_CORRECTION: { ar: 'عدّل العرض الفني وأعد رفعه', en: 'Revise the technical offer and upload it again' },
-  ELECTRICITY_UPLOAD: { ar: 'ارفع موافقة شركة الكهرباء', en: 'Upload the electricity company approval' },
-  ELECTRICITY_REVIEW: { ar: 'مراجعة موافقة الكهرباء', en: 'Review the electricity approval' },
+  ELECTRICITY_UPLOAD: { ar: 'ارفع ما يثبت حل ملاحظات وزارة الكهرباء ثم أرسله', en: 'Upload proof that the ministry’s notes are resolved, then send it' },
+  ELECTRICITY_REVIEW: { ar: 'مراجعة الطلب ورفع الموافقة أو الرفض بملاحظات', en: 'Review the application, then upload the approval or reject it with notes' },
   CONTRACT_OUTCOME: { ar: 'اختر مسار التعاقد: من خلال بنك أو من خلال شركة توزيع الكهرباء', en: 'Choose the contracting path: through a bank or through the electricity distribution company' },
   DISTRIBUTION_UPLOAD: { ar: 'ارفع موافقة شركة توزيع الكهرباء على التعاقد ثم أرسلها للمراجعة', en: 'Upload the distribution company’s contracting approval, then send it for review' },
   DISTRIBUTION_REVIEW: { ar: 'مراجعة موافقة شركة توزيع الكهرباء واتخاذ القرار النهائي', en: 'Review the distribution company approval and take the final decision' },
@@ -263,9 +262,9 @@ export function stateTask(app: { state: ApplicationState; bankOrgId: string | nu
   return STATE_TASKS[app.state] ?? STATE_LABELS[app.state];
 }
 
-/** رقم المرحلة: «مسار التعاقد» (8) حتى يختار المصنع البنك أو شركة التوزيع، ثم «التعاقد» (9). */
+/** رقم المرحلة: «مسار التعاقد» (6) حتى يختار المصنع البنك أو شركة التوزيع، ثم «التعاقد» (7). */
 export function stateStep(app: { state: ApplicationState; bankOrgId: string | null }): number {
-  if (app.state === 'CONTRACT_OUTCOME' && !app.bankOrgId) return 8;
+  if (app.state === 'CONTRACT_OUTCOME' && !app.bankOrgId) return 6;
   return STATE_STEP[app.state];
 }
 
@@ -274,11 +273,12 @@ export const RESPONSIBLE_LABELS: Record<Responsible, { ar: string; en: string }>
   imc: { ar: 'IMC', en: 'IMC' },
   encpc: { ar: 'ENCPC', en: 'ENCPC' },
   pmu: { ar: 'وحدة إدارة المبادرة (PMU)', en: 'Initiative Management Unit (PMU)' },
+  electricity: { ar: 'وزارة الكهرباء', en: 'Ministry of Electricity' },
   none: { ar: '—', en: '—' },
 };
 
 /** حالات التصحيح التي تقيّد التعديل بقائمة النواقص. */
-export const FORM_CORRECTION_STATES: readonly ApplicationState[] = ['IMC_CORRECTION', 'ENCPC_CORRECTION'];
+export const FORM_CORRECTION_STATES: readonly ApplicationState[] = ['IMC_CORRECTION'];
 
 /** حالة المراجعة التي يعود إليها كل تصحيح (لعدّ الإرجاعات). */
 export const RETURN_ACTIONS: ReadonlyArray<{ from: ApplicationState; action: ActionName }> = [
@@ -300,6 +300,7 @@ export function responsibleOrgId(app: AppLike): string | null {
     case 'imc': return ORG_IDS.imc;
     case 'encpc': return ORG_IDS.encpc;
     case 'pmu': return ORG_IDS.pmu;
+    case 'electricity': return ORG_IDS.electricity;
     default: return null;
   }
 }
@@ -312,6 +313,7 @@ export function actorOwnsRow(actor: ActorLike, app: AppLike, def: TransitionDef)
     case 'imc_reviewer': return actor.organizationId === ORG_IDS.imc;
     case 'encpc_reviewer': return actor.organizationId === ORG_IDS.encpc;
     case 'pmu_reviewer': return actor.organizationId === ORG_IDS.pmu;
+    case 'electricity_reviewer': return actor.organizationId === ORG_IDS.electricity;
     default: return false; // system_admin لا يملك أي قرار؛ bank_reviewer دور ملغى (G-02) بلا أي إجراء
   }
 }

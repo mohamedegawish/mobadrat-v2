@@ -59,7 +59,7 @@ test('the shared IMC account (IMC in every initiative) sees Shams\' work in its 
   assert.ok(merged.queue.items.some((r: any) => r.initiativeId === 'shams' && r.isMine));
 });
 
-test('PMU: its stage cards and attention; monitoring blocks; filters for banks; ENCPC gets the provider directory panel', async () => {
+test('PMU: its stage cards and attention; monitoring blocks; filters for banks; ENCPC sees no banks', async () => {
   const d = await ws(c.pmu, 'pmu', '&tab=monitoring');
   const part = d.parts[0].data;
   const dash = (await c.pmu.get('/dashboard')).json.data;
@@ -69,8 +69,8 @@ test('PMU: its stage cards and attention; monitoring blocks; filters for banks; 
   assert.ok(part.monitoring.some((b: any) => b.key === 'by-state'));
   assert.equal(typeof part.draftsCount, 'number');
   const encpc = (await ws(c.encpc, 'encpc')).parts[0].data;
-  assert.equal(encpc.panels[0].key, 'providers');
-  assert.equal(encpc.panels[0].action.view, 'providers');
+  assert.deepEqual(encpc.panels, [], 'D14: no provider directory');
+  assert.deepEqual(encpc.tools, [], 'D15: no approvals page');
   assert.ok(!encpc.filters.some((f: any) => f.key === 'bankOrgId'), 'ENCPC does not see banks');
 });
 

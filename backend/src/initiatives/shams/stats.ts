@@ -23,8 +23,8 @@ export const PHASE_OF: Record<ApplicationState, NormalizedPhase> = {
 const FUNNEL: Array<{ key: string; labelAr: string; labelEn: string; reached: ApplicationState[] }> = [
   { key: 'submitted', labelAr: 'طلبات مُرسلة', labelEn: 'Submitted', reached: ['IMC_REVIEW'] },
   { key: 'imc_accepted', labelAr: 'قبول IMC', labelEn: 'Accepted by IMC', reached: ['ENCPC_REVIEW'] },
-  { key: 'compliant', labelAr: 'مطابقة ENCPC', labelEn: 'ENCPC compliant', reached: ['PROVIDER_SELECTION'] },
-  { key: 'offer', labelAr: 'عرض فني مقبول', labelEn: 'Technical offer accepted', reached: ['ELECTRICITY_UPLOAD'] },
+  { key: 'compliant', labelAr: 'مطابقة ENCPC', labelEn: 'ENCPC compliant', reached: ['OFFER_UPLOAD', 'PROVIDER_SELECTION'] },
+  { key: 'offer', labelAr: 'عرض فني مقبول', labelEn: 'Technical offer accepted', reached: ['ELECTRICITY_REVIEW', 'ELECTRICITY_UPLOAD'] },
   { key: 'electricity', labelAr: 'موافقة الكهرباء', labelEn: 'Electricity approval', reached: ['CONTRACT_OUTCOME'] },
   { key: 'contracted', labelAr: 'تم التعاقد', labelEn: 'Contracted', reached: ['CONTRACTED'] },
 ];
