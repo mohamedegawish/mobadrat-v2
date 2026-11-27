@@ -1,5 +1,5 @@
 // D18: the Ministry of Electricity sees an application once PMU accepts its offer — the factory's data and everything before —
-// and decides on it from its own platform dashboard. D15: its accounts (and ENCPC's) do not need an approvals page.
+// and decides on it from its own platform dashboard. D15 / D18: the administrator creates its accounts (and ENCPC's) directly.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { isolateTestEnv, startServer, clients, act, advanceTo, getApp, pdfVariant, q, PROVIDER_INFO, PROVIDERS_LINK, type Client, type Started } from './helpers.js';
@@ -64,18 +64,34 @@ test('an application that was already under review before the change is approved
   assert.equal((await getApp(c.factory, id)).state, 'CONTRACT_OUTCOME');
 });
 
-test('D15: the administrator creates ENCPC accounts directly; ministry account requests are decided by PMU', async () => {
+test('D15 / D18: the administrator creates ENCPC and ministry accounts directly; a request filed through the API waits for PMU', async () => {
   const encpc = await c.admin.post('/admin/users', { email: 'new.encpc@shams.local', nameAr: 'مراجع جديد', role: 'encpc_reviewer', organizationId: 'org-encpc' });
   assert.equal(encpc.status, 201, JSON.stringify(encpc.json));
   assert.equal((await q("SELECT 1 FROM users WHERE email = 'new.encpc@shams.local'")).length, 1);
 
   const el = await c.admin.post('/admin/users', { email: 'new.elec@shams.local', nameAr: 'مراجع كهرباء', role: 'electricity_reviewer', organizationId: 'org-electricity' });
-  assert.equal(el.status, 202, JSON.stringify(el.json));
-  const requestId = el.json.data.request.id;
-  assert.ok((await c.pmu.get('/account-requests')).json.data.items.some((r: any) => r.id === requestId));
+  assert.equal(el.status, 201, JSON.stringify(el.json));
+  assert.equal((await q("SELECT 1 FROM users WHERE email = 'new.elec@shams.local'")).length, 1);
+  assert.equal((await q("SELECT 1 FROM shams_account_requests WHERE email = 'new.elec@shams.local'")).length, 0, 'no request to approve');
+
+  // an integration key never creates an account by itself
+  const key = await c.admin.post('/admin/integration-keys', { name: 'accounts-key', scopes: ['manage_users'], rateLimitPerMinute: 100 });
+  assert.equal(key.status, 201, JSON.stringify(key.json));
+  const filed = await fetch(`${srv.integration}/users`, { method: 'POST', headers: { Authorization: `Bearer ${key.json.data.plaintextKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'api.elec@shams.local', nameAr: 'مراجع عبر الربط', role: 'electricity_reviewer', organizationId: 'org-electricity' }) });
+  assert.equal(filed.status, 202);
+  const requestId = ((await filed.json()) as any).data.request.id;
   assert.equal((await c.imc.post(`/account-requests/${requestId}/approve`, {})).status, 403);
   assert.equal((await c.pmu.post(`/account-requests/${requestId}/approve`, {})).status, 200);
-  assert.equal((await q("SELECT 1 FROM users WHERE email = 'new.elec@shams.local'")).length, 1);
+
+  // a suspended organization takes no new account
+  const { getDb } = await import('../db/database.js');
+  await getDb().prepare("UPDATE shams_organizations SET isActive = 0 WHERE id = 'org-electricity'").run();
+  try {
+    const off = await c.admin.post('/admin/users', { email: 'off.elec@shams.local', nameAr: 'مراجع', role: 'electricity_reviewer', organizationId: 'org-electricity' });
+    assert.ok(off.status >= 400, JSON.stringify(off.json));
+    assert.equal((await q("SELECT 1 FROM users WHERE email = 'off.elec@shams.local'")).length, 0);
+  } finally { await getDb().prepare("UPDATE shams_organizations SET isActive = 1 WHERE id = 'org-electricity'").run(); }
 });
 
 test('the approval file the ministry prepares is limited to its review: no upload before or after', async () => {

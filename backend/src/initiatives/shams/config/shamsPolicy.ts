@@ -149,7 +149,7 @@ export const shamsPolicy = {
    * D15 — لا صفحة «موافقات» لـENCPC: الأدمن ينشئ حسابات ENCPC مباشرةً (accountApproval.adminCreatesDirectly).
    * D16 — المصنع يسمّي مقدم الخدمة (الاسم والبريد، والهاتف اختياري) مع العرض الفني.
    * D17 — قبول PMU للعرض يُبلَّغ به صاحب المصنع ومقدم الخدمة؛ PMU تتابع قرارات الكهرباء وتُنبّه الجهات المتأخرة.
-   * D18 — وزارة الكهرباء (electricity_reviewer): ترى بيانات المصنع وكل ما سبق، وتقبل برفع الموافقة (إلى مسار التعاقد
+   * D18 — وزارة الكهرباء (electricity_reviewer): الأدمن ينشئ حساباتها مباشرةً؛ ترى بيانات المصنع وكل ما سبق، وتقبل برفع الموافقة (إلى مسار التعاقد
    * مباشرة) أو ترفض بملاحظات يرد عليها المصنع بمرفق.
    */
   correctionProof: { maxFilesPerRound: 10 },
@@ -161,10 +161,10 @@ export const shamsPolicy = {
    */
   accountApproval: {
     approverRolesForBank: ['pmu_reviewer'] as Role[],
-    /** D15 / D18: organizations with no approvals page of their own — PMU approves their requests. */
+    /** D15 / D18: organizations with no approvals page of their own — PMU decides their e-mail changes and API-filed requests. */
     approvedByPmu: ['encpc', 'electricity'] as const,
-    /** D15: a request the system administrator makes for these roles creates the account at once. */
-    adminCreatesDirectly: ['encpc_reviewer'] as Role[],
+    /** D15 / D18: a request the system administrator makes for these roles creates the account at once. */
+    adminCreatesDirectly: ['encpc_reviewer', 'electricity_reviewer'] as Role[],
     firstUserViaCliOnly: true,
   },
   /** مدة رابط تعيين كلمة المرور (بعد الموافقة على الحساب أو إعادة التعيين الإدارية) — لمرة واحدة. */

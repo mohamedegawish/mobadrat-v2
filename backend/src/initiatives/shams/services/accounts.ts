@@ -218,12 +218,14 @@ function firstUserViaCli(org: Organization): AppError {
 }
 
 /**
- * طلب حساب جديد. جهات القرار → طلب معلق (لا حساب، لا دخول، لا سر في الرد). حساب أدمن (شاشة الأدمن فقط) → يُنشأ مباشرة
+ * طلب حساب جديد. جهات القرار → طلب معلق (لا حساب، لا دخول، لا سر في الرد). حساب أدمن، وحسابات ENCPC ووزارة الكهرباء (D15/D18)
+ * حين يطلبها الأدمن (شاشة الأدمن فقط) → تُنشأ مباشرة
  * برابط تعيين على بريده، ويُبلَّغ الأدمن الآخرون (الأدمن لا يملك أي قرار على الطلبات).
  */
 export async function requestStaffAccount(actor: AuditActor, body: unknown, opts: AccountsPolicy) {
   const n = await cleanNewAccount(body, opts);
   if (await getUserByEmail(n.email) || await pendingRequestForEmail(n.email)) throw emailTaken();
+  if (!n.org.isActive) throw Errors.conflict('ORG_INACTIVE', 'الجهة موقوفة.', 'The organization is inactive.');
   if (n.role === 'system_admin' || (actor.actorType === 'user' && shamsPolicy.accountApproval.adminCreatesDirectly.includes(n.role))) {
     const user = await tx(async () => {
       const u = await createUser({ organizationId: n.org.id, role: n.role, email: n.email, nameAr: n.nameAr, nameEn: n.nameEn, phone: n.phone, passwordHash: '', emailVerified: false, createdBy: actor.actorUserId ?? null });
@@ -235,7 +237,6 @@ export async function requestStaffAccount(actor: AuditActor, body: unknown, opts
     kickNotificationWorker();
     return { user: toPublicUser(user), request: null };
   }
-  if (!n.org.isActive) throw Errors.conflict('ORG_INACTIVE', 'الجهة موقوفة.', 'The organization is inactive.');
   // The command line is for an organization's first user only where nobody else could approve it.
   if (shamsPolicy.accountApproval.firstUserViaCliOnly && !decidedByPmu(n.org) && (await activeUsersOf(n.org.id, n.role)).length === 0) throw firstUserViaCli(n.org);
   const request = await tx(async () => {

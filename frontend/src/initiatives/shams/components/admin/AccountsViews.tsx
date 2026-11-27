@@ -133,7 +133,7 @@ const CreateUser: React.FC<{ onClose: () => void; onCreated: (message: string) =
     try {
       const r = await api.adminCreateUser({ email: f.email.trim(), nameAr: f.nameAr.trim(), nameEn: f.nameEn.trim() || undefined, phone: f.phone.trim() || undefined, role: f.role, organizationId: orgId });
       await onCreated(r.request
-        ? t('سُجّل الطلب — بانتظار الموافقة (من الجهة نفسها، ولوزارة الكهرباء من PMU).', 'Request filed — awaiting approval (from the organization itself; the PMU for the Ministry of Electricity).')
+        ? t('سُجّل الطلب — بانتظار موافقة مستخدم نشط من الجهة نفسها.', 'Request filed — awaiting approval from an active user of the organization.')
         : t('أُنشئ الحساب — أُرسل رابط تعيين كلمة المرور إلى بريده.', 'Account created — a password setup link was sent to its email.'));
     } catch (e) { setError(errorText(e, isAr)); setErrs(errorDetails(e, isAr)); } finally { setBusy(false); }
   };
