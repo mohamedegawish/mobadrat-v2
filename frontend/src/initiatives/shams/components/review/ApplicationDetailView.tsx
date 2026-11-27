@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BadgeCheck, Building, Building2, FileStack, Gavel, History, Landmark, ShieldAlert, Wrench } from 'lucide-react';
+import { Building, Building2, FileStack, Gavel, Landmark, ShieldAlert } from 'lucide-react';
 import { api, type AllowedAction, type ApplicationDetail } from '../../api';
 import { errorText, store, useStore } from '../../store/state';
 import { useAsync, formatDate, formatNumber } from '../../hooks/useAsync';
@@ -7,10 +7,10 @@ import { Loading, ErrorState, NotAvailable } from '../common/StateViews';
 import { StateBadge } from '../ui/StateBadge';
 import { ErrorBox } from '../ui/ErrorBox';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
-import { DataSections, DocumentsList, FinalOutcomeCard, StageTracker, TaskCard, TransitionTimeline, contractPathLabel, factoryTarget } from '../application/shared';
+import { DataSections, DocumentsList, FinalOutcomeCard, StageTracker, TaskCard, contractPathLabel, factoryTarget } from '../application/shared';
 import { useToast } from '../common/ToastSystem';
 
-type Tab = 'data' | 'documents' | 'history' | 'stages';
+type Tab = 'data' | 'documents';
 
 /** تفاصيل الطلب لكل الأدوار — يعرض فقط ما يرجعه السيرفر حسب قواعد الرؤية، والأزرار من allowedActions. */
 export const ApplicationDetailView: React.FC = () => {
@@ -29,6 +29,8 @@ export const ApplicationDetailView: React.FC = () => {
   // لا تعرضها هذه اللوحة، فتُنفَّذ من صفحاتها عبر «تنفيذ المطلوب» — وإلا أُرسلت فارغة وفشلت في السيرفر.
   const decisions = app.allowedActions.filter((a) => (isFactory ? a.action === 'withdraw' : a.action !== 'withdraw'));
   const back = () => store.navigate(isFactory ? 'factory-dashboard' : 'work-queue');
+  // D10: the closing decision's own words (IMC rejection, withdrawal) — the final card is where they are read.
+  const closingReason = [...app.transitions].reverse().find((x) => x.toState === app.state && x.fromState !== x.toState)?.reason || null;
 
   return (
     <div className="container-custom page">
@@ -50,7 +52,7 @@ export const ApplicationDetailView: React.FC = () => {
             state={app.state} closedAt={app.closedAt} contractPath={app.contractPath}
             bankName={app.bank ? (isAr ? app.bank.nameAr : app.bank.nameEn) : null}
             contractDate={app.contractPath === 'distribution' ? null : app.bankReferral?.contractDate ?? null}
-            reason={app.state === 'REJECTED' ? null : app.contractPath === 'distribution' ? (app.distributionContract?.decisionNotes || null) : app.bankReferral?.notContractedReason ?? null}
+            reason={app.state === 'REJECTED' || app.state === 'WITHDRAWN' ? closingReason : app.contractPath === 'distribution' ? (app.distributionContract?.decisionNotes || null) : app.bankReferral?.notContractedReason ?? null}
           >
             {app.contractPath === 'distribution' && app.documents.some((d) => d.kind === 'distributionApprovalFile')
               ? <div style={{ marginTop: '0.5rem' }}><DocumentsList app={app} kinds={['distributionApprovalFile']} /></div> : null}
@@ -83,66 +85,20 @@ export const ApplicationDetailView: React.FC = () => {
       {decisions.length ? <DecisionPanel app={app} actions={decisions} onDone={async () => res.setData(await api.getApplication(app.id))} /> : null}
 
       <div className="tabs" role="tablist" style={{ marginTop: '1rem' }}>
-        {([['data', t('البيانات', 'Data'), <Building key="i" size={14} />], ['documents', t('المستندات', 'Documents'), <FileStack key="i" size={14} />],
-          ['stages', t('المراحل اللاحقة', 'Later stages'), <Landmark key="i" size={14} />], ['history', t('السجل', 'History'), <History key="i" size={14} />]] as const).map(([k, l, icon]) => (
+        {([['data', t('البيانات', 'Data'), <Building key="i" size={14} />], ['documents', t('المستندات', 'Documents'), <FileStack key="i" size={14} />]] as const).map(([k, l, icon]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} className={`tab${tab === k ? ' active' : ''}`} onClick={() => setTab(k)}>{icon} {l}</button>
         ))}
       </div>
 
       {tab === 'data' ? (
         <div className="stack">
-          {app.registry ? (
-            <div className="card">
-              <h3 style={{ marginTop: 0, fontSize: '0.98rem' }}><BadgeCheck size={16} style={{ verticalAlign: '-3px' }} /> {t('نتيجة التحقق من السجل الصناعي', 'Industrial registry verification')}</h3>
-              <dl className="kv">
-                <dt>{t('النتيجة', 'Result')}</dt><dd>{app.registry.result === 'valid' ? t('صحيح ومسجل', 'Valid') : app.registry.result === 'invalid' ? t('غير صحيح', 'Invalid')
-                  : app.registry.result === 'manual' ? t('مراجعة يدوية — لم يُتحقق منه آليًا', 'Manual check — not verified automatically') : t('تعذر التحقق', 'Unavailable')}</dd>
-                <dt>{t('رقم السجل', 'Registry number')}</dt><dd className="num-ltr">{app.registry.registryNumber}</dd>
-                <dt>{t('وقت التحقق', 'Checked at')}</dt><dd>{formatDate(app.registry.checkedAt, isAr, true)}</dd>
-                {/* M1: بيانات السجل بتسميات عربية، بجانب بيانات الطلب */}
-                {app.registry.fields.filter((f) => f.key !== 'registryNumber').map((f) => (
-                  <React.Fragment key={f.key}><dt>{isAr ? f.labelAr : f.labelEn}</dt><dd>{isAr ? f.valueAr : f.valueEn}</dd></React.Fragment>
-                ))}
-                {app.registry.nameCheck ? <><dt>{t('اسم الشركة في الطلب', 'Company name in the application')}</dt><dd>{app.registry.nameCheck.applicationName}</dd></> : null}
-              </dl>
-              {app.registry.result === 'manual' ? <RegistryManualNotice /> : null}
-              {/* I3: تمييز عدم تطابق الاسم — للمراجع، دون منع آلي */}
-              {app.registry.nameCheck && !app.registry.nameCheck.matches ? (
-                <div className="error-box" style={{ marginTop: '0.6rem' }} data-testid="name-mismatch">
-                  <ShieldAlert size={15} style={{ verticalAlign: '-3px' }} /> {t('اسم المنشأة في السجل لا يطابق اسم الشركة في الطلب — تحقق من ملكية رقم السجل قبل القرار.', 'The facility name in the registry differs from the company name — verify ownership of the registry number before deciding.')}
-                </div>
-              ) : app.registry.nameCheck ? <p className="form-helper">{t('اسم المنشأة في السجل يطابق اسم الشركة.', 'The registry name matches the company name.')}</p> : null}
-            </div>
-          ) : null}
+          <ContractPathPanel app={app} />
           <DataSections app={app} />
         </div>
       ) : null}
 
       {tab === 'documents' ? <div className="card"><DocumentsList app={app} /></div> : null}
 
-      {tab === 'stages' ? <LaterStages app={app} /> : null}
-
-      {tab === 'history' ? (
-        <div className="grid-2">
-          <div className="card">
-            <h3 style={{ marginTop: 0, fontSize: '0.98rem' }}>{t('السجل التاريخي', 'History')}</h3>
-            {contractPathLabel(app.contractPath, t) ? <p className="form-helper" data-testid="history-path">{t('مسار التعاقد المختار', 'Chosen contracting path')}: <b>{contractPathLabel(app.contractPath, t)}</b></p> : null}
-            <TransitionTimeline items={app.transitions} documents={app.documents} />
-          </div>
-          <div className="card">
-            <h3 style={{ marginTop: 0, fontSize: '0.98rem' }}>{t('النواقص المطلوبة', 'Requested corrections')}</h3>
-            {app.deficiencies.length ? (
-              <ul className="home-list">{app.deficiencies.map((d) => <li key={d.id}><b>{isAr ? d.labelAr : d.labelEn}</b> — {d.note} <span className={`badge ${d.resolved ? 'badge-approved' : 'badge-pending'}`}>{d.resolved ? t('مُستوفى', 'Resolved') : t('مفتوح', 'Open')}</span></li>)}</ul>
-            ) : <p className="text-muted" style={{ fontSize: '0.85rem' }}>{t('لا توجد.', 'None.')}</p>}
-            {app.returnCounts ? (
-              <>
-                <h4 style={{ fontSize: '0.9rem' }}>{t('عدد مرات الإرجاع لكل مرحلة', 'Returns per stage')}</h4>
-                <dl className="kv">{Object.entries(app.returnCounts).map(([s, n]) => <React.Fragment key={s}><dt><StateBadge state={s as never} /></dt><dd>{n}</dd></React.Fragment>)}</dl>
-              </>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 };
@@ -174,77 +130,46 @@ const ConflictsPanel: React.FC<{ app: ApplicationDetail }> = ({ app }) => {
   );
 };
 
-const LaterStages: React.FC<{ app: ApplicationDetail }> = ({ app }) => {
+/** «مسار التعاقد»: المسار المختار، وبنك المصنع ونتيجة تعاقده، أو موافقة شركة التوزيع. لا يظهر قبل اختيار المسار. */
+const ContractPathPanel: React.FC<{ app: ApplicationDetail }> = ({ app }) => {
   const { isAr, t, meta } = useStore();
-  const hidden = !app.provider && !app.data.electricity && !app.bankReferral && !app.distributionContract;
-  if (hidden) return <div className="card"><p className="text-muted">{t('لا توجد بيانات مراحل لاحقة متاحة لك.', 'No later-stage data available to you.')}</p></div>;
+  const path = contractPathLabel(app.contractPath, t);
+  if (!path && !app.bankReferral && !app.distributionContract) return null;
   return (
-    <div className="grid-2">
-      {app.provider ? (
-        <div className="card">
-          <h3 style={{ marginTop: 0, fontSize: '0.98rem' }}><Wrench size={16} style={{ verticalAlign: '-3px' }} /> {t('مقدم الخدمة', 'Service provider')}</h3>
-          <dl className="kv"><dt>{t('الاسم', 'Name')}</dt><dd>{isAr ? app.provider.nameAr : app.provider.nameEn || app.provider.nameAr}</dd>
-            <dt>{t('حالة الاعتماد', 'Approval status')}</dt><dd><ProviderStatus status={app.provider.status} /></dd>
-            <dt>{t('التواصل', 'Contact')}</dt><dd dir="ltr">{[app.provider.contactName, app.provider.contactPhone, app.provider.contactEmail].filter(Boolean).join(' · ') || '—'}</dd></dl>
-          {/* I11: بعد قبول العرض تنبيه فقط — لا إجراء آلي */}
-          {!app.provider.selectable ? <div className="error-box" data-testid="provider-not-approved">{t('مقدم الخدمة المختار لهذا الطلب لم يعد متاحًا (موقوف أو غير مفعّل).', 'The service provider chosen for this application is no longer available (suspended or deactivated).')}</div> : null}
-          <StageFiles app={app} kind="technicalOfferFile" label={t('العرض الفني', 'Technical offer')} />
-        </div>
-      ) : null}
-      {app.data.electricity ? (
-        <div className="card">
-          <h3 style={{ marginTop: 0, fontSize: '0.98rem' }}>{t('موافقة الكهرباء', 'Electricity approval')}</h3>
-          <dl className="kv"><dt>{t('شركة التوزيع', 'Distribution company')}</dt><dd>{String(app.data.electricity.distributionCompany ?? '—')}</dd></dl>
-          <StageFiles app={app} kind="electricityApprovalFile" label={t('ملف موافقة الكهرباء', 'Electricity approval file')} />
-        </div>
-      ) : null}
-      {app.bankReferral ? (
-        <div className="card">
-          <h3 style={{ marginTop: 0, fontSize: '0.98rem' }}><Landmark size={16} style={{ verticalAlign: '-3px' }} /> {t('البنك المختار ونتيجة التعاقد', 'Chosen bank & contract outcome')}</h3>
-          <dl className="kv" data-testid="bank-outcome">
-            <dt>{t('البنك المختار', 'Chosen bank')}</dt><dd>{app.bank ? (isAr ? app.bank.nameAr : app.bank.nameEn) : '—'}</dd>
-            <dt>{t('تاريخ اختيار البنك', 'Bank chosen on')}</dt><dd>{formatDate(app.bankReferral.referredAt, isAr)}</dd>
-            {/* سجل تاريخي فقط: نتيجة «دراسة البنك» من قبل إلغاء هذه المرحلة (G-02) */}
-            {app.bankReferral.studyResult ? <><dt>{t('نتيجة دراسة البنك (مرحلة ملغاة)', 'Bank study result (retired step)')}</dt><dd>{app.bankReferral.studyResult === 'approved' ? t('موافقة', 'Approved') : t('عدم موافقة', 'Declined')}</dd></> : null}
-            <dt>{t('نتيجة التعاقد', 'Contract outcome')}</dt><dd>{app.bankReferral.contractStatus === 'contracted' ? t('تم التعاقد', 'Contracted') : app.bankReferral.contractStatus === 'not_contracted' ? t('لم يتم التعاقد', 'Not contracted') : '—'}</dd>
-            {app.bankReferral.contractAmount !== null ? (
-              <><dt>{t('قيمة التعاقد — مسجلة من المصنع', 'Contract amount — recorded by the factory')}</dt>
-                <dd>{formatNumber(app.bankReferral.contractAmount, isAr)} {t('جنيه', 'EGP')}
-                  {app.bankReferral.contractAmountAboveAlert ? <div className="overdue-flag" data-testid="amount-alert">{t(`أعلى من ${formatNumber(meta?.policy.contractAmountAlertEGP ?? 0, isAr)} جنيه (حد وثيقة المبادرة) — للمراجعة`, 'Above the initiative limit — for review')}</div> : null}
-                </dd></>
+    <>
+      <div className="card" data-testid="contract-path">
+        <h3 style={{ marginTop: 0, fontSize: '0.98rem' }}><Landmark size={16} style={{ verticalAlign: '-3px' }} /> {t('مسار التعاقد', 'Contracting path')}</h3>
+        {path ? <p className="form-helper" data-testid="contract-path-chosen">{t('مسار التعاقد المختار', 'Chosen contracting path')}: <b>{path}</b></p> : null}
+        {app.bankReferral ? (
+          <>
+            <dl className="kv" data-testid="bank-outcome">
+              <dt>{t('البنك المختار', 'Chosen bank')}</dt><dd>{app.bank ? (isAr ? app.bank.nameAr : app.bank.nameEn) : '—'}</dd>
+              <dt>{t('تاريخ اختيار البنك', 'Bank chosen on')}</dt><dd>{formatDate(app.bankReferral.referredAt, isAr)}</dd>
+              {/* سجل تاريخي فقط: نتيجة «دراسة البنك» من قبل إلغاء هذه المرحلة (G-02) */}
+              {app.bankReferral.studyResult ? <><dt>{t('نتيجة دراسة البنك (مرحلة ملغاة)', 'Bank study result (retired step)')}</dt><dd>{app.bankReferral.studyResult === 'approved' ? t('موافقة', 'Approved') : t('عدم موافقة', 'Declined')}</dd></> : null}
+              <dt>{t('نتيجة التعاقد', 'Contract outcome')}</dt><dd>{app.bankReferral.contractStatus === 'contracted' ? t('تم التعاقد', 'Contracted') : app.bankReferral.contractStatus === 'not_contracted' ? t('لم يتم التعاقد', 'Not contracted') : '—'}</dd>
+              {app.bankReferral.contractAmount !== null ? (
+                <><dt>{t('قيمة التعاقد — مسجلة من المصنع', 'Contract amount — recorded by the factory')}</dt>
+                  <dd>{formatNumber(app.bankReferral.contractAmount, isAr)} {t('جنيه', 'EGP')}
+                    {app.bankReferral.contractAmountAboveAlert ? <div className="overdue-flag" data-testid="amount-alert">{t(`أعلى من ${formatNumber(meta?.policy.contractAmountAlertEGP ?? 0, isAr)} جنيه (حد وثيقة المبادرة) — للمراجعة`, 'Above the initiative limit — for review')}</div> : null}
+                  </dd></>
+              ) : null}
+              {app.bankReferral.contractDate ? <><dt>{t('تاريخ التعاقد', 'Contract date')}</dt><dd className="num-ltr">{app.bankReferral.contractDate}</dd></> : null}
+              {app.bankReferral.notContractedReason ? <><dt>{t('سبب عدم التعاقد', 'Reason')}</dt><dd>{app.bankReferral.notContractedReason}</dd></> : null}
+              {app.bankReferral.contractNotes ? <><dt>{t('ملاحظات', 'Notes')}</dt><dd>{app.bankReferral.contractNotes}</dd></> : null}
+            </dl>
+            {app.documents.some((d) => d.kind === 'contractFile') ? (
+              <div style={{ marginTop: '0.75rem' }} data-testid="stage-files-contractFile">
+                <div className="form-label">{t('مستند إثبات التعاقد', 'Contract evidence')}</div>
+                <DocumentsList app={app} kinds={['contractFile']} />
+              </div>
             ) : null}
-            {app.bankReferral.contractDate ? <><dt>{t('تاريخ التعاقد', 'Contract date')}</dt><dd className="num-ltr">{app.bankReferral.contractDate}</dd></> : null}
-            {app.bankReferral.notContractedReason ? <><dt>{t('سبب عدم التعاقد', 'Reason')}</dt><dd>{app.bankReferral.notContractedReason}</dd></> : null}
-            {app.bankReferral.contractNotes ? <><dt>{t('ملاحظات', 'Notes')}</dt><dd>{app.bankReferral.contractNotes}</dd></> : null}
-          </dl>
-          <StageFiles app={app} kind="contractFile" label={t('مستند إثبات التعاقد', 'Contract evidence')} />
-        </div>
-      ) : null}
-      {app.distributionContract ? <DistributionPanel app={app} /> : null}
-      {app.referralHistory.length ? (
-        <div className="card" data-testid="referral-history">
-          <h3 style={{ marginTop: 0, fontSize: '0.98rem' }}>{t('إحالات بنكية سابقة (سجل تاريخي)', 'Earlier bank referrals (history)')}</h3>
-          <ul className="home-list">
-            {app.referralHistory.map((h) => (
-              <li key={h.endedAt}><b>{isAr ? h.bankNameAr : h.bankNameEn}</b> — {formatDate(h.referredAt, isAr)} ← {formatDate(h.endedAt, isAr)}{h.endReason ? ` — ${h.endReason}` : ''}</li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-    </div>
-  );
-};
-
-/** ملف المرحلة تحت بياناتها: كل النسخ (الأحدث أولًا)، أو «لم يُرفع بعد» — و«لا يوجد ملف» إذا أُغلق الطلب دونه. */
-const StageFiles: React.FC<{ app: ApplicationDetail; kind: string; label: string }> = ({ app, kind, label }) => {
-  const { t } = useStore();
-  const has = app.documents.some((d) => d.kind === kind);
-  return (
-    <div style={{ marginTop: '0.75rem' }} data-testid={`stage-files-${kind}`}>
-      <div className="form-label">{label}</div>
-      {has ? <DocumentsList app={app} kinds={[kind]} />
-        : <p className="text-muted" style={{ fontSize: '0.85rem', margin: 0 }}>{app.closedAt ? t('لا يوجد ملف.', 'No file.') : t('لم يُرفع بعد.', 'Not uploaded yet.')}</p>}
-    </div>
+          </>
+        ) : null}
+      </div>
+      {/* during its review the distribution panel already sits above the decision */}
+      {app.distributionContract && app.state !== 'DISTRIBUTION_REVIEW' ? <DistributionPanel app={app} /> : null}
+    </>
   );
 };
 
@@ -279,7 +204,6 @@ const DistributionPanel: React.FC<{ app: ApplicationDetail }> = ({ app }) => {
   );
 };
 
-/** أزرار القرار من allowedActions + نموذج القرار (سبب / نواقص) + تأكيد. لا قرارات بنكية (G-02). */
 /** The registry API is not connected yet (REGISTRY_ADAPTER=manual): the number was not verified — IMC checks it by hand. */
 const RegistryManualNotice: React.FC = () => {
   const { t } = useStore();
@@ -292,6 +216,7 @@ const RegistryManualNotice: React.FC = () => {
   );
 };
 
+/** أزرار القرار من allowedActions + نموذج القرار (سبب / نواقص) + تأكيد. لا قرارات بنكية (G-02). */
 const DecisionPanel: React.FC<{ app: ApplicationDetail; actions: AllowedAction[]; onDone: () => Promise<void> }> = ({ app, actions, onDone }) => {
   const { isAr, t, meta } = useStore();
   const { toast } = useToast();

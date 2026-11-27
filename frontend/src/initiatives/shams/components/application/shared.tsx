@@ -1,6 +1,6 @@
 import React from 'react';
 import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, Clock, Download, FileText, Hourglass, XCircle } from 'lucide-react';
-import { api, type ApplicationDetail, type ApplicationDocument, type ApplicationState, type ContractPath, type CurrentTask, type TransitionEntry } from '../../api';
+import { api, type ApplicationDetail, type ApplicationDocument, type ApplicationState, type ContractPath, type CurrentTask } from '../../api';
 import { errorText, store, useStore, type View } from '../../store/state';
 import { formatBytes, formatDate, formatNumber } from '../../hooks/useAsync';
 import { saveFile } from '../../utils/reports';
@@ -14,8 +14,11 @@ export function factoryTarget(state: ApplicationState): View {
 }
 
 const STEPS = [
-  { ar: 'التسجيل', en: 'Registration' }, { ar: 'IMC', en: 'IMC' }, { ar: 'ENCPC', en: 'ENCPC' }, { ar: 'مقدم الخدمة', en: 'Provider' },
-  { ar: 'العرض الفني', en: 'Offer' }, { ar: 'مراجعة العرض', en: 'Offer review' }, { ar: 'الكهرباء', en: 'Electricity' }, { ar: 'مسار التعاقد', en: 'Contracting path' }, { ar: 'التعاقد', en: 'Contract' },
+  { ar: 'التسجيل — المصنع', en: 'Registration — Factory' }, { ar: 'مراجعة الطلب — IMC', en: 'Application review — IMC' },
+  { ar: 'المراجعة الفنية — ENCPC', en: 'Technical review — ENCPC' }, { ar: 'اختيار مقدم الخدمة — المصنع', en: 'Provider selection — Factory' },
+  { ar: 'رفع العرض الفني — المصنع', en: 'Offer upload — Factory' }, { ar: 'مراجعة العرض — PMU', en: 'Offer review — PMU' },
+  { ar: 'موافقة الكهرباء — المصنع / PMU', en: 'Electricity approval — Factory / PMU' }, { ar: 'مسار التعاقد — المصنع', en: 'Contracting path — Factory' },
+  { ar: 'التعاقد — المصنع', en: 'Contract — Factory' },
 ];
 
 /** شريط المراحل التسع. */
@@ -95,7 +98,7 @@ export const FinalOutcomeCard: React.FC<{
   );
 };
 
-/** «المطلوب منك الآن» أو «بانتظار الجهة». */
+/** «المطلوب منك الآن»، أو لمن ينتظر: الإجراء ثم الجهة المسؤولة عنه (D11). */
 export const TaskCard: React.FC<{ task: CurrentTask | null; onAct?: () => void; actLabel?: string }> = ({ task, onAct, actLabel }) => {
   const { isAr, t } = useStore();
   const Arrow = isAr ? ArrowLeft : ArrowRight;
@@ -105,8 +108,8 @@ export const TaskCard: React.FC<{ task: CurrentTask | null; onAct?: () => void; 
     <div className={`task-card${task.isMine ? '' : ' is-waiting'}`} data-testid="current-task">
       <span className="task-card-icon">{task.isMine ? <AlertTriangle size={20} /> : <Hourglass size={20} />}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <p className="task-card-title">{task.isMine ? t('المطلوب منك الآن', 'Your action is needed') : t('بانتظار', 'Waiting for')} {task.isMine ? '' : responsible}</p>
-        <p className="task-card-sub">{isAr ? task.labelAr : task.labelEn}{!task.isMine ? '' : ` · ${t('الجهة المسؤولة', 'Responsible')}: ${responsible}`}</p>
+        <p className="task-card-title">{task.isMine ? t('المطلوب منك الآن', 'Your action is needed') : `${isAr ? task.labelAr : task.labelEn} — ${responsible}`}</p>
+        <p className="task-card-sub">{task.isMine ? `${isAr ? task.labelAr : task.labelEn} — ${responsible}` : t('بانتظار تنفيذ الجهة المسؤولة', 'Waiting for the responsible party')}</p>
         {task.overdue ? <p className="overdue-flag" style={{ margin: '0.3rem 0 0' }}><Clock size={13} /> {t('متأخر عن المهلة', 'Overdue')} ({formatDate(task.dueAt, isAr)})</p> : null}
         {task.deficiencies.length ? (
           <p className="task-card-sub" style={{ marginTop: '0.45rem', fontWeight: 700 }} data-testid="returned-notice">{task.isMine ? t('أُعيد الطلب إليك للتصحيح — ليس رفضًا نهائيًا. المطلوب:', 'Returned to you for correction — not a final rejection. Required:') : t('أُعيد الطلب للمصنع للتصحيح:', 'Returned to the factory for correction:')}</p>
@@ -119,75 +122,6 @@ export const TaskCard: React.FC<{ task: CurrentTask | null; onAct?: () => void; 
       </div>
       {onAct && task.isMine ? <button type="button" className="btn btn-primary" onClick={onAct} data-testid="task-go">{actLabel ?? t('ابدأ', 'Start')} <Arrow size={15} /></button> : null}
     </div>
-  );
-};
-
-const RETURN_ACTIONS = new Set(['request_correction', 'non_compliant']);
-/** إجراءات ملغاة تظهر في السجل التاريخي فقط (G-02: لا دراسة بنكية ولا إعادة إحالة). */
-const RETIRED_ACTIONS: Record<string, { ar: string; en: string }> = {
-  record_result: { ar: 'نتيجة دراسة البنك (مرحلة ملغاة)', en: 'Bank study result (retired step)' },
-  reassign_bank: { ar: 'إعادة الإحالة لبنك آخر (مرحلة ملغاة)', en: 'Bank reassignment (retired step)' },
-  bank_study_retired: { ar: 'نقل آلي: إلغاء مرحلة دراسة البنك', en: 'Automatic move: bank study retired' },
-  // System entries (backend SYSTEM_ACTION_LABELS): provider suspension (D6/D7), registry dispute decisions (D4), stopped bank (D2).
-  provider_suspended_return: { ar: 'إرجاع آلي لرفع العرض (إيقاف مقدم الخدمة)', en: 'Automatic return to offer upload (provider suspended)' },
-  provider_suspended_reselect: { ar: 'عودة آلية لاختيار مقدم الخدمة (إيقاف مقدم الخدمة)', en: 'Automatic return to provider selection (provider suspended)' },
-  provider_suspended_warning: { ar: 'تنبيه: أُوقف مقدم الخدمة المختار — لا تغيير في مسار الطلب', en: 'Warning: the chosen provider was suspended — the application continues' },
-  registry_dispute_reject: { ar: 'إغلاق آلي بقرار PMU في نزاع رقم السجل', en: 'Closed by the PMU registry dispute decision' },
-  registry_dispute_decided: { ar: 'قرار PMU في نزاع رقم السجل', en: 'PMU registry dispute decision' },
-  bank_released: { ar: 'تحرير الطلب من بنك موقوف — اختر بنكًا آخر', en: 'Released from a stopped bank — choose another bank' },
-};
-
-/**
- * السجل التاريخي (حسب ما يسمح به السيرفر لكل دور): القرارات والانتقالات، ومعها — إن مُرّرت — أحداث رفع المستندات ونسخها
- * (من رفعها ومتى)، مرتبة زمنيًا من الأحدث. اختيار مسار التعاقد يظهر بشارة واضحة.
- */
-export const TransitionTimeline: React.FC<{ items: TransitionEntry[]; documents?: ApplicationDocument[] }> = ({ items, documents }) => {
-  const { isAr, t, meta } = useStore();
-  if (!items.length && !documents?.length) return <p className="text-muted" style={{ fontSize: '0.85rem' }}>{t('لا توجد أحداث مسموح بعرضها.', 'No visible events.')}</p>;
-  // التسمية بحسب الفعل والحالة معًا: «accept» عند IMC غير «accept» عند PMU.
-  const actionLabel = (a: string, from: string) => (RETIRED_ACTIONS[a] ? (isAr ? RETIRED_ACTIONS[a].ar : RETIRED_ACTIONS[a].en)
-    : (meta?.transitions.find((x) => x.action === a && x.from === from) ?? meta?.transitions.find((x) => x.action === a))?.[isAr ? 'labelAr' : 'labelEn'] ?? a);
-  type Row = { kind: 'transition'; at: string; i: number; e: TransitionEntry } | { kind: 'document'; at: string; i: number; d: ApplicationDocument };
-  const rows: Row[] = [
-    ...items.map((e, i) => ({ kind: 'transition' as const, at: e.createdAt, i, e })),
-    ...(documents ?? []).map((d) => ({ kind: 'document' as const, at: d.createdAt, i: -1, d })),
-  ].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : b.i - a.i));
-  return (
-    <ol className="timeline">
-      {rows.map((row) => {
-        if (row.kind === 'document') {
-          const d = row.d;
-          return (
-            <li key={`doc-${d.id}`} className="timeline-item is-ok" data-testid="timeline-document">
-              <span className="timeline-dot" aria-hidden />
-              <div className="timeline-title"><FileText size={13} aria-hidden style={{ verticalAlign: '-2px' }} /> {t('رفع مستند', 'Document uploaded')}: {isAr ? d.labelAr : d.labelEn} — {t('نسخة', 'v')} {formatNumber(d.version, isAr)}</div>
-              <div className="timeline-meta">
-                {formatDate(d.createdAt, isAr, true)}{d.uploadedByName ? ` · ${d.uploadedByName}` : ''}
-                {!d.submitted ? ` · ${t('لم تُرسل بعد', 'not submitted yet')}` : ''}{!d.isCurrent ? ` · ${t('نسخة سابقة', 'previous version')}` : ''}
-              </div>
-            </li>
-          );
-        }
-        const e = row.e;
-        const cls = e.toState === 'REJECTED' || e.toState === 'CLOSED_NOT_CONTRACTED' ? 'is-reject' : RETURN_ACTIONS.has(e.action) || e.fromState === e.toState ? 'is-return' : 'is-ok';
-        const path = e.action === 'select_bank' ? 'bank' : e.action === 'select_distribution_path' ? 'distribution' : null;
-        return (
-          <li key={e.id} className={`timeline-item ${cls}`}>
-            <span className="timeline-dot" aria-hidden />
-            <div className="timeline-title">
-              {e.fromState === e.toState && e.registryResult
-                ? t(`تعذر التحقق من السجل الصناعي (${e.registryResult === 'invalid' ? 'رقم غير صحيح' : 'الخدمة غير متاحة'})`, `Registry check failed (${e.registryResult})`)
-                : `${actionLabel(e.action, e.fromState)}: ${isAr ? e.toLabelAr : e.toLabelEn}`}
-              {path ? <> <span className="badge badge-info" data-testid="timeline-path">{contractPathLabel(path, t)}</span></> : null}
-            </div>
-            <div className="timeline-meta">
-              {formatDate(e.createdAt, isAr, true)} · {e.actorName || e.actorRole} · {t('محاولة', 'attempt')} {formatNumber(e.attempt, isAr)}
-            </div>
-            {e.reason ? <div className="timeline-note">{e.reason}</div> : null}
-          </li>
-        );
-      })}
-    </ol>
   );
 };
 

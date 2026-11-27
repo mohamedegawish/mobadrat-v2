@@ -7,7 +7,7 @@ import { useAsync, formatDate } from '../../hooks/useAsync';
 import { Loading, Empty, ErrorState } from '../common/StateViews';
 import { StateBadge } from '../ui/StateBadge';
 import { ErrorBox } from '../ui/ErrorBox';
-import { FinalOutcomeCard, StageTracker, TaskCard, TransitionTimeline, factoryTarget } from '../application/shared';
+import { FinalOutcomeCard, StageTracker, TaskCard, factoryTarget } from '../application/shared';
 import { WithdrawDialog } from './WithdrawDialog';
 
 /** «لوحتي»: حالة الطلب الحالي، الخط الزمني، والمطلوب الآن. */
@@ -129,10 +129,6 @@ export const FactoryDashboardView: React.FC = () => {
             onAct={() => store.navigate(factoryTarget(app.state), app.id)}
             actLabel={app.state === 'DRAFT' ? t('إكمال الطلب', 'Continue application') : t('تنفيذ المطلوب', 'Do it now')}
           />
-          <div className="card">
-            <h3 style={{ marginTop: 0, fontSize: '1rem' }}>{t('الخط الزمني', 'Timeline')}</h3>
-            <TransitionTimeline items={app.transitions} />
-          </div>
         </div>
       )}
 
