@@ -123,28 +123,11 @@ export const HomeHero: React.FC<HomeHeroProps> = ({
               <div
                 key={isAr ? s.labelAr : s.labelEn}
                 className="metric-bento"
-                style={{
-                  flex: '1 1 120px',
-                  padding: '0.7rem 0.9rem',
-                  border: '1px solid var(--border-subtle)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '0.1rem',
-                }}
               >
-                <strong
-                  className="num-ltr"
-                  style={{
-                    fontSize: '1.25rem',
-                    fontWeight: 800,
-                    color: 'var(--egypt-red)',
-                    fontVariantNumeric: 'tabular-nums',
-                    lineHeight: 1.2,
-                  }}
-                >
+                <strong className="num-ltr">
                   {s.value}
                 </strong>
-                <span style={{ fontSize: '0.74rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+                <span className="metric-label">
                   {isAr ? s.labelAr : s.labelEn}
                 </span>
               </div>
