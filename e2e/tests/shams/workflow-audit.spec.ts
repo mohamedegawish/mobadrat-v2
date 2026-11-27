@@ -1,10 +1,10 @@
 // Workflow audit (docs/review/workflow-audit): the confirmed business decisions as the factory sees them.
-// G-01 bank chosen only after PMU accepts the electricity approval; G-02 no bank account/step; G-03 contract evidence;
+// G-01 bank chosen only after the electricity approval; G-02 no bank account/step; G-03 contract evidence;
 // G-09 closed applications stay in history, the result card stays, a new application can start, no contradictory message.
 // Earlier stages are seeded through the API (each has its own UI spec); every decision under test is made through the UI.
 import { test, expect, type Page } from '@playwright/test';
 import { login, open, confirm, pdfFile } from './helpers';
-import { act, apiLogin, closeOpenApplication, seedCompleteDraft, submitApplication, type ApiSession } from './seed';
+import { act, apiLogin, closeOpenApplication, electricityAccept, seedCompleteDraft, submitApplication, type ApiSession } from './seed';
 
 const uniq = () => `${Date.now() % 1_000_000}`;
 const BANK_A = 'org-bank-demo-a';
@@ -16,28 +16,24 @@ async function reviewers(request: Req) {
 }
 const ok = (r: { status: number; json: unknown }, s: string) => { if (r.status !== 200) throw new Error(`${s}: ${r.status} ${JSON.stringify(r.json)}`); };
 
-/** Seeds an application up to the electricity upload (offer accepted). */
-async function toElectricityUpload(request: Req, factory: ApiSession, tag: string): Promise<string> {
+/** Seeds an application up to the ministry's review (offer accepted). */
+async function toElectricityReview(request: Req, factory: ApiSession, tag: string): Promise<string> {
   const { imc, encpc, pmu } = await reviewers(request);
   await closeOpenApplication(factory);
   const id = await seedCompleteDraft(factory, `IND-E2E-WA-${tag}-${uniq()}`);
   ok(await submitApplication(factory, id), 'submit');
   ok(await act(imc, id, 'accept'), 'imc');
   ok(await act(encpc, id, 'compliant'), 'encpc');
-  ok(await act(factory, id, 'select_provider', { providerId: 'sp-demo-1' }), 'provider');
   if ((await factory.upload(`/applications/${id}/documents`, 'technicalOfferFile', 'offer.pdf')) !== 201) throw new Error('offer');
   ok(await act(factory, id, 'submit_offer'), 'offer submit');
   ok(await act(pmu, id, 'accept'), 'pmu offer');
   return id;
 }
 
-/** Seeds up to the contract stage with the bank chosen (G-01 order: electricity → PMU acceptance → bank). */
+/** Seeds up to the contract stage with the bank chosen (G-01 order: electricity approval → bank). */
 async function toContractOutcome(request: Req, factory: ApiSession, tag: string): Promise<string> {
-  const { pmu } = await reviewers(request);
-  const id = await toElectricityUpload(request, factory, tag);
-  if ((await factory.upload(`/applications/${id}/documents`, 'electricityApprovalFile', 'approval.pdf')) !== 201) throw new Error('approval');
-  ok(await act(factory, id, 'submit_electricity', { distributionCompany: 'شركة توزيع (اختبار)' }), 'electricity');
-  ok(await act(pmu, id, 'accept'), 'pmu electricity');
+  const id = await toElectricityReview(request, factory, tag);
+  ok(await electricityAccept(request, id), 'electricity');
   ok(await act(factory, id, 'select_bank', { bankOrgId: BANK_A }), 'bank');
   return id;
 }
@@ -48,29 +44,17 @@ async function expectStageIcon(page: Page, cls: 'done' | 'failed') {
   await expect(last.locator('svg')).toHaveCount(1); // ✓ or ✗ instead of the step number
 }
 
-test('G-01: the electricity form has no bank; the bank choice appears only after PMU accepts the approval, once', async ({ page, request }) => {
+test('G-01: the bank choice appears only after the ministry approves, once', async ({ page, request }) => {
   const factory = await apiLogin(request, 'factory@shams.local');
-  const { pmu } = await reviewers(request);
-  const id = await toElectricityUpload(request, factory, 'BANK');
+  const id = await toElectricityReview(request, factory, 'BANK');
 
   await login(page, 'factory@shams.local');
-  await open(page, `#task/${id}`);
-  await expect(page.locator('#distributionCompany')).toBeVisible();
-  await expect(page.locator('#bankOrgId')).toHaveCount(0);                          // no bank in the electricity submission
-  await expect(page.getByTestId('bank-step')).toHaveCount(0);
-  await page.getByTestId('upload-electricityApprovalFile').setInputFiles(pdfFile('approval.pdf'));
-  await expect(page.getByText('approval.pdf')).toBeVisible();
-  await page.locator('#distributionCompany').fill('شركة توزيع (اختبار)');
-  await page.getByTestId('task-submit').click();
-  await confirm(page);
-  await expect(page).toHaveURL(/#i\/shams\/factory-dashboard/);
-
-  // under PMU review: nothing to do, still no bank choice
+  // under the ministry's review: nothing to do, no bank choice
   await open(page, `#task/${id}`);
   await expect(page.getByTestId('bank-step')).toHaveCount(0);
   await expect(page.locator('#bankOrgId')).toHaveCount(0);
 
-  ok(await act(pmu, id, 'accept'), 'pmu accepts electricity');
+  ok(await electricityAccept(request, id), 'the ministry approves');
   await open(page, '#factory-dashboard');
   await expect(page.getByTestId('current-task')).toContainText('اختر مسار التعاقد');
   await open(page, `#task/${id}`);
@@ -128,7 +112,7 @@ test('G-03 + G-09: «تم التعاقد» with the evidence document → green 
   // the detail page carries the result and the evidence; nothing can be changed
   await page.getByTestId('final-outcome-view').click();
   await expect(page.getByTestId('final-outcome')).toContainText('2026-10-05');
-  await page.getByRole('tab', { name: /المراحل اللاحقة/ }).click();
+  await expect(page.getByRole('tab')).toHaveCount(2);                            // D11: data and documents only
   await expect(page.getByTestId('bank-outcome')).toContainText('بنك تجريبي (أ)');
   await expect(page.getByText('signed-contract.pdf').first()).toBeVisible();
   await expect(page.getByTestId('current-task')).toHaveCount(0);
@@ -182,7 +166,6 @@ test('unauthorized actions are not exposed: another factory cannot open it, PMU 
   await login(page, 'pmu@shams.local');
   await open(page, `#application/${id}`);
   await expect(page.getByTestId('decision-panel')).toHaveCount(0);                  // PMU may watch, not decide
-  await page.getByRole('tab', { name: /المراحل اللاحقة/ }).click();
   await expect(page.getByTestId('bank-outcome')).toContainText('بنك تجريبي (أ)');   // PMU sees the chosen bank
   const other = await (await browser.newContext()).newPage();
   await login(other, 'factory2@shams.local');
@@ -194,18 +177,15 @@ test('unauthorized actions are not exposed: another factory cannot open it, PMU 
   await closeOpenApplication(factory);
 });
 
-test('a return for correction is labelled as such on the dashboard, not as a rejection', async ({ page, request }) => {
+test('a rejection with notes shows the notes on the dashboard, not a final outcome', async ({ page, request }) => {
   const factory = await apiLogin(request, 'factory@shams.local');
-  const { pmu } = await reviewers(request);
-  const id = await toElectricityUpload(request, factory, 'RET');
-  if ((await factory.upload(`/applications/${id}/documents`, 'electricityApprovalFile', 'approval.pdf')) !== 201) throw new Error('approval');
-  ok(await act(factory, id, 'submit_electricity', { distributionCompany: 'شركة' }), 'electricity');
-  ok(await act(pmu, id, 'request_correction', { reason: 'الموافقة غير موقعة' }), 'return');
+  const id = await toElectricityReview(request, factory, 'RET');
+  const ministry = await apiLogin(request, 'electricity@shams.local');
+  ok(await act(ministry, id, 'request_correction', { reason: 'الرسم الهندسي غير موقع' }), 'return');
 
   await login(page, 'factory@shams.local');
   await open(page, '#factory-dashboard');
-  await expect(page.getByTestId('returned-notice')).toContainText('ليس رفضًا نهائيًا');
-  await expect(page.getByTestId('current-task')).toContainText('الموافقة غير موقعة');
+  await expect(page.getByTestId('return-reason')).toContainText('الرسم الهندسي غير موقع');
   await expect(page.getByTestId('final-outcome')).toHaveCount(0);
   await closeOpenApplication(factory);
 });

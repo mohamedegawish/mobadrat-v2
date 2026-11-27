@@ -18,10 +18,9 @@ test('IMC lands on its dashboard; the awaiting number equals the queue it shows;
   const server = (await imcApi.get('/dashboard'));
   const headline = page.getByTestId('awaiting-me');
   await expect(headline.getByTestId('awaiting-count')).toHaveText(ar(server.awaitingMe.count));
-  // لا بطاقات من مراحل ليست لـIMC، ولا دليل مقدمي خدمة
+  // لا بطاقات من مراحل ليست لـIMC
   await expect(page.getByTestId('card-offer')).toHaveCount(0);
-  await expect(page.getByTestId('dash-providers')).toHaveCount(0);
-  // «لا شيء مختلق»: لا بند متأخر بلا مهل
+  // «لا شيء مختلق»: لا بند متأخر ولا طلب تجاوز مهلته
   await expect(page.getByTestId('attention-overdue')).toHaveCount(0);
 
   // «بانتظار قراري» هو التبويب الأول والصف الجديد فيه — الأقدم انتظارًا أولًا
@@ -88,15 +87,15 @@ test('PMU: one dashboard with its stage cards, attention items and recent activi
   await expect(page.getByTestId('filter-state')).toHaveValue('CLOSED_NOT_CONTRACTED,WITHDRAWN');
 });
 
-test('ENCPC dashboard shows real directory counters and links to provider management; there is no bank account or bank dashboard (G-02)', async ({ page, request }) => {
+test('ENCPC and ministry dashboards have no provider directory; there is no bank account or bank dashboard (G-02)', async ({ page, request }) => {
   await login(page, 'encpc@shams.local');
   await expect(page).toHaveURL(/#workspace\/encpc/);
-  await expect(page.getByTestId('dash-providers')).toBeVisible();
-  const encpcApi = await apiLogin(request, 'encpc@shams.local');
-  const d = await encpcApi.get('/dashboard');
-  await expect(page.getByTestId('dash-providers')).toContainText(ar(d.providers.total));
-  await page.getByTestId('open-providers').click();
-  await expect(page).toHaveURL(/#i\/shams\/providers/);
+  await expect(page.getByTestId('dash-providers')).toHaveCount(0);
+  await open(page, '#approvals');
+  await expect(page.getByText('هذه الصفحة غير متاحة لدورك')).toBeVisible();          // D15
+  await login(page, 'electricity@shams.local');
+  await expect(page).toHaveURL(/#workspace\/electricity/);
+  await expect(page.getByTestId('card-electricity')).toBeVisible();
 
   // the former demo bank accounts no longer exist and cannot sign in
   const r = await request.post('/api/v1/auth/login', { data: { email: 'bank.b@shams.local', password: 'Mobadrat@2026' } });

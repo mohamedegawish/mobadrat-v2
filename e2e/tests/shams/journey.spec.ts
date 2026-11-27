@@ -1,6 +1,6 @@
 // رحلة كاملة عبر الواجهة: تسجيل مصنع بكل النموذج ومستنداته → تفعيل البريد (لا دخول قبل القبول) → IMC تطلب تعديل بيانات
-// (دخول مقيّد للتعديل فقط) → إعادة الإرسال (خروج) → IMC تقبل الحساب (بريد قبول) → دخول كامل → ENCPC → مقدم الخدمة
-// → العرض → PMU → الكهرباء والبنك → PMU → البنك → تسجيل التعاقد = CONTRACTED.
+// (دخول مقيّد للتعديل فقط) → إعادة الإرسال (خروج) → IMC تقبل الحساب (بريد قبول) → دخول كامل → ENCPC (لينك مقدمي الخدمة)
+// → العرض → PMU → وزارة الكهرباء → البنك → تسجيل التعاقد = CONTRACTED.
 import { test, expect } from '@playwright/test';
 import { shot } from '../support/platform';
 import { activate, apiFindApplication, apiToken, asRole, confirm, expectLoginRefused, expectShamsLocked, login, mailMatching, open, pdfFile, PASSWORD, registerViaPage } from './helpers';
@@ -59,7 +59,7 @@ test('factory and reviewers complete the full journey to CONTRACTED', async ({ p
   await page.getByTestId('wizard-submit').click();
   await confirm(page);
   await expect(page).toHaveURL(/#hub/);
-  await expect(page.getByTestId('submitted-for-review')).toContainText('تم إرسال التعديلات');
+  await expect(page.getByTestId('submitted-for-review')).toHaveCount(0);    // D16: no message after a resubmission
   await shot(page, 'shams-07-resubmitted');
   await expectShamsLocked(page, FACTORY_EMAIL, FACTORY_PASSWORD, /قيد مراجعة/);
 
@@ -80,57 +80,57 @@ test('factory and reviewers complete the full journey to CONTRACTED', async ({ p
   await expect(page.getByTestId('current-task')).toContainText('ENCPC');
   await shot(page, 'shams-09-factory-dashboard');
 
-  // ── ENCPC: مطابق ──
+  // ── ENCPC: قبول فني بلينك مقدمي الخدمة ──
   const encpc = await asRole(browser, 'encpc@shams.local');
   await open(encpc, `#application/${appId}`);
   await expect(encpc.getByTestId('action-reject')).toHaveCount(0);
   await encpc.getByTestId('action-compliant').click();
+  await expect(encpc.getByTestId('decision-submit')).toBeDisabled();           // the link is required
+  await encpc.getByTestId('providers-link-input').fill('https://encpc.example.eg/providers');
+  await encpc.getByTestId('decision-reason').fill('اختاروا مقدمًا معتمدًا');
   await encpc.getByTestId('decision-submit').click();
   await confirm(encpc);
-  await expect(encpc.getByText('اختيار مقدم الخدمة').first()).toBeVisible();
+  await expect(encpc.getByText('رفع العرض الفني — المصنع').first()).toBeVisible();
   await shot(encpc, 'shams-10-encpc-compliant');
+  expect(await mailMatching(FACTORY_EMAIL, /قبول فني/)).toContain('https://encpc.example.eg/providers');
 
-  // ── المصنع: مقدم الخدمة ثم العرض الفني ──
+  // ── المصنع: العرض الفني وبيانات مقدم الخدمة ──
   await open(page, `#task/${appId}`);
-  await page.getByTestId('provider-sp-demo-1').check();
-  await shot(page, 'shams-11-provider-selection');
-  await page.getByTestId('select-provider').click();
-  await confirm(page);
-  await expect(page).toHaveURL(/#i\/shams\/factory-dashboard/);
-  await open(page, `#task/${appId}`);
+  await expect(page.getByTestId('providers-link')).toHaveAttribute('href', 'https://encpc.example.eg/providers');
   await page.getByTestId('upload-technicalOfferFile').setInputFiles(pdfFile('offer.pdf'));
   await expect(page.getByText('offer.pdf')).toBeVisible();
+  await expect(page.getByTestId('task-submit')).toBeDisabled();                // the provider is required
+  await page.getByTestId('providerName').fill('شركة طاقة الواجهة');
+  await page.getByTestId('providerEmail').fill('offers@e2e-provider.test');
+  await shot(page, 'shams-11-offer-and-provider');
   await page.getByTestId('task-submit').click();
   await confirm(page);
   await expect(page).toHaveURL(/#i\/shams\/factory-dashboard/);
 
-  // ── PMU: قبول العرض ──
+  // ── PMU: قبول العرض → وزارة الكهرباء ──
   const pmu = await asRole(browser, 'pmu@shams.local');
   await open(pmu, `#application/${appId}`);
   await pmu.getByTestId('action-accept').click();
   await pmu.getByTestId('decision-submit').click();
   await confirm(pmu);
-  await expect(pmu.getByText('رفع موافقة الكهرباء').first()).toBeVisible();
+  await expect(pmu.getByText('موافقة الكهرباء — وزارة الكهرباء').first()).toBeVisible();
   await shot(pmu, 'shams-12-pmu-offer-accepted');
+  await mailMatching('offers@e2e-provider.test', /قبول عرضكم الفني/);
 
-  // ── المصنع: موافقة الكهرباء (بلا بنك — G-01) ──
-  await open(page, `#task/${appId}`);
-  await expect(page.locator('#bankOrgId')).toHaveCount(0);
-  await page.getByTestId('upload-electricityApprovalFile').setInputFiles(pdfFile('approval.pdf'));
-  await expect(page.getByText('approval.pdf')).toBeVisible();
-  await page.locator('#distributionCompany').fill('شركة توزيع (اختبار)');
-  await shot(page, 'shams-13-electricity-approval');
-  await page.getByTestId('task-submit').click();
-  await confirm(page);
-  await expect(page).toHaveURL(/#i\/shams\/factory-dashboard/);
-
-  // ── PMU: الموافقة مستوفاة → يختار المصنع مسار التعاقد ──
-  await open(pmu, `#application/${appId}`);
-  await pmu.getByTestId('action-accept').click();
-  await pmu.getByTestId('decision-submit').click();
-  await confirm(pmu);
-  await expect(pmu.getByText('مسار التعاقد / التعاقد البنكي').first()).toBeVisible();
-  await shot(pmu, 'shams-14-pmu-electricity-accepted');
+  // ── وزارة الكهرباء: ترفع الموافقة وتقبل ──
+  const ministry = await asRole(browser, 'electricity@shams.local');
+  await expect(ministry).toHaveURL(/#workspace\/electricity/);
+  await open(ministry, `#application/${appId}`);
+  await ministry.getByTestId('action-accept').click();
+  await expect(ministry.getByTestId('decision-submit')).toBeDisabled();        // the approval file is required
+  await ministry.getByTestId('upload-electricityApprovalFile').setInputFiles(pdfFile('approval.pdf'));
+  await expect(ministry.getByTestId('electricity-approval').getByText('approval.pdf')).toBeVisible();
+  await ministry.getByTestId('distribution-company').fill('شركة توزيع (اختبار)');
+  await shot(ministry, 'shams-13-electricity-approval');
+  await ministry.getByTestId('decision-submit').click();
+  await confirm(ministry);
+  await expect(ministry.getByText('مسار التعاقد / التعاقد البنكي').first()).toBeVisible();
+  await shot(ministry, 'shams-14-electricity-accepted');
 
   // ── المصنع: مسار البنك ثم اختيار البنك (لا حساب ولا قرار للبنك — G-02) ──
   await open(page, `#task/${appId}`);

@@ -2,13 +2,13 @@
 // Earlier stages are seeded through the API (each has its own UI spec); every step of the new path is done through the UI.
 import { test, expect, type Page } from '@playwright/test';
 import { login, open, confirm, pdfFile, asRole } from './helpers';
-import { act, apiLogin, closeOpenApplication, seedCompleteDraft, submitApplication, type ApiSession } from './seed';
+import { act, apiLogin, closeOpenApplication, electricityAccept, seedCompleteDraft, submitApplication, type ApiSession } from './seed';
 
 const uniq = () => `${Date.now() % 1_000_000}`;
 type Req = Parameters<typeof apiLogin>[0];
 const ok = (r: { status: number; json: unknown }, s: string) => { if (r.status !== 200) throw new Error(`${s}: ${r.status} ${JSON.stringify(r.json)}`); };
 
-/** Seeds an application up to the contracting-path choice (PMU accepted the electricity approval). */
+/** Seeds an application up to the contracting-path choice (the ministry approved). */
 async function toPathChoice(request: Req, factory: ApiSession, tag: string): Promise<string> {
   const [imc, encpc, pmu] = await Promise.all(['imc1@shams.local', 'encpc@shams.local', 'pmu@shams.local'].map((e) => apiLogin(request, e)));
   await closeOpenApplication(factory);
@@ -16,13 +16,10 @@ async function toPathChoice(request: Req, factory: ApiSession, tag: string): Pro
   ok(await submitApplication(factory, id), 'submit');
   ok(await act(imc, id, 'accept'), 'imc');
   ok(await act(encpc, id, 'compliant'), 'encpc');
-  ok(await act(factory, id, 'select_provider', { providerId: 'sp-demo-1' }), 'provider');
   if ((await factory.upload(`/applications/${id}/documents`, 'technicalOfferFile', 'offer.pdf')) !== 201) throw new Error('offer');
   ok(await act(factory, id, 'submit_offer'), 'offer submit');
   ok(await act(pmu, id, 'accept'), 'pmu offer');
-  if ((await factory.upload(`/applications/${id}/documents`, 'electricityApprovalFile', 'approval.pdf')) !== 201) throw new Error('approval');
-  ok(await act(factory, id, 'submit_electricity', { distributionCompany: 'شركة توزيع (اختبار)' }), 'electricity');
-  ok(await act(pmu, id, 'accept'), 'pmu electricity');
+  ok(await electricityAccept(request, id), 'electricity');
   return id;
 }
 
@@ -77,12 +74,11 @@ test('distribution path, accepted: path cards → upload/re-upload → PMU revie
   await confirm(pmu);
   await expect(pmu.getByTestId('final-outcome')).toHaveAttribute('data-outcome', 'CONTRACTED');
 
-  // history: the chosen path and every upload with its version, in the timeline
-  await pmu.getByRole('tab', { name: /السجل/ }).click();
-  await expect(pmu.getByTestId('history-path')).toContainText('شركة توزيع الكهرباء');
-  await expect(pmu.getByTestId('timeline-path')).toContainText('شركة توزيع الكهرباء');
-  // reviewers see the submitted version only (M7: an upload replaced before sending is not shown to them)
-  await expect(pmu.getByTestId('timeline-document').filter({ hasText: 'موافقة شركة توزيع الكهرباء على التعاقد' })).toHaveCount(1);
+  // the contracting path stays on the data tab; reviewers see the submitted version only (M7)
+  await expect(pmu.getByTestId('contract-path-chosen')).toContainText('شركة توزيع الكهرباء');
+  await pmu.getByRole('tab', { name: 'المستندات' }).click();
+  await expect(pmu.getByText('disco-v2.pdf').first()).toBeVisible();
+  await expect(pmu.getByText('disco-v1.pdf')).toHaveCount(0);
 
   await open(page, `#application/${id}`);
   const card = page.getByTestId('final-outcome');
@@ -93,9 +89,9 @@ test('distribution path, accepted: path cards → upload/re-upload → PMU revie
   await expect(card.getByText('disco-v2.pdf')).toBeVisible();
   const last = page.locator('.stage-track').first().locator('.stage-chip').last();
   await expect(last).toHaveClass(/\bdone\b/);
-  // the factory's own history keeps every upload, including the version replaced before sending
-  await page.getByRole('tab', { name: /السجل/ }).click();
-  await expect(page.getByTestId('timeline-document').filter({ hasText: 'موافقة شركة توزيع الكهرباء على التعاقد' })).toHaveCount(2);
+  // the factory's own documents keep every upload, including the version replaced before sending
+  await page.getByRole('tab', { name: 'المستندات' }).click();
+  await expect(page.getByText('disco-v1.pdf').first()).toBeVisible();
 });
 
 test('distribution path, rejected: reason required → final red X result with the reason; the factory has nothing left to do', async ({ page, request, browser }) => {
@@ -159,7 +155,6 @@ test('withdrawn on the distribution path before the decision: the panel says clo
   await open(pmu, `#application/${id}`);
   await expect(pmu.getByTestId('final-outcome')).toHaveAttribute('data-outcome', 'WITHDRAWN');
   await expect(pmu.getByTestId('decision-panel')).toHaveCount(0);
-  await pmu.getByRole('tab', { name: /المراحل اللاحقة/ }).click();
   await expect(pmu.getByTestId('distribution-status')).toContainText('أُغلق الطلب دون قرار');
   await expect(pmu.getByTestId('distribution-status')).not.toContainText('قيد مراجعة');
 });

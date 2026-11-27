@@ -60,8 +60,20 @@ export async function submitApplication(s: ApiSession, id: string): Promise<Resu
   return s.post(`/applications/${id}/actions/submit`, { expectedVersion: app.version });
 }
 
-/** ينفذ إجراء على طلب بنسخته الحالية. */
+export const PROVIDERS_LINK = 'https://encpc.example.eg/providers';
+export const PROVIDER_INFO = { providerName: 'شركة طاقة (اختبار)', providerEmail: 'offers@provider.test' };
+
+/** ينفذ إجراء على طلب بنسخته الحالية. ENCPC's link and the offer's provider are filled in unless the test passes its own. */
 export async function act(s: ApiSession, id: string, action: string, body: Record<string, unknown> = {}): Promise<Result> {
   const app = await s.get(`/applications/${id}`);
-  return s.post(`/applications/${id}/actions/${action}`, { expectedVersion: app.version, ...body });
+  const offer = action === 'submit_offer' || (action === 'resubmit' && app.state === 'OFFER_CORRECTION');
+  const defaults = action === 'compliant' ? { providersLink: PROVIDERS_LINK } : offer ? PROVIDER_INFO : {};
+  return s.post(`/applications/${id}/actions/${action}`, { expectedVersion: app.version, ...defaults, ...body });
+}
+
+/** D18: the Ministry of Electricity uploads its approval and accepts. */
+export async function electricityAccept(request: APIRequestContext, id: string): Promise<Result> {
+  const ministry = await apiLogin(request, 'electricity@shams.local');
+  if ((await ministry.upload(`/applications/${id}/documents`, 'electricityApprovalFile', 'approval.pdf')) !== 201) throw new Error('approval upload');
+  return act(ministry, id, 'accept', { distributionCompany: 'شركة توزيع (اختبار)' });
 }

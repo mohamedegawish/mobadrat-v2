@@ -33,7 +33,7 @@ test('IMC rejects through the UI: a reason code and reason are mandatory, a conf
   expect((await factory.get('/factory/profile')).canStartNew).toBe(true);
 });
 
-test('ENCPC marks the file non-compliant (no reject option), the factory resubmits and it returns directly to ENCPC', async ({ page, request }) => {
+test('ENCPC rejects technically (no final rejection); the factory attaches proof and the file returns directly to ENCPC', async ({ page, browser, request }) => {
   const factory = await apiLogin(request, 'factory@shams.local');
   await closeOpenApplication(factory);
   const imc = await apiLogin(request, 'imc1@shams.local');
@@ -45,17 +45,29 @@ test('ENCPC marks the file non-compliant (no reject option), the factory resubmi
   await open(page, `#application/${id}`);
   await expect(page.getByTestId('action-reject')).toHaveCount(0);                 // ENCPC لا ترفض نهائيًا
   await page.getByTestId('action-non_compliant').click();
-  await page.getByTestId('def-field-0').selectOption('peakLoad');
-  await page.getByTestId('def-note-0').fill('قيمة أقصى حمل لا تطابق فواتير الكهرباء');
+  await expect(page.getByTestId('def-field-0')).toHaveCount(0);                   // D13: a reason, not a field list
+  await expect(page.getByTestId('decision-submit')).toBeDisabled();
+  await page.getByTestId('decision-reason').fill('قيمة أقصى حمل لا تطابق فواتير الكهرباء');
   await page.getByTestId('decision-submit').click();
   await expect(page.getByTestId('returns-to-factory')).toBeVisible();
   await page.getByTestId('confirm-action').click();
   await expect.poll(async () => (await factory.get(`/applications/${id}`)).state).toBe('ENCPC_CORRECTION');
 
-  expect((await act(factory, id, 'resubmit')).status).toBe(200);
-  const after = await factory.get(`/applications/${id}`);
-  expect(after.state).toBe('ENCPC_REVIEW');                                        // عودة مباشرة لنفس المراجع
-  expect(after.transitions.map((t: any) => t.action)).toEqual(expect.arrayContaining(['non_compliant', 'resubmit']));
+  const fPage = await (await browser.newContext()).newPage();
+  await login(fPage, 'factory@shams.local');
+  await open(fPage, `#task/${id}`);
+  await expect(fPage.getByTestId('rejection-reason')).toContainText('أقصى حمل');
+  await expect(fPage.getByTestId('task-submit')).toBeDisabled();                  // proof required
+  await fPage.getByTestId('upload-correctionProofFile').setInputFiles(pdfFile('proof.pdf'));
+  await expect(fPage.getByText('proof.pdf')).toBeVisible();
+  await fPage.getByTestId('proof-note').fill('أرفقنا حساب الأحمال المعدل');
+  await fPage.getByTestId('task-submit').click();
+  await fPage.getByTestId('confirm-action').click();
+  await expect.poll(async () => (await factory.get(`/applications/${id}`)).state).toBe('ENCPC_REVIEW'); // عودة مباشرة لنفس المراجع
+
+  await open(page, `#application/${id}`);
+  await expect(page.getByTestId('stage-files-correctionProofFile')).toContainText('proof.pdf');
+  await expect(page.getByTestId('stage-files-correctionProofFile')).toContainText('أرفقنا حساب الأحمال المعدل');
   await closeOpenApplication(factory);
 });
 
@@ -68,7 +80,6 @@ test('PMU asks for a revised technical offer through the UI; the factory resubmi
   expect((await submitApplication(factory, id)).status).toBe(200);
   expect((await act(imc, id, 'accept')).status).toBe(200);
   expect((await act(encpc, id, 'compliant')).status).toBe(200);
-  expect((await act(factory, id, 'select_provider', { providerId: 'sp-demo-1' })).status).toBe(200);
   expect(await factory.upload(`/applications/${id}/documents`, 'technicalOfferFile', 'offer-v1.pdf')).toBe(201);
   expect((await act(factory, id, 'submit_offer')).status).toBe(200);
 

@@ -71,27 +71,26 @@ test('I12/I2/M3: wizard ticks only complete sections, blocks an incomplete submi
   await expect(page.locator('#f-taxNumber')).toBeFocused();
 });
 
-test('I5/I6: PMU lands on what awaits its decision; no fake "overdue 0"; days-waiting column', async ({ page }) => {
+test('I5/I6: PMU lands on what awaits its decision; the overdue figure once deadlines are set; days-waiting column', async ({ page }) => {
   await login(page, 'pmu@shams.local');
   await expect(page).toHaveURL(/#workspace\/pmu/);
   await expect(page.getByTestId('awaiting-me')).toContainText('بانتظار قراري');
-  await expect(page.getByTestId('sla-not-set')).toContainText('لم تُحدد مهل');
+  await expect(page.getByTestId('sla-not-set')).toHaveCount(0);                    // D12: deadlines are set
+  await expect(page.getByTestId('kpi-overdue')).toBeEnabled();
   await page.getByTestId('awaiting-me').click();
   await expect(page.getByTestId('tab-mine')).toHaveClass(/active/);
-  await expect(page.getByTestId('tab-overdue')).toBeDisabled();
+  await expect(page.getByTestId('tab-overdue')).toBeEnabled();
   await page.getByTestId('tab-all').click();
   await expect(page.getByTestId('drafts-count')).toBeVisible();
 });
 
-test('18/B2/M6: admin lands on readiness & operations — unmet conditions listed, no PMU dashboard or provider approval', async ({ page }) => {
+test('18/B2/M6: admin lands on readiness & operations — unmet conditions listed, no PMU dashboard', async ({ page }) => {
   await login(page, 'admin@shams.local');
   await expect(page).toHaveURL(/#workspace\/system_admin/);
   await expect(page.getByTestId('tab-readiness')).toHaveClass(/active/);
   await expect(page.getByTestId('check-support_contact')).toHaveAttribute('data-ok', '0');
   await expect(page.getByTestId('check-banks_available')).toHaveAttribute('data-ok', '1');
   await expect(page.getByTestId('failed-messages')).toBeVisible();
-  await open(page, '#providers');
-  await expect(page.getByText('هذه الصفحة غير متاحة لدورك')).toBeVisible();
   // M6: رسالة حقيقية في السجل بتسمية عربية بدل المفتاح البرمجي
   // Account mails (password reset…) are the platform's: they are in the platform's unified outbox, labelled in Arabic.
   await page.request.post('/api/v1/auth/forgot-password', { data: { email: 'factory2@shams.local' } });
@@ -101,9 +100,9 @@ test('18/B2/M6: admin lands on readiness & operations — unmet conditions liste
   await expect(page.getByText('auth.reset_password')).toHaveCount(0);
 });
 
-test('B3: the public page does not present the proposed electricity reviewer as fact', async ({ page }) => {
+test('B3 / D18: the public page names the Ministry of Electricity as the reviewer of the electricity approval', async ({ page }) => {
   await page.goto('/#i/shams/home');
-  await expect(page.getByText('تصدرها شركة التوزيع التابعة.')).toBeVisible();
+  await expect(page.getByText('موافقة وزارة الكهرباء').first()).toBeVisible();
   await expect(page.getByText('وتراجعها وحدة إدارة المبادرة')).toHaveCount(0);
 });
 
