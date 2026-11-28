@@ -1,7 +1,6 @@
 import React from 'react';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, Landmark } from 'lucide-react';
 import { usePlatformStore } from '../../store/state';
-import { EgyptianEagle } from '../common/EgyptianEagle';
 
 /** Official Government Footer — مخفي في وضع الإدارة لتوفير المساحة */
 export const Footer: React.FC = () => {
@@ -15,21 +14,13 @@ export const Footer: React.FC = () => {
         <div className="container-custom">
           <div className="footer-brand-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1.5rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                <img
-                  src="/ministry-industry-logo.png"
-                  alt="Ministry of Industry"
-                  width={42}
-                  height={42}
-                  style={{ width: 42, height: 42, objectFit: 'contain' }}
-                />
-                <img
-                  src="/imc-logo.png"
-                  alt="Industrial Modernisation Centre (IMC)"
-                  height={38}
-                  style={{ height: 38, width: 'auto', objectFit: 'contain', background: '#FFFFFF', padding: '3px 8px', borderRadius: '6px' }}
-                />
-              </div>
+              <img
+                src="/ministry-industry-logo.png"
+                alt="Ministry of Industry"
+                width={48}
+                height={48}
+                style={{ width: 48, height: 48, objectFit: 'contain' }}
+              />
               <div>
                 <div style={{ fontSize: '1rem', fontWeight: 700, color: '#FFFFFF' }}>
                   {isAr ? 'منصة المبادرات الصناعية' : 'Industrial Initiatives Platform'}
@@ -40,12 +31,18 @@ export const Footer: React.FC = () => {
               </div>
             </div>
 
-            <div className="footer-links-row" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
-              <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.85rem', color: '#CBD5E1' }}>
-                <span>{isAr ? 'هيئة التنمية الصناعية (IDA)' : 'IDA Authority'}</span>
-                <span style={{ opacity: 0.3 }}>|</span>
-                <span>{isAr ? 'مركز تحديث الصناعة (IMC)' : 'IMC Center'}</span>
-                <span style={{ opacity: 0.3 }}>|</span>
+            <div className="footer-links-row" style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap', fontSize: '0.85rem', color: '#CBD5E1' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.55rem', paddingInlineEnd: '1.1rem', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '14px' }}>
+                <img
+                  src="/imc-logo.png"
+                  alt=""
+                  height={48}
+                  style={{ height: 48, width: 'auto', objectFit: 'contain', background: '#FFFFFF', padding: '4px 8px', borderRadius: '10px' }}
+                />
+                <span style={{ fontWeight: 700, color: '#FFFFFF' }}>{isAr ? 'مركز تحديث الصناعة (IMC)' : 'Industrial Modernisation Centre (IMC)'}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                <Landmark size={16} aria-hidden style={{ color: '#C8102E' }} />
                 <span>{isAr ? 'القطاع المصرفي المصري' : 'Egyptian Banking Sector'}</span>
               </div>
             </div>
