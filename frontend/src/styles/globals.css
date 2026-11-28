@@ -973,13 +973,11 @@ html[dir="ltr"] .hero-editorial-title {
 .home-section-sub { font-size: 0.86rem; color: var(--text-muted); margin: -0.45rem 0 1.1rem; line-height: 1.7; }
 
 .home-grid { display: grid; gap: 1rem; }
-.home-grid-trio { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .home-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .home-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 @media (max-width: 1024px) { .home-grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 860px) {
   .home-grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .home-grid-trio { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 560px) {
   .home-grid { gap: 0.75rem; }
@@ -1038,15 +1036,10 @@ button.home-card:focus-visible { outline: 2px solid var(--egypt-red); outline-of
   transition: background var(--transition-normal), color var(--transition-normal), border-color var(--transition-normal);
 }
 .home-card:hover .home-card-icon { background: var(--egypt-red); border-color: var(--egypt-red); color: #fff; }
-.home-card-num { font-size: 0.78rem; font-weight: 800; color: var(--text-light); font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }
 .home-card-title { font-size: 0.98rem; font-weight: 800; color: var(--text-main); margin: 0; line-height: 1.45; }
 .home-card-desc { font-size: 0.84rem; line-height: 1.8; color: var(--text-secondary); margin: 0; }
 .home-card-tags { display: flex; gap: 0.3rem; flex-wrap: wrap; margin-top: 0.1rem; }
 .home-card-tag { font-size: 0.7rem; font-weight: 700; padding: 0.15rem 0.5rem; border-radius: 9999px; background: #F8FAFC; border: 1px solid #E2E8F0; color: #334155; }
-.home-card-link { margin-top: auto; padding-top: 0.2rem; display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.82rem; font-weight: 700; color: var(--egypt-red); }
-.home-card-link svg { transition: transform var(--transition-normal); }
-.home-card:hover .home-card-link svg { transform: translateX(-4px); }
-html[dir="ltr"] .home-card:hover .home-card-link svg { transform: translateX(4px); }
 
 /* بطاقة قطاع مستهدف — أيقونة أعلى الزاوية + نص متوسط */
 .sector-card {
@@ -1071,7 +1064,7 @@ html[dir="ltr"] .home-card:hover .home-card-link svg { transform: translateX(4px
   color: var(--text-main);
 }
 
-/* عن المنصة: نص + لوحة الشركاء + مسار من الفكرة إلى الأثر */
+/* عن المنصة: نص + لوحة الشركاء */
 .home-about { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 1.5rem; padding: 1.5rem; }
 @media (max-width: 860px) { .home-about { grid-template-columns: minmax(0, 1fr); padding: 1.25rem; } }
 .home-about-lead { font-size: 0.98rem; line-height: 2; color: var(--text-secondary); margin: 0; }
@@ -1080,12 +1073,6 @@ html[dir="ltr"] .home-card:hover .home-card-link svg { transform: translateX(4px
 .home-stakeholders { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
 .home-stakeholder { display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 0.7rem; background: var(--bg-surface); border: 1px solid #E2E8F0; border-radius: 10px; font-size: 0.8rem; font-weight: 700; color: #334155; line-height: 1.45; }
 .home-stakeholder svg { color: var(--egypt-red); flex-shrink: 0; }
-.home-journey { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; margin-top: 1.4rem; }
-.home-journey::before { content: ''; position: absolute; top: 21px; inset-inline: 16.66%; height: 2px; background: rgba(200,16,46,0.2); }
-.home-journey-step { position: relative; display: flex; flex-direction: column; align-items: center; gap: 0.45rem; text-align: center; font-size: 0.8rem; font-weight: 700; color: #334155; line-height: 1.5; }
-.home-journey-dot { width: 44px; height: 44px; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; background: var(--bg-surface); border: 2px solid rgba(200,16,46,0.25); color: var(--egypt-red); }
-.home-journey-step:last-child .home-journey-dot { background: var(--egypt-red); border-color: var(--egypt-red); color: #fff; box-shadow: 0 6px 16px rgba(200,16,46,0.22); }
-.home-journey-step:last-child { color: var(--egypt-red); }
 
 /* ===== شريط أخبار المبادرات ===== */
 .news-ticker {

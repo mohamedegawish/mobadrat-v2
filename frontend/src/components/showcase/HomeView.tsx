@@ -1,27 +1,16 @@
 import React from 'react';
 import { usePlatformStore } from '../../store/state';
-import {
-  Compass,
-  ClipboardCheck,
-  Send,
-  Sun,
-  Factory,
-  Boxes,
-  ArrowLeft,
-  ArrowRight,
-  Layers,
-  LogIn,
-  Briefcase,
-} from 'lucide-react';
+import { Layers, LogIn, Briefcase } from 'lucide-react';
 import { HomeHero } from './HomeHero';
 import { PlatformAbout } from './PlatformAbout';
 import { NewsTicker } from './NewsTicker';
 import { HomeBanners } from './HomeBanners';
+import { InitiativeCard, publicInitiatives } from './InitiativeCard';
 
 /**
- * HomeView — الصفحة التعريفية: شريط أخبار المبادرات + هيرو تحريري + عن المنصة (الأهداف والمكونات) +
- * كيف تعمل المنصة + الفئات + دعوة ختامية. كل النصوص Ar/En عبر language.
- * بانرات الإعلانات (HomeBanners) في ثلاثة أماكن تختارها الإدارة: قبل «عن المنصة» / «كيف تعمل» / الدعوة الختامية.
+ * HomeView — الصفحة التعريفية: شريط أخبار المبادرات + هيرو تحريري + عن المنصة والقطاعات المستهدفة +
+ * استكشف المبادرات الصناعية + دعوة ختامية. كل النصوص Ar/En عبر language.
+ * بانرات الإعلانات (HomeBanners) في ثلاثة أماكن تختارها الإدارة: قبل «عن المنصة» / القطاعات المستهدفة / الدعوة الختامية.
  */
 export const HomeView: React.FC = () => {
   const { language, initiatives, isLoggedIn, navigate } = usePlatformStore();
@@ -32,56 +21,7 @@ export const HomeView: React.FC = () => {
   const activeCount = base.length;
   const targetFactories = base.reduce((s, i) => s + (i.impactMetrics?.targetFactories ?? 0), 0);
 
-  const steps = [
-    {
-      icon: <Compass size={20} />,
-      titleAr: 'استكشف',
-      titleEn: 'Explore',
-      descAr: 'تصفح المبادرات الوطنية وقارن المزايا وشروط الأهلية.',
-      descEn: 'Browse national initiatives and compare benefits and eligibility.',
-    },
-    {
-      icon: <ClipboardCheck size={20} />,
-      titleAr: 'افحص الأهلية',
-      titleEn: 'Check eligibility',
-      descAr: 'أجب عن أسئلة الفحص المسبق واعرف مدى توافق مصنعك.',
-      descEn: 'Answer the pre-eligibility check and see how your factory fits.',
-    },
-    {
-      icon: <Send size={20} />,
-      titleAr: 'قدّم وتابع',
-      titleEn: 'Apply & track',
-      descAr: 'قدّم طلبك إلكترونياً وتابع مراحله لحظة بلحظة.',
-      descEn: 'Submit your application online and track every stage live.',
-    },
-  ];
-
-  const tracks = [
-    {
-      icon: <Sun size={20} />,
-      titleAr: 'شمس المصانع',
-      titleEn: 'Factory Sun',
-      descAr: 'محطات شمسية للمصانع تخفض فاتورة الكهرباء وتضمن استدامة التشغيل.',
-      descEn: 'Factory solar plants that cut power bills and secure operations.',
-      initiativeId: 'shams' as string | undefined,
-    },
-    {
-      icon: <Factory size={20} />,
-      titleAr: 'مصنع المستقبل',
-      titleEn: 'Factory of the Future',
-      descAr: 'أتمتة وتطوير المعدات لرفع الجودة والتنافسية.',
-      descEn: 'Automation and equipment upgrades for quality and competitiveness.',
-      initiativeId: undefined as string | undefined,
-    },
-    {
-      icon: <Boxes size={20} />,
-      titleAr: 'صُنع في مصر',
-      titleEn: 'Made in Egypt',
-      descAr: 'توطين الصناعات البديلة ودعم سلاسل الإمداد الوطنية.',
-      descEn: 'Localize substitute industries and support national supply chains.',
-      initiativeId: undefined as string | undefined,
-    },
-  ];
+  const offered = publicInitiatives(initiatives);
 
   const sectionTitle: React.CSSProperties = {
     fontFamily: isAr ? 'var(--font-display-ar)' : 'var(--font-display-en)',
@@ -101,49 +41,19 @@ export const HomeView: React.FC = () => {
 
       <PlatformAbout />
 
-      {/* كيف تعمل المنصة */}
-      <section aria-label={isAr ? 'كيف تعمل المنصة' : 'How it works'} className="home-section">
-        <div className="section-anchor">
-          <h2 style={sectionTitle}>{isAr ? 'كيف تعمل المنصة' : 'How the platform works'}</h2>
-        </div>
-        <div className="home-grid home-grid-trio">
-          {steps.map((s, idx) => (
-            <div key={s.titleEn} className="home-card">
-              <div className="home-card-head">
-                <span className="home-card-icon">{s.icon}</span>
-                <span className="home-card-num num-ltr">{String(idx + 1).padStart(2, '0')}</span>
-              </div>
-              <h3 className="home-card-title">{isAr ? s.titleAr : s.titleEn}</h3>
-              <p className="home-card-desc">{isAr ? s.descAr : s.descEn}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* الفئات */}
-      <section aria-label={isAr ? 'الفئات' : 'Categories'} className="home-section">
-        <div className="section-anchor">
-          <h2 style={sectionTitle}>{isAr ? 'الفئات' : 'Categories'}</h2>
-        </div>
-        <div className="home-grid home-grid-trio">
-          {tracks.map(t => (
-            <button
-              key={t.titleEn}
-              type="button"
-              className="home-card"
-              onClick={() => (t.initiativeId ? navigate('initiative-detail', t.initiativeId) : navigate('initiatives'))}
-            >
-              <span className="home-card-icon">{t.icon}</span>
-              <h3 className="home-card-title">{isAr ? t.titleAr : t.titleEn}</h3>
-              <p className="home-card-desc">{isAr ? t.descAr : t.descEn}</p>
-              <span className="home-card-link">
-                {isAr ? 'استعرض المبادرات' : 'Browse initiatives'}
-                {isAr ? <ArrowLeft size={14} /> : <ArrowRight size={14} />}
-              </span>
-            </button>
-          ))}
-        </div>
-      </section>
+      {/* استكشف المبادرات الصناعية */}
+      {offered.length > 0 && (
+        <section aria-label={isAr ? 'استكشف المبادرات الصناعية' : 'Explore industrial initiatives'} className="home-section">
+          <div className="section-anchor">
+            <h2 style={sectionTitle}>{isAr ? 'استكشف المبادرات الصناعية' : 'Explore industrial initiatives'}</h2>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 380px), 1fr))', gap: '1.5rem' }}>
+            {offered.map(initiative => (
+              <InitiativeCard key={initiative.id} initiative={initiative} compact />
+            ))}
+          </div>
+        </section>
+      )}
 
       <HomeBanners placement="before_cta" />
 

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { usePlatformStore, goToWorkspace } from '../../store/state';
 import {
   Layers, Globe, Factory, TrendingUp,
-  ChevronDown, Search, X, Scale, BarChart3, Home, Bookmark,
+  ChevronDown, Search, X, BarChart3, Home, Bookmark,
   KeyRound, LogOut, LayoutDashboard, UserCheck, LogIn, User
 } from 'lucide-react';
 import { EgyptianEagle } from '../common/EgyptianEagle';
@@ -33,7 +33,6 @@ export const HeaderNavbar: React.FC = () => {
     { id: 'home', labelAr: 'الرئيسية', labelEn: 'Home', icon: Home },
     { id: 'initiatives', labelAr: 'المبادرات', labelEn: 'Initiatives', icon: Layers },
     { id: 'my-initiatives', labelAr: 'مبادراتي', labelEn: 'My Initiatives', icon: Bookmark },
-    { id: 'compare', labelAr: 'المقارنة', labelEn: 'Compare', icon: Scale },
     { id: 'impact', labelAr: 'الإنجازات', labelEn: 'Achievements', icon: BarChart3 }, // ADMIN ONLY
     // «المصانع» = منشآتي وبياناتي المشتركة (تُستخدم في كل المبادرات) — للحسابات غير الإدارية.
     { id: 'factory-portal', labelAr: 'المصانع', labelEn: 'Factories', icon: Factory },

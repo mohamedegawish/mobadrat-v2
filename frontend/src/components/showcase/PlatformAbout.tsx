@@ -1,20 +1,11 @@
 import React from 'react';
 import { usePlatformStore } from '../../store/state';
-import {
-  Landmark,
-  Building2,
-  Briefcase,
-  Handshake,
-  Lightbulb,
-  Rocket,
-  TrendingUp,
-  Database,
-} from 'lucide-react';
+import { Landmark, Building2, Briefcase, Handshake, Database } from 'lucide-react';
 import { HomeBanners } from './HomeBanners';
 
 /**
  * PlatformAbout — تعريف المنصة في الصفحة الرئيسية:
- * عن المنصة (الرؤية + شركاء المنظومة + من الفكرة إلى الأثر) · الأهداف الرئيسية.
+ * عن المنصة (الرؤية + شركاء المنظومة) · القطاعات المستهدفة.
  * كل النصوص Ar/En عبر language. التنسيق في globals.css (home-*).
  */
 export const PlatformAbout: React.FC = () => {
@@ -26,12 +17,6 @@ export const PlatformAbout: React.FC = () => {
     { icon: <Building2 size={16} />, ar: 'القطاع الخاص', en: 'Private sector' },
     { icon: <Briefcase size={16} />, ar: 'المستثمرون', en: 'Investors' },
     { icon: <Handshake size={16} />, ar: 'الجهات التمويلية والتنموية', en: 'Financing & development bodies' },
-  ];
-
-  const journey = [
-    { icon: <Lightbulb size={18} />, ar: 'أفكار ومقترحات', en: 'Ideas & proposals' },
-    { icon: <Rocket size={18} />, ar: 'مشروعات قابلة للتنفيذ', en: 'Executable projects' },
-    { icon: <TrendingUp size={18} />, ar: 'أثر اقتصادي قابل للقياس', en: 'Measurable economic impact' },
   ];
 
   const sectors = [
@@ -61,21 +46,11 @@ export const PlatformAbout: React.FC = () => {
           <h2 style={sectionTitle}>{isAr ? 'عن المنصة' : 'About the platform'}</h2>
         </div>
         <div className="card home-about">
-          <div>
-            <p className="home-about-lead">
-              {isAr
-                ? 'في إطار حرص وزارة الصناعة على دعم الصناعة المصرية، وتماشياً مع المستهدفات الرئيسية للاستراتيجية الوطنية للصناعة، أطلقت الوزارة منصة وطنية موحدة تهدف إلى حصر وتنسيق وإدارة ومتابعة المبادرات والبرامج ذات الصلة بالتنمية الصناعية.'
-                : "As part of the Ministry of Industry's commitment to Egyptian industry, and in line with the key targets of the National Industrial Strategy, the Ministry has launched a unified national platform to catalogue, coordinate, manage and monitor industrial-development initiatives and programs."}
-            </p>
-            <div className="home-journey" aria-label={isAr ? 'من الفكرة إلى الأثر' : 'From idea to impact'}>
-              {journey.map(j => (
-                <div key={j.en} className="home-journey-step">
-                  <span className="home-journey-dot" aria-hidden>{j.icon}</span>
-                  <span>{isAr ? j.ar : j.en}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          <p className="home-about-lead">
+            {isAr
+              ? 'في إطار حرص وزارة الصناعة على دعم الصناعة المصرية، وتماشياً مع المستهدفات الرئيسية للاستراتيجية الوطنية للصناعة، أطلقت الوزارة منصة وطنية موحدة تهدف إلى حصر وتنسيق وإدارة ومتابعة المبادرات والبرامج ذات الصلة بالتنمية الصناعية.'
+              : "As part of the Ministry of Industry's commitment to Egyptian industry, and in line with the key targets of the National Industrial Strategy, the Ministry has launched a unified national platform to catalogue, coordinate, manage and monitor industrial-development initiatives and programs."}
+          </p>
 
           <div className="home-about-panel">
             <p className="home-about-label">{isAr ? 'تربط المنصة بين' : 'The platform connects'}</p>
